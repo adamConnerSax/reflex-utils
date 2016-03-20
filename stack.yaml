@@ -1,0 +1,75 @@
+# For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
+
+# Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
+#resolver: nightly-2015-11-14
+resolver: lts-3.21
+
+#compiler: ghcjs-0.2.0.20151029_ghc-7.10.2
+#compiler-check: match-exact
+#setup-info:
+#  ghcjs:
+#    source:
+#      ghcjs-0.2.0.20151029_ghc-7.10.2:
+#        url: "https://github.com/nrolland/ghcjs/releases/download/v0.2.0.20151029/ghcjs-0.2.0.20151029.tar.gz"
+
+compiler: ghcjs-0.2.0.20151230.3_ghc-7.10.2
+compiler-check: match-exact
+setup-info:
+  ghcjs:
+    source:
+      ghcjs-0.2.0.20151230.3_ghc-7.10.2:
+        url: "https://github.com/nrolland/ghcjs/releases/download/v.0.2.0.20151230.3/ghcjs-0.2.0.20151230.3.tar.gz"
+
+
+# Local packages, usually specified by relative directory name
+packages:
+- location:
+    git: https://github.com/adamConnerSax/dataBuilder
+    commit: "507a6d0"
+- location:
+    git: https://github.com/ryantrinkle/reflex
+    commit: "cc62c11a6cde31412582758c236919d4bb766ada"
+- location:
+    git: https://github.com/ryantrinkle/reflex-dom
+    commit: "639d9ca13c2def075e83344c9afca6eafaf24219"
+- location:
+    git: https://github.com/ghcjs/ghcjs-dom
+    commit: "1644ab2a058618ebbffefa12ee95cd7484169275"
+- location:
+    git: https://github.com/reflex-frp/reflex-dom-contrib
+    commit: "52fcdca"    
+- '.'
+
+# Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
+extra-deps:
+   - dependent-map-0.2.1.0
+   - dependent-sum-0.3.2.1
+   - ref-tf-0.4
+   - these-0.6.2.0	
+   - readable-0.3.1
+   - string-conv-0.1
+   - generics-sop-0.2.1.0
+#   - reflex-orphans-0.1
+   
+# Override default flag values for local packages and extra-deps
+flags:
+  ghcjs-dom:
+    jsffi: true
+
+# Extra package databases containing global packages
+extra-package-dbs: []
+
+# Control whether we use the GHC we find on the path
+# system-ghc: true
+
+# Require a specific version of stack, using version ranges
+# require-stack-version: -any # Default
+# require-stack-version: >= 0.1.10.0
+
+# Override the architecture used by stack, especially useful on Windows
+# arch: i386
+# arch: x86_64
+
+# Extra directories used by stack for building
+# extra-include-dirs: [/path/to/dir]
+# extra-lib-dirs: [/path/to/dir]

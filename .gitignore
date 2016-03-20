@@ -1,0 +1,12 @@
+.stack-work/*
+.hg/*
+.hg*
+*.hs#
+*~
+*.lkshs
+
+*.lkshw
+
+
+
+
