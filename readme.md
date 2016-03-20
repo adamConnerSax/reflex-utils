@@ -10,5 +10,6 @@ Various form and layout utilities for reflex-dom:
 For examples of the latter 3, see app/layout/Main.hs
 
 
-See stack.yaml for details of GHCJS version as well as relfex, reflex-dom, reflex-dom-contrib versions.  
+See stack.yaml for details of GHCJS version as well as relfex, reflex-dom, reflex-dom-contrib versions.
+NB; requires a newer version of generics-sop than is in the resolver given
 
