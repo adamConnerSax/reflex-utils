@@ -1,9 +1,8 @@
 .stack-work/*
 .hg/*
 .hg*
-*.hs#
 *~
-
+*#
 
 
 
