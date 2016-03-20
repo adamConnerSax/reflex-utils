@@ -178,8 +178,8 @@ tabbedWidget = do
 allCss = tabCssBS
          <> flexCssBS
          <> clayCssBS 
-         <> $(embedFile "/Users/adam/Development/webResources/css/pure-release-0.6.0/pure.css")
-         <> $(embedFile "/Users/adam/Development/webResources/css/flexboxgrid-6.3.0/flexboxgrid.css")
+--         <> $(embedFile "/Users/adam/Development/webResources/css/pure-release-0.6.0/pure.css")
+--         <> $(embedFile "/Users/adam/Development/webResources/css/flexboxgrid-6.3.0/flexboxgrid.css")
 
 
 main::IO ()

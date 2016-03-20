@@ -51,7 +51,7 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 
 
 -- generic instances
--- NB: "Generic" here is the Generics.SOP sort.  GHC.Generics is 
+-- NB: "Generic" below is the Generics.SOP sort.  
 -- NB: You don't need the "buildA .. = .. gBuildA .. " lines if the default formatting is okay.  But this allows you to insert layout on a per type basis.
 -- More layout options are available if you write custom instances. 
 instance Generic A
