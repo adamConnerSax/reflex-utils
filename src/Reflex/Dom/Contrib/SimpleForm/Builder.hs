@@ -13,6 +13,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        (
          DynMaybe
        , makeSimpleForm
+       , makeObserver
        , deriveSFRowBuilder
        , deriveSFColBuilder
        , SFRW
@@ -44,7 +45,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
 import Control.Monad (liftM2)
 import Control.Applicative (liftA2)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader (ReaderT, runReaderT, ask, lift)
+import Control.Monad.Reader (ReaderT, runReaderT, ask, lift,local)
 import Control.Monad.Morph
 import Data.Maybe (fromJust,isJust)
 import Data.Monoid ((<>))
@@ -97,6 +98,14 @@ switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
 makeSimpleForm::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->Maybe a->m (DynMaybe t a)
 makeSimpleForm cfg ma = runSimpleFormR cfg $ B.buildA Nothing ma
 
+makeObserver::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->R.Dynamic t a->m (DynMaybe t a)
+makeObserver cfg aDyn = runSimpleFormR cfg . SimpleFormR $ disableInputs $ do
+  startDyn <- R.mapDyn Just aDyn -- DynMaybe t a
+  builtDyn <- R.mapDyn (unSF . buildA Nothing) startDyn -- Dynamic t (SimpleFormR e t m (DynMaybe t a))
+  newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
+  lift $ R.joinDyn <$> R.foldDyn (\_ x-> x) startDyn newDynEv -- DynMaybe t a
+
+
 type SFLayoutF e m a = ReaderT e m a -> ReaderT e m a
 type DynAttrs t = R.Dynamic t (M.Map String String)
 liftLF::Monad m=>(forall b.m b->m b)->SFLayoutF e m a
@@ -124,6 +133,8 @@ class SimpleFormConfiguration e t m | m->t  where
   invalidItemStyle::ReaderT e m CssClasses
   buttonStyle::ReaderT e m CssClasses
   dropdownStyle::ReaderT e m CssClasses
+  inputsDisabled::ReaderT e m Bool
+  disableInputs::ReaderT e m a->ReaderT e m a
 
 itemL::SimpleFormConfiguration e t m=>SFLayoutF e m a
 itemL = layoutL . formItem
@@ -143,10 +154,13 @@ formRow' attrsDyn  = formItem . dynamicDiv attrsDyn . layoutHoriz
 formCol'::SimpleFormConfiguration e t m=>DynAttrs t->SFLayoutF e m a
 formCol' attrsDyn = formItem . dynamicDiv attrsDyn .layoutVert
 
-buttonClass::RD.MonadWidget t m=>String->String->m (R.Event t ())
-buttonClass label cssClass = do
-  (e,_) <- RD.elAttr' "button" ("class" RD.=: cssClass) $ RD.text label
+--disableAttr::SimpleFormConfiguration e t m=>Reader e t m (M.Map String String)
+
+buttonClass::RD.MonadWidget t m=>String->M.Map String String->m (R.Event t ())
+buttonClass label attrs = do
+  (e,_) <- RD.elAttr' "button" attrs $ RD.text label
   return $ RD.domEvent RD.Click e 
+
 
 attrs0::R.Reflex t=>DynAttrs t
 attrs0 = R.constDyn mempty
@@ -166,9 +180,11 @@ sfAttrs'::(RD.MonadHold t m, R.Reflex t, SimpleFormConfiguration e t m)
 sfAttrs' mDyn mFN mTypeS fixedCss = do
   validClasses <- validItemStyle
   invalidClasses <- invalidItemStyle
+  disable <- inputsDisabled
   let title = componentTitle mFN mTypeS
-      validAttrs = (titleAttr title <> cssClassAttr (validClasses <> fixedCss))
-      invalidAttrs = (titleAttr title <> cssClassAttr (invalidClasses <> fixedCss))
+      disableAttr = if disable then ("disabled" RD.=: "") else mempty
+      validAttrs = (disableAttr <> titleAttr title <> cssClassAttr (validClasses <> fixedCss))
+      invalidAttrs = (disableAttr <> titleAttr title <> cssClassAttr (invalidClasses <> fixedCss))
   lift $ R.mapDyn (\x -> if isJust x then validAttrs else invalidAttrs) mDyn
 
 

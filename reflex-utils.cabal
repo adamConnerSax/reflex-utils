@@ -32,6 +32,7 @@ library
   other-modules:
                 Reflex.Dom.Contrib.SimpleForm.Instances.Basic
                 Reflex.Dom.Contrib.SimpleForm.Instances.Containers
+                Reflex.Dom.Contrib.SimpleForm.Instances.Extras
 
   build-depends:       base >= 4.7 && < 5
                      , reflex

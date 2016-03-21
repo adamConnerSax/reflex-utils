@@ -94,9 +94,11 @@ c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.emp
 
 
 test::(SimpleFormC e t m,MonadIO (PushM t))=>e->m ()
-test env = do
-  cDyn<- flexFillR $ makeSimpleForm env (Just c)
-  mapDyn ppShow cDyn >>= dynText 
+test cfg = do
+  cDyn<- flexFillR $ makeSimpleForm cfg (Just c)
+  mapDyn ppShow cDyn >>= dynText
+  _ <- flexFillR $ makeObserver cfg cDyn
+  return ()
 
 {-
    NB: AllDefault module exports DefSFCfg which is an instance of SimpleFormConfiguration with all the specific failure, sum and styling.
@@ -104,7 +106,7 @@ test env = do
    That's the part to re-implement for different form behavior. Or just to use different layout functions than the ones I've
    implemented with here.
 -}
-demoCfg = DefSFCfg (CssClasses [CssClass "demo-box-blue"]) (CssClasses [CssClass "demo-box-red"]) emptyCss emptyCss
+demoCfg = DefSFCfg (CssClasses [CssClass "demo-box-blue"]) (CssClasses [CssClass "demo-box-red"]) emptyCss emptyCss False
 
 main  :: IO ()
 main  = mainWidgetWithCss (flexCssBS <> cssToBS cssBoxes) $ test demoCfg

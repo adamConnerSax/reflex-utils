@@ -2,12 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Extras () where
 
 import Control.Applicative (liftA2)
@@ -33,13 +28,26 @@ import qualified DataBuilder as B
 
 import Reflex.Dom.Contrib.SimpleForm.Builder
 
+{-
 -- This is not an isomorphism since there may be b's which have no analog as a's.  Injective but not nec. Surjective.
 class EquivRep a b where
   to::a -> b
   from::b -> a
 
 instance (SimpleFormC e t m,EquivRep a b, B.Builder (SimpleFormR e t m) b)=>Builder (SimpleFormR e t m) a where
-  buildA md ma = from <$> buildA (to <$> ma)
+  buildA mFN ma = from <$> buildA mFN (to <$> ma)
+-}
 
-instance (SimpleFormC e t m, GHCG.Generic a)=>
-
+instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFormR e t m) (R.Dynamic t a) where
+  buildA mFN mda = SimpleFormR $ 
+    case mda of
+      Nothing -> return $ R.constDyn Nothing 
+      Just aDyn -> do
+        let builder::Maybe a->SimpleFormR e t m a
+            builder = buildA mFN
+        startDyn <- R.mapDyn Just aDyn -- DynMaybe t a
+        builtDyn <- R.mapDyn (unSF . builder) startDyn -- Dynamic t (SimpleFormR e t m (DynMaybe t a))
+        newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
+        dMaybe <- R.joinDyn <$> R.foldDyn (\_ x-> x) startDyn newDynEv -- DynMaybe t a
+        lift $ R.mapDyn (maybe Nothing (Just . R.constDyn)) dMaybe
+        

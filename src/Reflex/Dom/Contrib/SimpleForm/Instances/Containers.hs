@@ -12,6 +12,7 @@ import Control.Monad (join)
 import Control.Monad.Reader (ReaderT, lift)
 import Control.Monad.State (StateT, runStateT, modify, get, put)
 import Control.Monad.Morph (hoist)
+import Data.Monoid ((<>))
 
 -- reflex imports
 import qualified Reflex as R 
@@ -198,6 +199,7 @@ buildSFContainer aI buildTr mFN mfa = do
   validClasses <- validItemStyle
   invalidClasses <- invalidItemStyle
   buttonClasses <- buttonStyle
+  disabled <- inputsDisabled
   mdo
     attrsDyn <- sfAttrs dmfa mFN Nothing
     let initial = maybe (Just $ emptyT aI) (Just . (toT aI)) mfa 
@@ -208,7 +210,8 @@ buildSFContainer aI buildTr mFN mfa = do
       addEv <- formRow $ do
         let emptyB = unSF $ B.buildA Nothing Nothing -- we don't pass the fieldname here since it's the name of the parent 
         dmb <- itemL $ RD.joinDyn <$> RD.widgetHold (emptyB) (fmap (const emptyB) $ R.updated dmfa')
-        clickEv <-  itemR . lift $ buttonClass "+" (toCssString buttonClasses)-- need attributes for styling??
+        let disableAttr = if disabled then ("disabled" RD.=: "") else mempty
+        clickEv <-  itemR . lift $ buttonClass "+" (("class" RD.=: (toCssString buttonClasses)) <> disableAttr) -- need attributes for styling??
         return $ R.attachDynWithMaybe (\mb _ -> mb) dmb clickEv -- only fires if button is clicked when mb is a Just.
       let insert mfa b = (insertB aI) <$> (Just b) <*> mfa 
           newFaEv = R.attachDynWithMaybe insert dmfa' addEv -- Event t (tr a), only fires if traverable is not Nothing
@@ -220,11 +223,13 @@ buildSFContainer aI buildTr mFN mfa = do
 
 buildOneDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b)
                    =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (ReaderT e m) (DynMaybe t b)
-buildOneDeletable dI mFN ma = liftLF' formRow $ do
+buildOneDeletable dI mFN ma = liftLF' formRow $ do     
     (evs,curS) <- get
     buttonClasses <- lift buttonStyle
+    disabled <- lift inputsDisabled
     dma <- lift . itemL . unSF $ B.buildA mFN ma
-    ev  <- lift . itemR . lift $ buttonClass "x" (toCssString buttonClasses)
+    let disableAttr = if disabled then ("disabled" RD.=: "") else mempty
+    ev  <- lift . itemR . lift $ buttonClass "x" (("class" RD.=: (toCssString buttonClasses)) <> disableAttr) 
     let ev' = R.attachDynWithMaybe (\ma _ -> (getKey dI) <$> ma <*> (Just curS)) dma ev
     put ((ev':evs),(updateS dI) curS)
     return dma

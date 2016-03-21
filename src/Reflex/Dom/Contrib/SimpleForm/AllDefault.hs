@@ -22,7 +22,7 @@ module Reflex.Dom.Contrib.SimpleForm.AllDefault
 
 import Control.Monad.IO.Class (MonadIO)
 import Control.Lens ((^.))
-import Control.Monad.Reader (ReaderT, runReaderT, ask, lift)
+import Control.Monad.Reader (ReaderT, runReaderT, ask, lift,local)
 import Data.Maybe (fromJust)
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -45,7 +45,11 @@ data DefSFCfg  = DefSFCfg
                  , cfgInvalidStyle::CssClasses
                  , cfgButtonStyle::CssClasses
                  , cfgDropdownStyle::CssClasses
+                 , cfgDisable::Bool
                  }
+
+disableDefCfg::DefSFCfg->DefSFCfg
+disableDefCfg x = x { cfgDisable = True }
 
 defFailureF::SimpleFormC e t m=>String->SimpleFormR e t m a
 defFailureF msg = SimpleFormR $ do
@@ -67,7 +71,9 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
       defPair = maybe (pft $ head conWidgets) (\cn->getSFRP cn conWidgets) mDefCon
   validClasses <- validItemStyle
   dropdownClasses <- dropdownStyle
-  let attrsDyn = R.constDyn (cssClassAttr (validClasses <> dropdownClasses) <> titleAttr ("Constructor"))
+  disabled <- inputsDisabled
+  let disabledAttr = if disabled then ("disabled" RD.=: "") else mempty
+      attrsDyn = R.constDyn (cssClassAttr (validClasses <> dropdownClasses) <> titleAttr ("Constructor") <> disabledAttr)
   formRow $ do
     sfrpCW <- itemL $ _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) (WidgetConfig RD.never defPair attrsDyn)
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
@@ -86,5 +92,5 @@ instance (MonadIO(PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg
   invalidItemStyle = cfgInvalidStyle <$> ask
   buttonStyle = cfgButtonStyle <$> ask
   dropdownStyle = cfgDropdownStyle <$> ask
-
-
+  inputsDisabled = cfgDisable <$> ask
+  disableInputs = local disableDefCfg
