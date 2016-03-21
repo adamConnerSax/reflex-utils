@@ -15,6 +15,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , makeSimpleForm
        , observeDynamic
        , observeWidget
+       , observeFlow
        , deriveSFRowBuilder
        , deriveSFColBuilder
        , SFRW
@@ -110,16 +111,16 @@ observeWidget cfg wa = runSimpleFormR cfg . SimpleFormR . disableInputs $ do
   a <- lift wa
   unSF . buildA Nothing . Just $ a
 
-{-
+
 observeFlow::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a,B.Builder (SimpleFormR e t m) b)=>e->(a->m b)->a->m (DynMaybe t b)
 observeFlow cfg f a = runSimpleFormR cfg . SimpleFormR  $ do
-  let initialB = f a
-  dma <- buildA Nothing (Just a) -- DynMaybe t a
-  dwb <- R.foldDynMaybe (\ma _ -> f <$> ma) initialB (R.updated dma) -- Dynamic t (m b)  
-  dwdmb <- R.mapDyn (observeWidget cfg) dwb  -- Dynamic t (m (DynMaybe t b))
-  dmbEv <- RD.dyn dwdmb -- Event t (DynMaybe t b)
-  lift $ R.joinDyn $ R.foldDyn (\a _ -> a) (R.constDyn . Just $ initialB) dmbEv
--}  
+  let initialWidget = f a
+  dma <- unSF $ buildA Nothing (Just a) -- DynMaybe t a
+  dwb <- lift $ R.foldDynMaybe (\ma _ -> f <$> ma) initialWidget (R.updated dma) -- Dynamic t (m b)  
+  dwdmb <- lift $ R.mapDyn (observeWidget cfg) dwb  -- Dynamic t (m (DynMaybe t b))
+  lift $ R.joinDyn <$> RD.widgetHold (observeWidget cfg initialWidget) (R.updated dwdmb)
+
+
     
 
 type SFLayoutF e m a = ReaderT e m a -> ReaderT e m a
