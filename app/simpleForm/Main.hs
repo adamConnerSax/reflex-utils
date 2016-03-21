@@ -97,7 +97,7 @@ test::(SimpleFormC e t m,MonadIO (PushM t))=>e->m ()
 test cfg = do
   cDyn<- flexFillR $ makeSimpleForm cfg (Just c)
   mapDyn ppShow cDyn >>= dynText
-  _ <- flexFillR $ makeObserver cfg cDyn
+  _ <- flexFillR $ observeDynamic cfg cDyn
   return ()
 
 {-

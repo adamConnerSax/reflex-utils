@@ -3,7 +3,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Reflex.Dom.Contrib.SimpleForm.Instances.Extras () where
+{-# LANGUAGE Rank2Types #-}
+module Reflex.Dom.Contrib.SimpleForm.Instances.Extras
+       (
+         MWidget(..)
+       ) where
 
 import Control.Applicative (liftA2)
 import Control.Monad.Reader (ReaderT, runReaderT, ask, lift)
@@ -28,6 +32,7 @@ import qualified DataBuilder as B
 
 import Reflex.Dom.Contrib.SimpleForm.Builder
 
+
 {-
 -- This is not an isomorphism since there may be b's which have no analog as a's.  Injective but not nec. Surjective.
 class EquivRep a b where
@@ -50,4 +55,19 @@ instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFo
         newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
         dMaybe <- R.joinDyn <$> R.foldDyn (\_ x-> x) startDyn newDynEv -- DynMaybe t a
         lift $ R.mapDyn (maybe Nothing (Just . R.constDyn)) dMaybe
-        
+
+
+newtype MWidget m a = MWidget { unMW::m a }
+
+instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFormR e t m) (MWidget m a) where
+  buildA mFN mwa = SimpleFormR $ 
+    case mwa of
+      Nothing -> return $ R.constDyn Nothing 
+      Just wa -> do
+        a <- lift $ unMW wa
+        let builder::Maybe a->SimpleFormR e t m a
+            builder = buildA mFN
+        dma <- unSF $ builder (Just a)
+        lift $ R.mapDyn (maybe Nothing (Just . MWidget . return)) dma 
+
+
