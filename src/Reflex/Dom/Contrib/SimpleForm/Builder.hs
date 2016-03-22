@@ -13,16 +13,24 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        (
          DynMaybe
        , makeSimpleForm
+       , observeDynamic
+       , observeWidget
+       , observeFlow
        , deriveSFRowBuilder
        , deriveSFColBuilder
        , SFRW
        , SimpleFormR(..)
+       , SimpleFormConfiguration(..)
+       , SFLayoutF
        , runSimpleFormR
+       , SimpleFormC
+       , module ReflexExport
+       , module BExport
+       , module GSOP
        , liftF
        , liftLF
        , liftTransform
        , switchingSFR
-       , SimpleFormConfiguration(..)
        , itemL
        , itemR
        , formRow
@@ -35,16 +43,12 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , cssClassAttr
        , sfAttrs
        , sfAttrs'
-       , SimpleFormC
-       , module ReflexExport
-       , module BExport
-       , module GSOP
        ) where
 
 import Control.Monad (liftM2)
 import Control.Applicative (liftA2)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader (ReaderT, runReaderT, ask, lift)
+import Control.Monad.Reader (ReaderT, runReaderT, ask, lift,local)
 import Control.Monad.Morph
 import Data.Maybe (fromJust,isJust)
 import Data.Monoid ((<>))
@@ -66,8 +70,6 @@ import DataBuilder.TH (deriveBuilder)
 
 type DynMaybe t a = R.Dynamic t (Maybe a)
 type SFRW e t m a = ReaderT e m (DynMaybe t a)
-
-data Orientation = Row | Column
 
 -- This is necessary because this functor and applicative are different from that of SFRW
 newtype SimpleFormR e t m a = SimpleFormR { unSF::SFRW e t m a }
@@ -97,16 +99,43 @@ switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
 makeSimpleForm::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->Maybe a->m (DynMaybe t a)
 makeSimpleForm cfg ma = runSimpleFormR cfg $ B.buildA Nothing ma
 
+observeDynamic::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->R.Dynamic t a->m (DynMaybe t a)
+observeDynamic cfg aDyn = runSimpleFormR cfg . SimpleFormR . disableInputs $ do
+  startDyn <- R.mapDyn Just aDyn -- DynMaybe t a
+  builtDyn <- R.mapDyn (unSF . buildA Nothing) startDyn -- Dynamic t (SimpleFormR e t m (DynMaybe t a))
+  newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
+  lift $ R.joinDyn <$> R.foldDyn (\_ x-> x) startDyn newDynEv -- DynMaybe t a
+
+observeWidget::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->m a->m (DynMaybe t a)
+observeWidget cfg wa = runSimpleFormR cfg . SimpleFormR . disableInputs $ do
+  a <- lift wa
+  unSF . buildA Nothing . Just $ a
+
+
+observeFlow::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a,B.Builder (SimpleFormR e t m) b)=>e->(a->m b)->a->m (DynMaybe t b)
+observeFlow cfg f a = runSimpleFormR cfg . SimpleFormR  $ do
+  let initialWidget = f a
+  dma <- unSF $ buildA Nothing (Just a) -- DynMaybe t a
+  dwb <- lift $ R.foldDynMaybe (\ma _ -> f <$> ma) initialWidget (R.updated dma) -- Dynamic t (m b)  
+  dwdmb <- lift $ R.mapDyn (observeWidget cfg) dwb  -- Dynamic t (m (DynMaybe t b))
+  lift $ R.joinDyn <$> RD.widgetHold (observeWidget cfg initialWidget) (R.updated dwdmb)
+
+
+    
+
 type SFLayoutF e m a = ReaderT e m a -> ReaderT e m a
 type DynAttrs t = R.Dynamic t (M.Map String String)
+
 liftLF::Monad m=>(forall b.m b->m b)->SFLayoutF e m a
 liftLF = hoist
+
 
 liftF::(forall b.SFLayoutF e m b)->SimpleFormR e t m a->SimpleFormR e t m a
 liftF f = SimpleFormR . f . unSF
 
 liftTransform::Monad m=>(forall b.m b->m b)->SimpleFormR e t m a->SimpleFormR e t m a
 liftTransform f = liftF (liftLF f)
+
 
 -- | class to hold form configuration.  For different configurations, declare an env type and then
 -- | instantiate the class for that type.
@@ -124,6 +153,9 @@ class SimpleFormConfiguration e t m | m->t  where
   invalidItemStyle::ReaderT e m CssClasses
   buttonStyle::ReaderT e m CssClasses
   dropdownStyle::ReaderT e m CssClasses
+  inputsDisabled::ReaderT e m Bool
+  disableInputs::ReaderT e m a->ReaderT e m a
+
 
 itemL::SimpleFormConfiguration e t m=>SFLayoutF e m a
 itemL = layoutL . formItem
@@ -143,10 +175,16 @@ formRow' attrsDyn  = formItem . dynamicDiv attrsDyn . layoutHoriz
 formCol'::SimpleFormConfiguration e t m=>DynAttrs t->SFLayoutF e m a
 formCol' attrsDyn = formItem . dynamicDiv attrsDyn .layoutVert
 
-buttonClass::RD.MonadWidget t m=>String->String->m (R.Event t ())
-buttonClass label cssClass = do
-  (e,_) <- RD.elAttr' "button" ("class" RD.=: cssClass) $ RD.text label
+disabledAttr::(Monad m,SimpleFormConfiguration e t m)=>ReaderT e m (M.Map String String)
+disabledAttr = do
+  disabled <- inputsDisabled
+  return $ if disabled then ("disabled" RD.=: "") else mempty
+
+buttonClass::RD.MonadWidget t m=>String->M.Map String String->m (R.Event t ())
+buttonClass label attrs = do
+  (e,_) <- RD.elAttr' "button" attrs $ RD.text label
   return $ RD.domEvent RD.Click e 
+
 
 attrs0::R.Reflex t=>DynAttrs t
 attrs0 = R.constDyn mempty
@@ -166,9 +204,10 @@ sfAttrs'::(RD.MonadHold t m, R.Reflex t, SimpleFormConfiguration e t m)
 sfAttrs' mDyn mFN mTypeS fixedCss = do
   validClasses <- validItemStyle
   invalidClasses <- invalidItemStyle
+  dAttr <- disabledAttr
   let title = componentTitle mFN mTypeS
-      validAttrs = (titleAttr title <> cssClassAttr (validClasses <> fixedCss))
-      invalidAttrs = (titleAttr title <> cssClassAttr (invalidClasses <> fixedCss))
+      validAttrs = (dAttr <> titleAttr title <> cssClassAttr (validClasses <> fixedCss))
+      invalidAttrs = (dAttr <> titleAttr title <> cssClassAttr (invalidClasses <> fixedCss))
   lift $ R.mapDyn (\x -> if isJust x then validAttrs else invalidAttrs) mDyn
 
 
@@ -177,6 +216,7 @@ componentTitle mFN mType =
   let fnS = maybe "" id  mFN
       tnS = maybe "" id  mType
   in if (isJust mFN && isJust mType) then fnS ++ "::" ++ tnS else fnS ++ tnS
+
 
 instance SimpleFormC e t m => B.Buildable (SimpleFormR e t m) where
   -- the rest of the instances are handled by defaults since SimpleFormR is Applicative

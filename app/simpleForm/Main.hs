@@ -9,6 +9,7 @@
 module Main where
 
 import Prelude hiding (rem,div,span)
+import Control.Monad (foldM)
 import Control.Monad.IO.Class as IOC (MonadIO)
 import Data.Monoid ((<>))
 import Data.FileEmbed
@@ -22,6 +23,7 @@ import Data.Time.Clock (UTCTime(..))
 import Data.Time.Calendar (Day(..))
 
 import Reflex
+import Reflex.Dynamic.TH
 import Reflex.Dom
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 
@@ -92,11 +94,20 @@ b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
 b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, AC Red ]
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
 
+flowTestWidget::MonadWidget t m=>Int->m (Dynamic t String)
+flowTestWidget n = do
+  text "Are all these checked?"
+  boolDyns <- sequence $ take n $ Prelude.repeat (RDC._hwidget_value <$> RDC.htmlCheckbox (RDC.WidgetConfig never False (constDyn mempty)))
+  allTrueDyn <- foldM (\x bDyn -> combineDyn (&&) x bDyn) (constDyn True) boolDyns
+  forDyn allTrueDyn $ \b -> if b then "All Checked!" else "Some Unchecked."
 
 test::(SimpleFormC e t m,MonadIO (PushM t))=>e->m ()
-test env = do
-  cDyn<- flexFillR $ makeSimpleForm env (Just c)
-  mapDyn ppShow cDyn >>= dynText 
+test cfg = do
+  cDyn<- flexFillR $ makeSimpleForm cfg (Just c)
+  mapDyn ppShow cDyn >>= dynText
+  _ <- flexFillR $ observeDynamic cfg cDyn
+  _ <- observeFlow cfg flowTestWidget 2
+  return ()
 
 {-
    NB: AllDefault module exports DefSFCfg which is an instance of SimpleFormConfiguration with all the specific failure, sum and styling.
@@ -104,7 +115,7 @@ test env = do
    That's the part to re-implement for different form behavior. Or just to use different layout functions than the ones I've
    implemented with here.
 -}
-demoCfg = DefSFCfg (CssClasses [CssClass "demo-box-blue"]) (CssClasses [CssClass "demo-box-red"]) emptyCss emptyCss
+demoCfg = DefSFCfg (CssClasses [CssClass "demo-box-blue"]) (CssClasses [CssClass "demo-box-red"]) emptyCss emptyCss False
 
 main  :: IO ()
 main  = mainWidgetWithCss (flexCssBS <> cssToBS cssBoxes) $ test demoCfg

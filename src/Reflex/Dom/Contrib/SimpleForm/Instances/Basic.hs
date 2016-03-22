@@ -95,7 +95,7 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Bool where
   buildA mFN mInitial = SimpleFormR $ mdo
     let initial = maybe False id mInitial
     attrsDyn <- sfAttrs (R.constDyn $ Just False) mFN (Just $ "Bool")
-    dma <- itemL . lift $ _hwidget_value <$> htmlCheckbox (WidgetConfig RD.never initial attrs0)
+    dma <- itemL . lift $ _hwidget_value <$> htmlCheckbox (WidgetConfig RD.never initial attrsDyn)
     lift $ R.mapDyn Just dma
 
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Double where
