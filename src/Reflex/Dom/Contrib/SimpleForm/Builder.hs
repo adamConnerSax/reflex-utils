@@ -95,7 +95,6 @@ switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
   let f = runSimpleFormR cfg . widgetGetter
   lift $ R.joinDyn <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)  
   
-
 makeSimpleForm::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->Maybe a->m (DynMaybe t a)
 makeSimpleForm cfg ma = runSimpleFormR cfg $ B.buildA Nothing ma
 
@@ -116,11 +115,8 @@ observeFlow::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a,B.Builder (Simpl
 observeFlow cfg f a = runSimpleFormR cfg . SimpleFormR  $ do
   let initialWidget = f a
   dma <- unSF $ buildA Nothing (Just a) -- DynMaybe t a
-  dwb <- lift $ R.foldDynMaybe (\ma _ -> f <$> ma) initialWidget (R.updated dma) -- Dynamic t (m b)  
-  dwdmb <- lift $ R.mapDyn (observeWidget cfg) dwb  -- Dynamic t (m (DynMaybe t b))
-  lift $ R.joinDyn <$> RD.widgetHold (observeWidget cfg initialWidget) (R.updated dwdmb)
-
-
+  dwb <- lift $ R.foldDynMaybe (\ma _ -> f <$> ma) initialWidget (R.updated dma) -- Dynamic t (m b)
+  lift $ R.joinDyn <$> RD.widgetHold (observeWidget cfg initialWidget) (observeWidget cfg <$> R.updated dwb)
     
 
 type SFLayoutF e m a = ReaderT e m a -> ReaderT e m a
