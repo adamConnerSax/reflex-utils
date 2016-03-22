@@ -63,7 +63,6 @@ instance Eq (SFRPair e t m a) where
 
 defSumF::SimpleFormC e t m=>[(B.ConName,SimpleFormR e t m a)]->Maybe B.ConName->SimpleFormR e t m a
 defSumF conWidgets mDefCon = SimpleFormR $ do
---  env <- ask
   let conNames = fst . unzip $ conWidgets
       getSFRP::B.ConName->[(B.ConName,SimpleFormR e t m a)]->SFRPair e t m a
       getSFRP cn = SFRPair cn . fromJust . M.lookup cn . M.fromList 

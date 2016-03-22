@@ -160,7 +160,7 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Day where
     return dma
 
 
--- I should be able to make TH do this, right? Or not.  Since it would have to reify a.  So it would need a template splice for every a.
+
 instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>B.Builder (SimpleFormR e t m) (Maybe a)
 
 instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a,B.Builder (SimpleFormR e t m) b)=>B.Builder (SimpleFormR e t m) (Either a b)
