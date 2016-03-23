@@ -45,10 +45,10 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , sfAttrs'
        ) where
 
-import Control.Monad (liftM2)
-import Control.Applicative (liftA2)
+--import Control.Monad (liftM2)
+--import Control.Applicative (liftA2)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader (ReaderT, runReaderT, ask, lift,local)
+import Control.Monad.Reader (ReaderT,runReaderT, ask,lift,local)
 import Control.Monad.Morph
 import Data.Maybe (fromJust,isJust)
 import Data.Monoid ((<>))
@@ -150,7 +150,7 @@ class SimpleFormConfiguration e t m | m->t  where
   buttonStyle::ReaderT e m CssClasses
   dropdownStyle::ReaderT e m CssClasses
   inputsDisabled::ReaderT e m Bool
-  disableInputs::ReaderT e m a->ReaderT e m a
+  disableInputs::ReaderT e m a -> ReaderT e m a
 
 
 itemL::SimpleFormConfiguration e t m=>SFLayoutF e m a
