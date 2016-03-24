@@ -48,15 +48,25 @@ import Reflex.Dom.Contrib.SimpleForm.Builder
 -- If this uses an index, it might require some state as the traversable container is rendered.
 
 -- I'd prefer these as classes but I can't make all the types work.  I end up with open type families and injectivity issues.
--- So, instead, I carry the dictionaries around as arguments.  That works too.  
+-- So, instead, I carry the dictionaries around as arguments.  That works too.
+data CRepI (fa :: *) (gb :: *) = CRepI { toRep::fa -> gb, fromRep::gb -> fa }
+
+idRep::CRepI fa fa
+idRep = CRepI id id
+
 data SFAppendableI (fa :: * ) (g :: * -> *) (b :: *) = SFAppendableI
   {
-    toT::fa -> g b
-  , fromT::g b -> fa
+    cRep::CRepI fa (g b)
   , emptyT::g b
   , insertB::b->fa->fa
   , sizeFa::fa->Int
   }
+
+toT::SFAppendableI fa g b->(fa -> g b)
+toT = toRep . cRep
+
+fromT::SFAppendableI fa g b->(g b -> fa)
+fromT = fromRep . cRep
 
 data SFDeletableI (g :: * -> *) (b :: *) (k :: *) (s :: *) = SFDeletableI
   {
@@ -72,7 +82,16 @@ data SFAdjustableI fa g b k s= SFAdjustableI { sfAI::SFAppendableI fa g b, sfDI:
 
 buildAdjustableContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
                           =>SFAdjustableI fa g b k s->Maybe FieldName->Maybe fa->SimpleFormR e t m fa
-buildAdjustableContainer sfAdj mFN = SimpleFormR . buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN
+buildAdjustableContainer sfAdj mFN mfa = SimpleFormR  $ do
+  disabled <- inputsDisabled
+  if disabled
+     then buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfa
+     else buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
+
+
+buildReadOnlyContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
+                        =>CRepI fa (g b)->BuildF e t m fa
+buildReadOnlyContainer crI mFN = buildTraversableSFA crI mFN 
 
 
 listAppend::a->[a]->[a]
@@ -82,7 +101,7 @@ listDeleteAt::Int->[a]->[a]
 listDeleteAt n as = take n as ++ drop (n+1) as
 
 listSFA::SFAppendableI [a] [] a
-listSFA = SFAppendableI id id [] listAppend L.length
+listSFA = SFAppendableI idRep [] listAppend L.length
 
 listSFD::SFDeletableI [] a Int Int
 listSFD = SFDeletableI (\_ n->n) 0 (+1) listDeleteAt
@@ -92,7 +111,7 @@ instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>B.Builder (SimpleF
 
 
 mapSFA::Ord k=>SFAppendableI (M.Map k v) (M.Map k) (k,v)
-mapSFA = SFAppendableI (M.mapWithKey (\k v->(k,v))) (\m->M.fromList $ snd <$> M.toList m) mempty (\(k,x) m->M.insert k x m) M.size
+mapSFA = SFAppendableI (CRepI (M.mapWithKey (\k v->(k,v))) (\m->M.fromList $ snd <$> M.toList m)) mempty (\(k,x) m->M.insert k x m) M.size
 
 mapSFD::Ord k=>SFDeletableI (M.Map k) (k,v) k ()
 mapSFD = SFDeletableI (\(k,_) _ ->k) () id M.delete
@@ -104,7 +123,7 @@ instance (SimpleFormC e t m,
   buildA = buildAdjustableContainer (SFAdjustableI mapSFA mapSFD)
 
 intMapSFA::SFAppendableI (IM.IntMap v) IM.IntMap (IM.Key,v)
-intMapSFA = SFAppendableI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList $ snd <$> IM.toList m) mempty (\(k,x) m->IM.insert k x m) IM.size
+intMapSFA = SFAppendableI (CRepI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList $ snd <$> IM.toList m)) mempty (\(k,x) m->IM.insert k x m) IM.size
 
 intMapSFD::SFDeletableI IM.IntMap (IM.Key,v) IM.Key ()
 intMapSFD = SFDeletableI (\(k,_) _ ->k) () id IM.delete
@@ -116,7 +135,7 @@ instance (SimpleFormC e t m,
   buildA = buildAdjustableContainer (SFAdjustableI intMapSFA intMapSFD)
 
 seqSFA::SFAppendableI (Seq.Seq a) Seq.Seq a
-seqSFA = SFAppendableI id id Seq.empty (flip (Seq.|>)) Seq.length
+seqSFA = SFAppendableI idRep Seq.empty (flip (Seq.|>)) Seq.length
 
 seqSFD::SFDeletableI Seq.Seq a Int Int
 seqSFD = SFDeletableI (\_ index->index) 0 (+1) (\n bs -> Seq.take n bs Seq.>< Seq.drop (n+1) bs)
@@ -126,7 +145,7 @@ instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>B.Builder (SimpleF
 
 -- we transform to a map since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
 setSFA::Ord a=>SFAppendableI (S.Set a) (M.Map a) a
-setSFA = SFAppendableI (\s ->M.fromList $ (\x->(x,x)) <$> S.toList s) (\m->S.fromList $ snd <$> M.toList m) M.empty (\x s->S.insert x s) S.size
+setSFA = SFAppendableI (CRepI (\s ->M.fromList $ (\x->(x,x)) <$> S.toList s) (\m->S.fromList $ snd <$> M.toList m)) M.empty (\x s->S.insert x s) S.size
 
 setSFD::Ord a=>SFDeletableI (M.Map a) a a ()
 setSFD = SFDeletableI (\a _ -> a) () id M.delete
@@ -135,7 +154,7 @@ instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a,Ord a)=>B.Builder (
   buildA = buildAdjustableContainer (SFAdjustableI setSFA setSFD)
 
 hashMapSFA::(Eq k,Hashable k)=>SFAppendableI (HML.HashMap k v) (HML.HashMap k) (k,v)
-hashMapSFA = SFAppendableI (HML.mapWithKey (\k v->(k,v))) (\m->HML.fromList $ snd <$> HML.toList m) mempty (\(k,x) m->HML.insert k x m) HML.size
+hashMapSFA = SFAppendableI (CRepI (HML.mapWithKey (\k v->(k,v))) (\m->HML.fromList $ snd <$> HML.toList m)) mempty (\(k,x) m->HML.insert k x m) HML.size
 
 hashMapSFD::(Eq k, Hashable k)=>SFDeletableI (HML.HashMap k) (k,v) k ()
 hashMapSFD = SFDeletableI (\(k,_) _ ->k) () id HML.delete
@@ -150,7 +169,7 @@ instance (SimpleFormC e t m,
 
 -- we transform to a HashMap since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
 hashSetSFA::(Eq a,Hashable a)=>SFAppendableI (HS.HashSet a) (HML.HashMap a) a
-hashSetSFA = SFAppendableI (\hs ->HML.fromList $ (\x->(x,x)) <$> HS.toList hs) (\hm->HS.fromList $ snd <$> HML.toList hm) HML.empty (\x hs->HS.insert x hs) HS.size
+hashSetSFA = SFAppendableI (CRepI (\hs ->HML.fromList $ (\x->(x,x)) <$> HS.toList hs) (\hm->HS.fromList $ snd <$> HML.toList hm)) HML.empty (\x hs->HS.insert x hs) HS.size
 
 hashSetSFD::(Eq a, Hashable a)=>SFDeletableI (HML.HashMap a) a a ()
 hashSetSFD = SFDeletableI (\a _ -> a) () id HML.delete
@@ -182,17 +201,17 @@ liftLF' = hoist
 
 
 -- unstyled, for use within other instances which will deal with the styling.
-buildTraversableSFA'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m b->BuildF e t m fa
-buildTraversableSFA' cI buildOne md mfa =
+buildTraversableSFA'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m b->BuildF e t m fa
+buildTraversableSFA' crI buildOne md mfa =
   case mfa of
-    Just fa -> unSF $ fromT cI <$> traverse (liftF formRow . SimpleFormR . buildOne Nothing . Just) (toT cI $ fa)
+    Just fa -> unSF $ fromRep crI <$> traverse (liftF formRow . SimpleFormR . buildOne Nothing . Just) (toRep crI $ fa)
     Nothing -> return $ R.constDyn Nothing
 
 -- styled, in case we ever want an editable container without add/remove
-buildTraversableSFA::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m fa 
-buildTraversableSFA aI md mfa = do
+buildTraversableSFA::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m fa 
+buildTraversableSFA crI md mfa = do
   validClasses <- validItemStyle
-  formCol' (R.constDyn $ cssClassAttr validClasses) $ buildTraversableSFA' aI (\x -> unSF . B.buildA x) md mfa
+  formCol' (R.constDyn $ cssClassAttr validClasses) $ buildTraversableSFA' crI (\x -> unSF . B.buildA x) md mfa
 
 buildSFContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
 buildSFContainer aI buildTr mFN mfa = do
@@ -220,6 +239,8 @@ buildSFContainer aI buildTr mFN mfa = do
     return dmfa
 --    lift $ R.mapDyn (\ml -> (fromT aI) <$> ml) dmla
 
+--buildOne::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b, Traversable g)=>BuildF e t m (g b)
+--buildOne mFN = unSF . buildA mFN
 
 buildOneDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b)
                    =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (ReaderT e m) (DynMaybe t b)

@@ -115,7 +115,7 @@ test cfg = do
    That's the part to re-implement for different form behavior. Or just to use different layout functions than the ones I've
    implemented with here.
 -}
-demoCfg = DefSFCfg (CssClasses [CssClass "demo-box-blue"]) (CssClasses [CssClass "demo-box-red"]) emptyCss emptyCss False
+demoCfg = DefSFCfg (CssClasses [CssClass "demo-box-blue"]) (CssClasses [CssClass "demo-box-red"]) emptyCss emptyCss emptyCss False
 
 main  :: IO ()
 main  = mainWidgetWithCss (flexCssBS <> cssToBS cssBoxes) $ test demoCfg

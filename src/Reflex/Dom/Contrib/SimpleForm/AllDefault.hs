@@ -43,6 +43,7 @@ data DefSFCfg  = DefSFCfg
                  {
                    cfgValidStyle::CssClasses
                  , cfgInvalidStyle::CssClasses
+                 , cfgLabelStyle::CssClasses
                  , cfgButtonStyle::CssClasses
                  , cfgDropdownStyle::CssClasses
                  , cfgDisable::Bool
@@ -89,6 +90,7 @@ instance (MonadIO(PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg
   layoutR  = liftLF $ flexFillL 
   validItemStyle = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask
+  labelStyle = cfgLabelStyle <$> ask
   buttonStyle = cfgButtonStyle <$> ask
   dropdownStyle = cfgDropdownStyle <$> ask
   inputsDisabled = cfgDisable <$> ask

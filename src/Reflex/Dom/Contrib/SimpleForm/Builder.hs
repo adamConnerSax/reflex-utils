@@ -30,7 +30,11 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , liftF
        , liftLF
        , liftTransform
+       , liftRAction
+       , liftAction
        , switchingSFR
+       , labelLeft
+       , labelTop
        , itemL
        , itemR
        , formRow
@@ -125,12 +129,17 @@ type DynAttrs t = R.Dynamic t (M.Map String String)
 liftLF::Monad m=>(forall b.m b->m b)->SFLayoutF e m a
 liftLF = hoist
 
-
 liftF::(forall b.SFLayoutF e m b)->SimpleFormR e t m a->SimpleFormR e t m a
 liftF f = SimpleFormR . f . unSF
 
 liftTransform::Monad m=>(forall b.m b->m b)->SimpleFormR e t m a->SimpleFormR e t m a
 liftTransform f = liftF (liftLF f)
+
+liftRAction::Monad m=>ReaderT e m b->SimpleFormR e t m a->SimpleFormR e t m a
+liftRAction ac sf = SimpleFormR $ ac >> unSF sf
+
+liftAction::Monad m=>m b->SimpleFormR e t m a->SimpleFormR e t m a
+liftAction ac = liftRAction (lift ac) 
 
 
 -- | class to hold form configuration.  For different configurations, declare an env type and then
@@ -145,12 +154,30 @@ class SimpleFormConfiguration e t m | m->t  where
   layoutHoriz::SFLayoutF e m a
   layoutL::SFLayoutF e m a
   layoutR::SFLayoutF e m a
+--  labelLeft::Text -> SFLayoutF e m a
+--  labelTop::Text -> SFLayoutF e m a
   validItemStyle::ReaderT e m CssClasses
   invalidItemStyle::ReaderT e m CssClasses
+  labelStyle::ReaderT e m CssClasses
   buttonStyle::ReaderT e m CssClasses
   dropdownStyle::ReaderT e m CssClasses
   inputsDisabled::ReaderT e m Bool
   disableInputs::ReaderT e m a->ReaderT e m a
+
+
+labelLeft::SimpleFormC e t m=>String->SFLayoutF e m a
+labelLeft label ra = do
+  labelClasses <- labelStyle 
+  layoutHoriz $ do
+    formItem . lift $ RD.elClass "div" (toCssString labelClasses) $ RD.text label
+    ra
+
+labelTop::SimpleFormC e t m=>String->SFLayoutF e m a
+labelTop label ra = do
+  labelClasses <- labelStyle 
+  layoutVert $ do
+    formItem . lift $ RD.elClass "div" (toCssString labelClasses) $ RD.text label
+    ra
 
 
 itemL::SimpleFormConfiguration e t m=>SFLayoutF e m a
