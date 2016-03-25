@@ -211,14 +211,13 @@ buildTraversableSFA' crI buildOne md mfa =
 buildTraversableSFA::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m fa 
 buildTraversableSFA crI md mfa = do
   validClasses <- validItemStyle
-  formCol' (R.constDyn $ cssClassAttr validClasses) $ buildTraversableSFA' crI (\x -> unSF . B.buildA x) md mfa
+  formCol' (R.constDyn $ cssClassAttr validClasses) $ buildTraversableSFA' crI (\x -> itemL . unSF . B.buildA x) md mfa
 
 buildSFContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
 buildSFContainer aI buildTr mFN mfa = do
   validClasses <- validItemStyle
   invalidClasses <- invalidItemStyle
   buttonClasses <- buttonStyle
-  disabled <- inputsDisabled
   mdo
     attrsDyn <- sfAttrs dmfa mFN Nothing
     let initial = maybe (Just $ emptyT aI) (Just . (toT aI)) mfa 
@@ -229,8 +228,7 @@ buildSFContainer aI buildTr mFN mfa = do
       addEv <- formRow $ do
         let emptyB = unSF $ B.buildA Nothing Nothing -- we don't pass the fieldname here since it's the name of the parent 
         dmb <- itemL $ RD.joinDyn <$> RD.widgetHold (emptyB) (fmap (const emptyB) $ R.updated dmfa')
-        let disableAttr = if disabled then ("disabled" RD.=: "") else mempty
-        clickEv <-  itemR . lift $ buttonClass "+" (("class" RD.=: (toCssString buttonClasses)) <> disableAttr) -- need attributes for styling??
+        clickEv <-  itemR . lift $ buttonClass "+" (("class" RD.=: (toCssString buttonClasses))) -- need attributes for styling??
         return $ R.attachDynWithMaybe (\mb _ -> mb) dmb clickEv -- only fires if button is clicked when mb is a Just.
       let insert mfa b = (insertB aI) <$> (Just b) <*> mfa 
           newFaEv = R.attachDynWithMaybe insert dmfa' addEv -- Event t (tr a), only fires if traverable is not Nothing
@@ -247,10 +245,8 @@ buildOneDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b)
 buildOneDeletable dI mFN ma = liftLF' formRow $ do     
     (evs,curS) <- get
     buttonClasses <- lift buttonStyle
-    disabled <- lift inputsDisabled
     dma <- lift . itemL . unSF $ B.buildA mFN ma
-    let disableAttr = if disabled then ("disabled" RD.=: "") else mempty
-    ev  <- lift . itemR . lift $ buttonClass "x" (("class" RD.=: (toCssString buttonClasses)) <> disableAttr) 
+    ev  <- lift . itemR . lift $ buttonClass "x" (("class" RD.=: (toCssString buttonClasses))) 
     let ev' = R.attachDynWithMaybe (\ma _ -> (getKey dI) <$> ma <*> (Just curS)) dma ev
     put ((ev':evs),(updateS dI) curS)
     return dma

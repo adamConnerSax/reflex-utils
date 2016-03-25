@@ -35,7 +35,7 @@ import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..))
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexLayoutColSimple,flexLayoutRowSimple,flexLayoutItemSimple,flexFillR,flexFillL,flexVCenter)
 
 import Reflex.Dom.Contrib.SimpleForm.Builder
-import Reflex.Dom.Contrib.SimpleForm.Instances()
+import Reflex.Dom.Contrib.SimpleForm.Instances(sfWidget)
 
 import qualified DataBuilder as B
 
@@ -74,8 +74,10 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
   disabled <- inputsDisabled
   let disabledAttr = if disabled then ("disabled" RD.=: "") else mempty
       attrsDyn = R.constDyn (cssClassAttr (validClasses <> dropdownClasses) <> titleAttr ("Constructor") <> disabledAttr)
+      wc = WidgetConfig RD.never defPair attrsDyn
   formRow $ do
-    sfrpCW <- itemL $ _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) (WidgetConfig RD.never defPair attrsDyn)
+--    sfrpCW <- itemL $ _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
+    sfrpCW <- itemL $ sfWidget id sfrpCN  wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
 
