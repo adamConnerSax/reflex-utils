@@ -33,8 +33,8 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , liftRAction
        , liftAction
        , switchingSFR
-       , labelLeft
-       , labelTop
+       , label
+--       , labelTop
        , itemL
        , itemR
        , formRow
@@ -154,8 +154,6 @@ class SimpleFormConfiguration e t m | m->t  where
   layoutHoriz::SFLayoutF e m a
   layoutL::SFLayoutF e m a
   layoutR::SFLayoutF e m a
---  labelLeft::Text -> SFLayoutF e m a
---  labelTop::Text -> SFLayoutF e m a
   validItemStyle::ReaderT e m CssClasses
   invalidItemStyle::ReaderT e m CssClasses
   labelStyle::ReaderT e m CssClasses
@@ -165,20 +163,21 @@ class SimpleFormConfiguration e t m | m->t  where
   disableInputs::ReaderT e m a->ReaderT e m a
 
 
-labelLeft::SimpleFormC e t m=>String->SFLayoutF e m a
-labelLeft label ra = do
+label::SimpleFormC e t m=>String->SFLayoutF e m a
+label label ra = do
   labelClasses <- labelStyle 
-  layoutHoriz $ do
-    formItem . lift $ RD.elClass "div" (toCssString labelClasses) $ RD.text label
+  layoutHoriz . formItem $ RD.elClass "label" (toCssString labelClasses) $ do
+    lift $ RD.text label
     ra
 
+{-
 labelTop::SimpleFormC e t m=>String->SFLayoutF e m a
 labelTop label ra = do
   labelClasses <- labelStyle 
   layoutVert $ do
     formItem . lift $ RD.elClass "div" (toCssString labelClasses) $ RD.text label
     ra
-
+-}
 
 itemL::SimpleFormConfiguration e t m=>SFLayoutF e m a
 itemL = layoutL . formItem

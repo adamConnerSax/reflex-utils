@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -11,6 +12,7 @@
 module Reflex.Dom.Contrib.SimpleForm.AllDefault
        (
          DefSFCfg(..)
+       , simpleFormDefaultCss
          -- these two can be re-used in other env types
        , defFailureF 
        , defSumF
@@ -27,6 +29,8 @@ import Data.Maybe (fromJust)
 import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Monoid ((<>))
+import qualified Clay as C
+import Clay ((?))
 
 import qualified Reflex as R 
 import qualified Reflex.Dom as RD
@@ -76,7 +80,6 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
       attrsDyn = R.constDyn (cssClassAttr (validClasses <> dropdownClasses) <> titleAttr ("Constructor") <> disabledAttr)
       wc = WidgetConfig RD.never defPair attrsDyn
   formRow $ do
---    sfrpCW <- itemL $ _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
     sfrpCW <- itemL $ sfWidget id sfrpCN  wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
@@ -97,3 +100,26 @@ instance (MonadIO(PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg
   dropdownStyle = cfgDropdownStyle <$> ask
   inputsDisabled = cfgDisable <$> ask
   disableInputs = local disableDefCfg
+
+boxMargin m = C.sym C.margin (C.rem m)
+
+cssOutlineBox m c = do
+  boxMargin m
+  C.border C.solid (C.px 2) c
+
+cssSolidTextBox m cBox cText = do
+  boxMargin m
+  C.background cBox
+  C.fontColor cText
+
+simpleFormBoxes = do
+  ".sf-outline-black" ? cssOutlineBox 0.1 C.black
+  ".sf-outline-red" ? cssOutlineBox 0.1 C.red
+  ".sf-outline-blue" ? cssOutlineBox 0.1 C.blue
+  ".sf-outline-green" ? cssOutlineBox 0.1 C.green
+  ".sf-black-on-gray" ? cssSolidTextBox 0.1 C.gray C.black
+  ".sf-white-on-gray" ? cssSolidTextBox 0.1 C.gray C.white
+  
+
+simpleFormDefaultCss = do
+  simpleFormBoxes

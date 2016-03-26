@@ -62,11 +62,7 @@ readOnlyW f wc = do
 sfWidget::SimpleFormC e t m=>(a->b)->(a->String)->WidgetConfig t a->(WidgetConfig t a->m (R.Dynamic t a))->ReaderT e m (R.Dynamic t b)
 sfWidget fDyn fString wc widget = do
   disabled <- inputsDisabled
-  lift $ do
-    da<-if disabled
-        then readOnlyW fString wc
-        else widget wc
-    R.mapDyn fDyn da
+  lift $ (if disabled then readOnlyW fString wc else widget wc) >>= R.mapDyn fDyn
 
 
 buildReadable::(SimpleFormC e t m,Readable a, Show a)=>Maybe FieldName->Maybe a->SimpleFormR e t m a
@@ -187,8 +183,7 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Day where
     dma <- itemL $ sfWidget id (show . fromJust) wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c
     return dma
 
-
-
+-- uses generics to build instances
 instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>B.Builder (SimpleFormR e t m) (Maybe a)
 
 instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a,B.Builder (SimpleFormR e t m) b)=>B.Builder (SimpleFormR e t m) (Either a b)
@@ -207,17 +202,11 @@ instance {-# OVERLAPPABLE #-} (SimpleFormC e t m,Enum a,Show a,Bounded a, Eq a)
     return dma
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
+-- generics for (,) since mkDyn is not an optimization here
 instance (SimpleFormC e t m,
           B.Builder  (SimpleFormR e t m)  a,
           B.Builder  (SimpleFormR e t m)  b)
-         =>B.Builder (SimpleFormR e t m) (a,b) where
-  buildA mFN mTup = SimpleFormR $ do
-    let (ma,mb) = maybe (Nothing,Nothing) (\(a,b)->(Just a, Just b)) mTup
-    formRow  $ do
-      maW <- unSF $ B.buildA mFN ma
-      mbW <- unSF $ B.buildA mFN mb
-      lift $ R.combineDyn (liftA2 (,)) maW mbW
-
+         =>B.Builder (SimpleFormR e t m) (a,b) 
 
 instance (SimpleFormC e t m,
           B.Builder  (SimpleFormR e t m)  a,
@@ -227,9 +216,9 @@ instance (SimpleFormC e t m,
   buildA mFN mTup = SimpleFormR $ do
     let (ma,mb,mc) = maybe (Nothing,Nothing,Nothing) (\(a,b,c)->(Just a, Just b, Just c)) mTup
     formRow $ do
-      maW <- unSF $ B.buildA mFN ma
-      mbW <- unSF $ B.buildA mFN mb
-      mcW <- unSF $ B.buildA mFN mc
+      maW <- unSF $ B.buildA Nothing ma
+      mbW <- unSF $ B.buildA Nothing mb
+      mcW <- unSF $ B.buildA Nothing mc
       lift $ [mkDyn|(,,) <$> $maW <*> $mbW <*> $mcW|]
 
 instance (SimpleFormC e t m,
@@ -241,10 +230,10 @@ instance (SimpleFormC e t m,
   buildA mFN mTup = SimpleFormR $ do
     let (ma,mb,mc,md) = maybe (Nothing,Nothing,Nothing,Nothing) (\(a,b,c,d)->(Just a, Just b, Just c,Just d)) mTup
     formRow $ do
-      maW <- unSF $ B.buildA mFN ma
-      mbW <- unSF $ B.buildA mFN mb
-      mcW <- unSF $ B.buildA mFN mc
-      mdW <- unSF $ B.buildA mFN md
+      maW <- unSF $ B.buildA Nothing ma
+      mbW <- unSF $ B.buildA Nothing mb
+      mcW <- unSF $ B.buildA Nothing mc
+      mdW <- unSF $ B.buildA Nothing md
       lift $ [mkDyn|(,,,) <$> $maW <*> $mbW <*> $mcW <*> $mdW|]
 
 instance (SimpleFormC e t m,
@@ -257,9 +246,9 @@ instance (SimpleFormC e t m,
   buildA mFN mTup = SimpleFormR $ do
     let (ma,mb,mc,md,me) = maybe (Nothing,Nothing,Nothing,Nothing,Nothing) (\(a,b,c,d,e)->(Just a, Just b, Just c, Just d, Just e)) mTup
     formRow $ do
-      maW <- unSF $ B.buildA mFN ma
-      mbW <- unSF $ B.buildA mFN mb
-      mcW <- unSF $ B.buildA mFN mc
-      mdW <- unSF $ B.buildA mFN md
-      meW <- unSF $ B.buildA mFN me
+      maW <- unSF $ B.buildA Nothing ma
+      mbW <- unSF $ B.buildA Nothing mb
+      mcW <- unSF $ B.buildA Nothing mc
+      mdW <- unSF $ B.buildA Nothing md
+      meW <- unSF $ B.buildA Nothing me
       lift $ [mkDyn|(,,,,) <$> $maW <*> $mbW <*> $mcW <*> $mdW <*> $meW|]

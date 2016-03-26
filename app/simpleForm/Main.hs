@@ -30,6 +30,7 @@ import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 import Reflex.Dom.Contrib.Layout.All (CssClasses(..),CssClass(..),emptyCss,flexCssBS,flexFillR,cssToBS)
 import Reflex.Dom.Contrib.SimpleForm
 
+{-
 boxMargin m = sym margin (rem m)
 cssBox m c = do
   boxMargin m
@@ -41,6 +42,7 @@ cssBoxes = do
   ".demo-box-blue" ? cssBox 0.1 blue
   ".demo-box-green" ? cssBox 0.1 green
 
+-}
 
 -- Some types to demonstrate what we can make into a form
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
@@ -115,10 +117,19 @@ test cfg = do
    That's the part to re-implement for different form behavior. Or just to use different layout functions than the ones I've
    implemented with here.
 -}
-demoCfg = DefSFCfg (CssClasses [CssClass "demo-box-blue"]) (CssClasses [CssClass "demo-box-red"]) emptyCss emptyCss emptyCss False
+
+demoCfg = DefSFCfg {
+    cfgValidStyle = (CssClasses [CssClass "sf-white-on-gray"])
+  , cfgInvalidStyle = (CssClasses [CssClass "sf-black-on-gray",CssClass "sf-outline-red"])
+  , cfgLabelStyle = (CssClasses [CssClass "sf-black-on-gray"])
+  , cfgButtonStyle = emptyCss
+  , cfgDropdownStyle = emptyCss
+  , cfgDisable = False
+  }
+
 
 main  :: IO ()
-main  = mainWidgetWithCss (flexCssBS <> cssToBS cssBoxes) $ test demoCfg
+main  = mainWidgetWithCss (flexCssBS <> cssToBS simpleFormDefaultCss) $ test demoCfg
 
 
 
