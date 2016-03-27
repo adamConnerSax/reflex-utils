@@ -13,6 +13,7 @@ module Reflex.Dom.Contrib.SimpleForm.AllDefault
        (
          DefSFCfg(..)
        , simpleFormDefaultCss
+       , simpleObserverDefaultCss
          -- these two can be re-used in other env types
        , defFailureF 
        , defSumF
@@ -30,7 +31,7 @@ import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Monoid ((<>))
 import qualified Clay as C
-import Clay ((?))
+import Clay ((?),(@=),(#))
 
 import qualified Reflex as R 
 import qualified Reflex.Dom as RD
@@ -47,9 +48,6 @@ data DefSFCfg  = DefSFCfg
                  {
                    cfgValidStyle::CssClasses
                  , cfgInvalidStyle::CssClasses
-                 , cfgLabelStyle::CssClasses
-                 , cfgButtonStyle::CssClasses
-                 , cfgDropdownStyle::CssClasses
                  , cfgDisable::Bool
                  }
 
@@ -74,10 +72,9 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
       pft (x,y) = SFRPair x y
       defPair = maybe (pft $ head conWidgets) (\cn->getSFRP cn conWidgets) mDefCon
   validClasses <- validItemStyle
-  dropdownClasses <- dropdownStyle
   disabled <- inputsDisabled
   let disabledAttr = if disabled then ("disabled" RD.=: "") else mempty
-      attrsDyn = R.constDyn (cssClassAttr (validClasses <> dropdownClasses) <> titleAttr ("Constructor") <> disabledAttr)
+      attrsDyn = R.constDyn (cssClassAttr (validClasses) <> titleAttr ("Constructor") <> disabledAttr)
       wc = WidgetConfig RD.never defPair attrsDyn
   formRow $ do
     sfrpCW <- itemL $ sfWidget id sfrpCN  wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
@@ -95,31 +92,49 @@ instance (MonadIO(PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg
   layoutR  = liftLF $ flexFillL 
   validItemStyle = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask
-  labelStyle = cfgLabelStyle <$> ask
-  buttonStyle = cfgButtonStyle <$> ask
-  dropdownStyle = cfgDropdownStyle <$> ask
   inputsDisabled = cfgDisable <$> ask
   disableInputs = local disableDefCfg
 
 boxMargin m = C.sym C.margin (C.rem m)
 
-cssOutlineBox m c = do
+cssOutlineTextBox m cBox cText = do
   boxMargin m
-  C.border C.solid (C.px 2) c
+  C.border C.solid (C.px 2) cBox
+  C.fontColor cText
 
 cssSolidTextBox m cBox cText = do
   boxMargin m
   C.background cBox
   C.fontColor cText
 
+-- some styles 
 simpleFormBoxes = do
-  ".sf-outline-black" ? cssOutlineBox 0.1 C.black
-  ".sf-outline-red" ? cssOutlineBox 0.1 C.red
-  ".sf-outline-blue" ? cssOutlineBox 0.1 C.blue
-  ".sf-outline-green" ? cssOutlineBox 0.1 C.green
+  ".sf-outline-black" ? cssOutlineTextBox 0.1 C.black C.black
+  ".sf-outline-red" ? cssOutlineTextBox 0.1 C.red C.black
+  ".sf-outline-blue" ? cssOutlineTextBox 0.1 C.blue C.black
+  ".sf-outline-green" ? cssOutlineTextBox 0.1 C.green C.black
   ".sf-black-on-gray" ? cssSolidTextBox 0.1 C.gray C.black
   ".sf-white-on-gray" ? cssSolidTextBox 0.1 C.gray C.white
-  
 
+isSimpleForm::C.Selector
+isSimpleForm = C.form # ".simpleForm"
+
+simpleFormElements = do
+  isSimpleForm ? do
+    C.background C.ghostwhite
+    C.button ? cssSolidTextBox 0.1 C.whitesmoke C.black
+    C.input  # ("type" @= "text") ? cssOutlineTextBox 0.1 C.lightslategrey C.black
+    C.input  # ("type" @= "number") ? cssOutlineTextBox 0.1 C.lightslategrey C.black
+    C.select ? cssOutlineTextBox 0.1 C.grey C.black
+    C.input # ".sf-invalid" ? cssOutlineTextBox 0.1 C.red C.black -- invalid
+      
 simpleFormDefaultCss = do
   simpleFormBoxes
+  simpleFormElements
+
+isSimpleObserver = C.div # ".simpleObserver"
+
+simpleObserverDefaultCss = do
+  isSimpleObserver ? do
+    simpleFormBoxes
+

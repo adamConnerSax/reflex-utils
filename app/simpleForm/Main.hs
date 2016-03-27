@@ -105,10 +105,10 @@ flowTestWidget n = do
 
 test::(SimpleFormC e t m,MonadIO (PushM t))=>e->m ()
 test cfg = do
-  cDyn<- flexFillR $ makeSimpleForm cfg (Just c)
+  cDyn<- flexFillR $ makeSimpleForm cfg (CssClass "simpleForm") (Just c)
   mapDyn ppShow cDyn >>= dynText
-  _ <- flexFillR $ observeDynamic cfg cDyn
-  _ <- observeFlow cfg flowTestWidget 2
+  _ <- flexFillR $ observeDynamic cfg (CssClass "simpleObserver") cDyn
+  _ <- observeFlow cfg (CssClass "simpleForm") (CssClass "simpleObserver") flowTestWidget 2
   return ()
 
 {-
@@ -119,17 +119,14 @@ test cfg = do
 -}
 
 demoCfg = DefSFCfg {
-    cfgValidStyle = (CssClasses [CssClass "sf-white-on-gray"])
-  , cfgInvalidStyle = (CssClasses [CssClass "sf-black-on-gray",CssClass "sf-outline-red"])
-  , cfgLabelStyle = (CssClasses [CssClass "sf-black-on-gray"])
-  , cfgButtonStyle = emptyCss
-  , cfgDropdownStyle = emptyCss
+    cfgValidStyle = (CssClasses [CssClass "sf-outline-black"])
+  , cfgInvalidStyle = (CssClasses [CssClass "sf-invalid"])
   , cfgDisable = False
   }
 
 
 main  :: IO ()
-main  = mainWidgetWithCss (flexCssBS <> cssToBS simpleFormDefaultCss) $ test demoCfg
+main  = mainWidgetWithCss (flexCssBS <> cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss) $ test demoCfg
 
 
 

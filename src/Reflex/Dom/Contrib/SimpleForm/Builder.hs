@@ -34,19 +34,16 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , liftAction
        , switchingSFR
        , label
---       , labelTop
        , itemL
        , itemR
        , formRow
        , formRow'
        , formCol
        , formCol'
-       , buttonClass
        , attrs0
        , titleAttr
        , cssClassAttr
        , sfAttrs
-       , sfAttrs'
        ) where
 
 import Control.Monad (liftM2)
@@ -63,7 +60,7 @@ import qualified Reflex as R
 import Reflex as ReflexExport (PushM)
 import qualified Reflex.Dom as RD
 
-import Reflex.Dom.Contrib.Layout.Types (LayoutM,CssClasses(..),IsCssClass(..))
+import Reflex.Dom.Contrib.Layout.Types (LayoutM,CssClass,CssClasses(..),IsCssClass(..))
 import Reflex.Dom.Contrib.Layout.Core()
 --import Reflex.Orphans()
 
@@ -98,29 +95,40 @@ switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
   cfg <- ask
   let f = runSimpleFormR cfg . widgetGetter
   lift $ R.joinDyn <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)  
-  
-makeSimpleForm::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->Maybe a->m (DynMaybe t a)
-makeSimpleForm cfg ma = runSimpleFormR cfg $ B.buildA Nothing ma
 
-observeDynamic::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->R.Dynamic t a->m (DynMaybe t a)
-observeDynamic cfg aDyn = runSimpleFormR cfg . SimpleFormR . disableInputs $ do
-  startDyn <- R.mapDyn Just aDyn -- DynMaybe t a
-  builtDyn <- R.mapDyn (unSF . buildA Nothing) startDyn -- Dynamic t (SimpleFormR e t m (DynMaybe t a))
-  newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
-  lift $ R.joinDyn <$> R.foldDyn (\_ x-> x) startDyn newDynEv -- DynMaybe t a
+asSimpleForm::RD.MonadWidget t m=>CssClass->m a->m a
+asSimpleForm formClass = RD.elClass "form" (toCssString formClass)
 
-observeWidget::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->m a->m (DynMaybe t a)
-observeWidget cfg wa = runSimpleFormR cfg . SimpleFormR . disableInputs $ do
+asSimpleObserver::RD.MonadWidget t m=>CssClass->m a->m a
+asSimpleObserver observerClass = RD.divClass (toCssString observerClass)
+
+
+makeSimpleForm::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->Maybe a->m (DynMaybe t a)
+makeSimpleForm cfg formClass ma = 
+  asSimpleForm formClass $ runSimpleFormR cfg $ B.buildA Nothing ma
+
+observeDynamic::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->R.Dynamic t a->m (DynMaybe t a)
+observeDynamic cfg observerClass aDyn =
+  asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . disableInputs $ do
+    startDyn <- R.mapDyn Just aDyn -- DynMaybe t a
+    builtDyn <- R.mapDyn (unSF . buildA Nothing) startDyn -- Dynamic t (SimpleFormR e t m (DynMaybe t a))
+    newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
+    lift $ R.joinDyn <$> R.foldDyn (\_ x-> x) startDyn newDynEv -- DynMaybe t a
+
+observeWidget::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->m a->m (DynMaybe t a)
+observeWidget cfg observerClass wa =
+  asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . disableInputs $ do
   a <- lift wa
   unSF . buildA Nothing . Just $ a
 
 
-observeFlow::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a,B.Builder (SimpleFormR e t m) b)=>e->(a->m b)->a->m (DynMaybe t b)
-observeFlow cfg f a = runSimpleFormR cfg . SimpleFormR  $ do
+observeFlow::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a,B.Builder (SimpleFormR e t m) b)=>e->CssClass->CssClass->(a->m b)->a->m (DynMaybe t b)
+observeFlow cfg formClass observerClass f a = runSimpleFormR cfg . SimpleFormR  $ do
   let initialWidget = f a
-  dma <- unSF $ buildA Nothing (Just a) -- DynMaybe t a
+      obF = observeWidget cfg observerClass
+  dma <- liftLF (asSimpleForm formClass) (unSF $ buildA Nothing (Just a)) -- DynMaybe t a
   dwb <- lift $ R.foldDynMaybe (\ma _ -> f <$> ma) initialWidget (R.updated dma) -- Dynamic t (m b)
-  lift $ R.joinDyn <$> RD.widgetHold (observeWidget cfg initialWidget) (observeWidget cfg <$> R.updated dwb)
+  lift $ R.joinDyn <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
     
 
 type SFLayoutF e m a = ReaderT e m a -> ReaderT e m a
@@ -156,17 +164,13 @@ class SimpleFormConfiguration e t m | m->t  where
   layoutR::SFLayoutF e m a
   validItemStyle::ReaderT e m CssClasses
   invalidItemStyle::ReaderT e m CssClasses
-  labelStyle::ReaderT e m CssClasses
-  buttonStyle::ReaderT e m CssClasses
-  dropdownStyle::ReaderT e m CssClasses
   inputsDisabled::ReaderT e m Bool
   disableInputs::ReaderT e m a->ReaderT e m a
 
 
 label::SimpleFormC e t m=>String->SFLayoutF e m a
 label label ra = do
-  labelClasses <- labelStyle 
-  layoutHoriz . formItem $ RD.elClass "label" (toCssString labelClasses) $ do
+  layoutHoriz . formItem $ RD.el "label" $ do
     lift $ RD.text label
     ra
 
@@ -201,12 +205,6 @@ disabledAttr::(Monad m,SimpleFormConfiguration e t m)=>ReaderT e m (M.Map String
 disabledAttr = do
   disabled <- inputsDisabled
   return $ if disabled then ("disabled" RD.=: "") else mempty
-
-buttonClass::RD.MonadWidget t m=>String->M.Map String String->m (R.Event t ())
-buttonClass label attrs = do
-  (e,_) <- RD.elAttr' "button" attrs $ RD.text label
-  return $ RD.domEvent RD.Click e 
-
 
 attrs0::R.Reflex t=>DynAttrs t
 attrs0 = R.constDyn mempty

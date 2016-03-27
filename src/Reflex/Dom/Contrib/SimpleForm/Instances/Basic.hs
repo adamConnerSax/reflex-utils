@@ -97,7 +97,7 @@ instance {-# OVERLAPPING #-} SimpleFormC e t m=>B.Builder (SimpleFormR e t m) St
     let initial = maybe "" id mInitial
         wc = WidgetConfig RD.never initial attrsDyn
     dma <- itemL $ sfWidget Just id wc $ \c-> do
-      _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput "String") c
+      _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput "text") c
     return dma
 
 {- Not clear what to do here! Default behavior is bad since Char is a huge enum.
@@ -193,8 +193,7 @@ instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a,B.Builder (SimpleFor
 instance {-# OVERLAPPABLE #-} (SimpleFormC e t m,Enum a,Show a,Bounded a, Eq a)
                               =>B.Builder (SimpleFormR e t m) a where
   buildA mFN mInitial = SimpleFormR $ mdo
-    dropdownClasses <- dropdownStyle
-    attrsDyn <- sfAttrs' dma mFN Nothing dropdownClasses 
+    attrsDyn <- sfAttrs dma mFN Nothing
     let values = [minBound..] :: [a]
         initial = maybe (head values) id mInitial
         wc = WidgetConfig RD.never initial attrsDyn
