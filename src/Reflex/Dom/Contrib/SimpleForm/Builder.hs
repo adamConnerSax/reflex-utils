@@ -109,7 +109,7 @@ makeSimpleForm cfg formClass ma =
 
 observeDynamic::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->R.Dynamic t a->m (DynMaybe t a)
 observeDynamic cfg observerClass aDyn =
-  asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . disableInputs $ do
+  asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
     startDyn <- R.mapDyn Just aDyn -- DynMaybe t a
     builtDyn <- R.mapDyn (unSF . buildA Nothing) startDyn -- Dynamic t (SimpleFormR e t m (DynMaybe t a))
     newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
@@ -117,7 +117,7 @@ observeDynamic cfg observerClass aDyn =
 
 observeWidget::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->m a->m (DynMaybe t a)
 observeWidget cfg observerClass wa =
-  asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . disableInputs $ do
+  asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
   a <- lift wa
   unSF . buildA Nothing . Just $ a
 
@@ -164,8 +164,9 @@ class SimpleFormConfiguration e t m | m->t  where
   layoutR::SFLayoutF e m a
   validItemStyle::ReaderT e m CssClasses
   invalidItemStyle::ReaderT e m CssClasses
-  inputsDisabled::ReaderT e m Bool
-  disableInputs::ReaderT e m a->ReaderT e m a
+  observerStyle::ReaderT e m CssClasses
+  observer::ReaderT e m Bool
+  setToObserve::ReaderT e m a->ReaderT e m a
 
 
 label::SimpleFormC e t m=>String->SFLayoutF e m a
@@ -201,11 +202,12 @@ formRow' attrsDyn  = formItem . dynamicDiv attrsDyn . layoutHoriz
 formCol'::SimpleFormConfiguration e t m=>DynAttrs t->SFLayoutF e m a
 formCol' attrsDyn = formItem . dynamicDiv attrsDyn .layoutVert
 
+{-
 disabledAttr::(Monad m,SimpleFormConfiguration e t m)=>ReaderT e m (M.Map String String)
 disabledAttr = do
   disabled <- inputsDisabled
   return $ if disabled then ("disabled" RD.=: "") else mempty
-
+-}
 attrs0::R.Reflex t=>DynAttrs t
 attrs0 = R.constDyn mempty
 
@@ -224,11 +226,17 @@ sfAttrs'::(RD.MonadHold t m, R.Reflex t, SimpleFormConfiguration e t m)
 sfAttrs' mDyn mFN mTypeS fixedCss = do
   validClasses <- validItemStyle
   invalidClasses <- invalidItemStyle
-  dAttr <- disabledAttr
+  observerClasses <- observerStyle
+  isObserver <- observer
   let title = componentTitle mFN mTypeS
-      validAttrs = (dAttr <> titleAttr title <> cssClassAttr (validClasses <> fixedCss))
-      invalidAttrs = (dAttr <> titleAttr title <> cssClassAttr (invalidClasses <> fixedCss))
-  lift $ R.mapDyn (\x -> if isJust x then validAttrs else invalidAttrs) mDyn
+      validAttrs = titleAttr title <> cssClassAttr (validClasses <> fixedCss)
+      invalidAttrs = titleAttr title <> cssClassAttr (invalidClasses <> fixedCss)
+      observerAttr = titleAttr title <> cssClassAttr (observerClasses <> fixedCss)
+  lift $ if isObserver
+         then return $ R.constDyn observerAttr
+         else R.forDyn mDyn $ \x -> if isJust x
+                                    then validAttrs
+                                    else invalidAttrs 
 
 
 componentTitle::Maybe FieldName->Maybe String->String

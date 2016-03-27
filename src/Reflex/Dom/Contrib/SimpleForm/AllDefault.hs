@@ -48,11 +48,12 @@ data DefSFCfg  = DefSFCfg
                  {
                    cfgValidStyle::CssClasses
                  , cfgInvalidStyle::CssClasses
-                 , cfgDisable::Bool
+                 , cfgObserverStyle::CssClasses
+                 , cfgObserver::Bool
                  }
 
-disableDefCfg::DefSFCfg->DefSFCfg
-disableDefCfg x = x { cfgDisable = True }
+setCfgToObserver::DefSFCfg->DefSFCfg
+setCfgToObserver x = x { cfgObserver = True }
 
 defFailureF::SimpleFormC e t m=>String->SimpleFormR e t m a
 defFailureF msg = SimpleFormR $ do
@@ -72,9 +73,10 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
       pft (x,y) = SFRPair x y
       defPair = maybe (pft $ head conWidgets) (\cn->getSFRP cn conWidgets) mDefCon
   validClasses <- validItemStyle
-  disabled <- inputsDisabled
-  let disabledAttr = if disabled then ("disabled" RD.=: "") else mempty
-      attrsDyn = R.constDyn (cssClassAttr (validClasses) <> titleAttr ("Constructor") <> disabledAttr)
+  observerClasses <- observerStyle
+  isObserver <- observer
+  let classes = if isObserver then observerClasses else validClasses 
+      attrsDyn = R.constDyn (cssClassAttr (classes) <> titleAttr ("Constructor"))
       wc = WidgetConfig RD.never defPair attrsDyn
   formRow $ do
     sfrpCW <- itemL $ sfWidget id sfrpCN  wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
@@ -92,8 +94,11 @@ instance (MonadIO(PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg
   layoutR  = liftLF $ flexFillL 
   validItemStyle = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask
-  inputsDisabled = cfgDisable <$> ask
-  disableInputs = local disableDefCfg
+  observerStyle = cfgObserverStyle <$> ask
+  observer = cfgObserver <$> ask
+  setToObserve = local setCfgToObserver 
+
+-- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 
 boxMargin m = C.sym C.margin (C.rem m)
 
@@ -117,7 +122,8 @@ simpleFormBoxes = do
   ".sf-white-on-gray" ? cssSolidTextBox 0.1 C.gray C.white
 
 isSimpleForm::C.Selector
-isSimpleForm = C.form # ".simpleForm"
+isSimpleForm = C.form # ".sf-form"
+
 
 simpleFormElements = do
   isSimpleForm ? do
@@ -132,9 +138,16 @@ simpleFormDefaultCss = do
   simpleFormBoxes
   simpleFormElements
 
-isSimpleObserver = C.div # ".simpleObserver"
+isSimpleObserver = C.div # ".sf-observer"
+
+isSimpleObserverItem::C.Selector
+isSimpleObserverItem = C.div # ".sf-observer-item" 
+
 
 simpleObserverDefaultCss = do
   isSimpleObserver ? do
-    simpleFormBoxes
+    C.background C.linen
+    isSimpleObserverItem ? do
+      cssOutlineTextBox 0.1 C.gray C.black
+      C.sym C.padding (C.rem 0.1)
 

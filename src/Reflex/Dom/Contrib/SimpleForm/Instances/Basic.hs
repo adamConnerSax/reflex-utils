@@ -61,8 +61,8 @@ readOnlyW f wc = do
 
 sfWidget::SimpleFormC e t m=>(a->b)->(a->String)->WidgetConfig t a->(WidgetConfig t a->m (R.Dynamic t a))->ReaderT e m (R.Dynamic t b)
 sfWidget fDyn fString wc widget = do
-  disabled <- inputsDisabled
-  lift $ (if disabled then readOnlyW fString wc else widget wc) >>= R.mapDyn fDyn
+  isObserver <- observer
+  lift $ (if isObserver then readOnlyW fString wc else widget wc) >>= R.mapDyn fDyn
 
 
 buildReadable::(SimpleFormC e t m,Readable a, Show a)=>Maybe FieldName->Maybe a->SimpleFormR e t m a

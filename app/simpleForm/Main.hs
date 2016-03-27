@@ -30,20 +30,6 @@ import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 import Reflex.Dom.Contrib.Layout.All (CssClasses(..),CssClass(..),emptyCss,flexCssBS,flexFillR,cssToBS)
 import Reflex.Dom.Contrib.SimpleForm
 
-{-
-boxMargin m = sym margin (rem m)
-cssBox m c = do
-  boxMargin m
-  border solid (px 2) c
-
-cssBoxes = do
-  ".demo-box-black" ? cssBox 0.1 black
-  ".demo-box-red" ? cssBox 0.1 red
-  ".demo-box-blue" ? cssBox 0.1 blue
-  ".demo-box-green" ? cssBox 0.1 green
-
--}
-
 -- Some types to demonstrate what we can make into a form
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
 data Shape = Square | Circle | Triangle deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
@@ -105,10 +91,10 @@ flowTestWidget n = do
 
 test::(SimpleFormC e t m,MonadIO (PushM t))=>e->m ()
 test cfg = do
-  cDyn<- flexFillR $ makeSimpleForm cfg (CssClass "simpleForm") (Just c)
+  cDyn<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
   mapDyn ppShow cDyn >>= dynText
-  _ <- flexFillR $ observeDynamic cfg (CssClass "simpleObserver") cDyn
-  _ <- observeFlow cfg (CssClass "simpleForm") (CssClass "simpleObserver") flowTestWidget 2
+  _ <- flexFillR $ observeDynamic cfg (CssClass "sf-observer") cDyn
+  _ <- observeFlow cfg (CssClass "sf-form") (CssClass "sf-observer") flowTestWidget 2
   return ()
 
 {-
@@ -119,9 +105,10 @@ test cfg = do
 -}
 
 demoCfg = DefSFCfg {
-    cfgValidStyle = (CssClasses [CssClass "sf-outline-black"])
+    cfgValidStyle = emptyCss -- (CssClasses [CssClass "sf-outline-black"])
   , cfgInvalidStyle = (CssClasses [CssClass "sf-invalid"])
-  , cfgDisable = False
+  , cfgObserverStyle = (CssClasses [CssClass "sf-observer-item"])                    
+  , cfgObserver = False
   }
 
 
