@@ -129,10 +129,15 @@ simpleFormElements = do
   isSimpleForm ? do
     C.background C.ghostwhite
     C.button ? cssSolidTextBox 0.1 C.whitesmoke C.black
+    C.input ? do
+      C.verticalAlign C.middle
+      C.position C.relative
     C.input  # ("type" @= "text") ? cssOutlineTextBox 0.1 C.lightslategrey C.black
     C.input  # ("type" @= "number") ? cssOutlineTextBox 0.1 C.lightslategrey C.black
     C.select ? cssOutlineTextBox 0.1 C.grey C.black
     C.input # ".sf-invalid" ? cssOutlineTextBox 0.1 C.red C.black -- invalid
+    C.span ? do
+      C.verticalAlign C.middle 
       
 simpleFormDefaultCss = do
   simpleFormBoxes

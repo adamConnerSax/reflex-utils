@@ -15,7 +15,7 @@ import Data.Monoid ((<>))
 import Data.FileEmbed
 import Text.Show.Pretty (ppShow)
 import qualified GHC.Generics as GHC
-import Clay hiding (button,col,Color)
+--import Clay hiding (button,col,Color)
 import qualified Data.Map as M
 import qualified Data.Sequence as Seq
 import qualified Data.HashSet as HS
@@ -46,12 +46,13 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 -- More layout options are available if you write custom instances. 
 instance Generic A
 instance HasDatatypeInfo A
-instance SimpleFormC e t m=>Builder (SimpleFormR e t m) A 
+instance SimpleFormC e t m=>Builder (SimpleFormR e t m) A where 
+  buildA mFN = liftF (textAtLeft "A" . formRow) . gBuildA mFN
 
 instance Generic B
 instance HasDatatypeInfo B
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) B where
-  buildA mFN = liftF formRow . gBuildA mFN
+  buildA mFN = liftF (legend "B" . formRow) . gBuildA mFN
 
 instance Generic MyMap
 instance HasDatatypeInfo MyMap
@@ -60,12 +61,12 @@ instance SimpleFormC e t m=>Builder (SimpleFormR e t m) MyMap
 instance Generic BRec
 instance HasDatatypeInfo BRec
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) BRec where
-  buildA mFN = liftF formRow . gBuildA mFN
+  buildA mFN = liftF (textOnTop "BRec" . formRow) . gBuildA mFN
 
 instance Generic C
 instance HasDatatypeInfo C
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) C where
-  buildA mFN = liftF formCol . gBuildA mFN
+  buildA mFN = liftF (legend "C" . formCol) . gBuildA mFN
 
 -- (Almost) Equivalent TH-built instances
 {-

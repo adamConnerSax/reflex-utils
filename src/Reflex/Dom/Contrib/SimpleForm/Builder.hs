@@ -33,7 +33,9 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , liftRAction
        , liftAction
        , switchingSFR
-       , label
+       , textAtLeft
+       , textOnTop
+       , legend
        , itemL
        , itemR
        , formRow
@@ -169,10 +171,19 @@ class SimpleFormConfiguration e t m | m->t  where
   setToObserve::ReaderT e m a->ReaderT e m a
 
 
-label::SimpleFormC e t m=>String->SFLayoutF e m a
-label label ra = do
-  layoutHoriz . formItem $ RD.el "label" $ do
-    lift $ RD.text label
+textAtLeft::SimpleFormC e t m=>String->SFLayoutF e m a
+textAtLeft label ra = formRow $ do
+  formItem $ RD.el "span" $ RD.text label
+  formItem $ ra
+
+textOnTop::SimpleFormC e t m=>String->SFLayoutF e m a
+textOnTop label ra = formCol $ do
+  formItem $ RD.el "span" $ RD.text label
+  formItem $ ra
+
+legend::SimpleFormC e t m=>String->SFLayoutF e m a
+legend legend ra = RD.el "fieldset" $ do
+    lift $ RD.el "legend" $ RD.text legend
     ra
 
 {-
