@@ -25,7 +25,7 @@ module Reflex.Dom.Contrib.SimpleForm.AllDefault
 
 import Control.Monad.IO.Class (MonadIO)
 import Control.Lens ((^.))
-import Control.Monad.Reader (ReaderT, runReaderT, ask, lift,local)
+import Control.Monad.Reader (ReaderT, runReaderT, ask, asks, lift,local)
 import Data.Maybe (fromJust)
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -37,7 +37,9 @@ import qualified Reflex as R
 import qualified Reflex.Dom as RD
 import Reflex.Dom.Contrib.Widgets.Common (WidgetConfig(..),Widget0(..),htmlDropdownStatic)
 import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..))
-import Reflex.Dom.Contrib.Layout.FlexLayout (flexLayoutColSimple,flexLayoutRowSimple,flexLayoutItemSimple,flexFillR,flexFillL,flexVCenter)
+import Reflex.Dom.Contrib.Layout.FlexLayout (flexLayoutColSimple,flexLayoutRowSimple,flexLayoutItemSimple,
+                                             flexFillR,flexFillL,flexHCenter,
+                                             flexFillU,flexFillD,flexVCenter)
 
 import Reflex.Dom.Contrib.SimpleForm.Builder
 import Reflex.Dom.Contrib.SimpleForm.Instances(sfWidget)
@@ -47,8 +49,9 @@ import qualified DataBuilder as B
 data DefSFCfg  = DefSFCfg
                  {
                    cfgValidStyle::CssClasses
-                 , cfgInvalidStyle::CssClasses
+                 , cfgInvalidStyle::CssClasses                                    
                  , cfgObserverStyle::CssClasses
+                 , cfgLabelF::Maybe (String -> String)
                  , cfgObserver::Bool
                  }
 
@@ -79,7 +82,7 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
       attrsDyn = R.constDyn (cssClassAttr (classes) <> titleAttr ("Constructor"))
       wc = WidgetConfig RD.never defPair attrsDyn
   formRow $ do
-    sfrpCW <- itemL $ sfWidget id sfrpCN  wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
+    sfrpCW <- itemL $ sfWidget id sfrpCN Nothing wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
 
@@ -91,12 +94,20 @@ instance (MonadIO(PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg
   layoutVert = liftLF $ flexLayoutColSimple 
   layoutHoriz = liftLF $ flexLayoutRowSimple
   layoutL = liftLF $ flexFillR 
-  layoutR  = liftLF $ flexFillL 
+  layoutR  = liftLF $ flexFillL
+  layoutHC = liftLF $ flexHCenter
+  layoutT = liftLF $ flexFillD 
+  layoutB  = liftLF $ flexFillU
+  layoutVC = liftLF $ flexVCenter
   validItemStyle = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask
   observerStyle = cfgObserverStyle <$> ask
   observer = cfgObserver <$> ask
-  setToObserve = local setCfgToObserver 
+  setToObserve = local (\cfg -> cfg {cfgObserver = True })
+  setLayoutFieldName f = local (\cfg -> cfg { cfgLabelF = f })
+  getLayoutFieldName = do
+    mf <- asks cfgLabelF
+    return $ mf >>= (\f -> Just $ textAtLeft . f)
 
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 

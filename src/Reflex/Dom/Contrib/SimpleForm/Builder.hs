@@ -33,6 +33,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , liftRAction
        , liftAction
        , switchingSFR
+       , layoutFieldNameHelper
        , textAtLeft
        , textOnTop
        , legend
@@ -164,12 +165,23 @@ class SimpleFormConfiguration e t m | m->t  where
   layoutHoriz::SFLayoutF e m a
   layoutL::SFLayoutF e m a
   layoutR::SFLayoutF e m a
+  layoutHC::SFLayoutF e m a
+  layoutT::SFLayoutF e m a
+  layoutB::SFLayoutF e m a
+  layoutVC::SFLayoutF e m a
   validItemStyle::ReaderT e m CssClasses
   invalidItemStyle::ReaderT e m CssClasses
   observerStyle::ReaderT e m CssClasses
   observer::ReaderT e m Bool
-  setToObserve::ReaderT e m a->ReaderT e m a
+  setToObserve::SFLayoutF e m a
+  setLayoutFieldName::Maybe (String -> String)->SFLayoutF e m a
+  getLayoutFieldName::ReaderT e m (Maybe (String -> SFLayoutF e m a)) -- Nothing is ignored, otherwise do the layout
 
+layoutFieldNameHelper::SimpleFormC e t m=>Maybe FieldName->SFLayoutF e m a
+layoutFieldNameHelper mFN sfra = do
+  mf <- getLayoutFieldName
+  let lf = maybe id id $ mf <*> mFN
+  lf sfra
 
 textAtLeft::SimpleFormC e t m=>String->SFLayoutF e m a
 textAtLeft label ra = formRow $ do

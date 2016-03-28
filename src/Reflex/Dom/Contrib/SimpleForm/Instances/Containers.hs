@@ -36,6 +36,7 @@ import qualified DataBuilder as B
 import Reflex.Dom.Contrib.Layout.Types (LayoutM,CssClasses,IsCssClass(..))
 import Reflex.Dom.Contrib.Layout.Core() --for LayoutM instances
 
+
 -- All the basic (primitive types, tuples, etc.) are in here
 import Reflex.Dom.Contrib.SimpleForm.Instances.Basic()
 
@@ -227,7 +228,7 @@ buildSFContainer aI buildTr mFN mfa = do
       addEv <- formRow $ do
         let emptyB = unSF $ B.buildA Nothing Nothing -- we don't pass the fieldname here since it's the name of the parent 
         dmb <- itemL $ RD.joinDyn <$> RD.widgetHold (emptyB) (fmap (const emptyB) $ R.updated dmfa')
-        clickEv <-  itemR . lift $ RD.button "+"
+        clickEv <-  layoutVC . itemR . lift $ RD.button "+"
         return $ R.attachDynWithMaybe (\mb _ -> mb) dmb clickEv -- only fires if button is clicked when mb is a Just.
       let insert mfa b = (insertB aI) <$> (Just b) <*> mfa 
           newFaEv = R.attachDynWithMaybe insert dmfa' addEv -- Event t (tr a), only fires if traverable is not Nothing
@@ -244,7 +245,7 @@ buildOneDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b)
 buildOneDeletable dI mFN ma = liftLF' formRow $ do     
     (evs,curS) <- get
     dma <- lift . itemL . unSF $ B.buildA mFN ma
-    ev  <- lift . itemR . lift $ RD.button "-" 
+    ev  <- lift . layoutVC . itemR . lift $ RD.button "-" 
     let ev' = R.attachDynWithMaybe (\ma _ -> (getKey dI) <$> ma <*> (Just curS)) dma ev
     put ((ev':evs),(updateS dI) curS)
     return dma

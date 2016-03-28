@@ -47,7 +47,7 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 instance Generic A
 instance HasDatatypeInfo A
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) A where 
-  buildA mFN = liftF (textAtLeft "A" . formRow) . gBuildA mFN
+  buildA mFN = liftF formRow . gBuildA mFN
 
 instance Generic B
 instance HasDatatypeInfo B
@@ -61,8 +61,11 @@ instance SimpleFormC e t m=>Builder (SimpleFormR e t m) MyMap
 instance Generic BRec
 instance HasDatatypeInfo BRec
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) BRec where
-  buildA mFN = liftF (textOnTop "BRec" . formRow) . gBuildA mFN
-
+  buildA mFN mBRec= liftF (textOnTop "BRec" . formRow) $ BRec
+               <$> buildA Nothing (oneB <$> mBRec)
+               <*> liftF (textOnTop "Seq A") (buildA Nothing (seqOfA <$> mBRec))
+               <*> liftF (textOnTop "HashSet String") (buildA Nothing (hashSetOfString <$> mBRec))
+  
 instance Generic C
 instance HasDatatypeInfo C
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) C where
@@ -108,7 +111,8 @@ test cfg = do
 demoCfg = DefSFCfg {
     cfgValidStyle = emptyCss -- (CssClasses [CssClass "sf-outline-black"])
   , cfgInvalidStyle = (CssClasses [CssClass "sf-invalid"])
-  , cfgObserverStyle = (CssClasses [CssClass "sf-observer-item"])                    
+  , cfgObserverStyle = (CssClasses [CssClass "sf-observer-item"])
+  , cfgLabelF = Nothing
   , cfgObserver = False
   }
 
