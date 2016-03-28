@@ -36,6 +36,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , layoutFieldNameHelper
        , textAtLeft
        , textOnTop
+       , textOnTop'
        , legend
        , itemL
        , itemR
@@ -189,9 +190,13 @@ textAtLeft label ra = formRow $ do
   formItem $ ra
 
 textOnTop::SimpleFormC e t m=>String->SFLayoutF e m a
-textOnTop label ra = formCol $ do
-  formItem $ RD.el "span" $ RD.text label
+textOnTop = textOnTop' id 
+
+textOnTop'::SimpleFormC e t m=>SFLayoutF e m b ->String->SFLayoutF e m a
+textOnTop labelLayout label ra = formCol $ do
+  lableLayout . formItem $ RD.el "span" $ RD.text label
   formItem $ ra
+
 
 legend::SimpleFormC e t m=>String->SFLayoutF e m a
 legend legend ra = RD.el "fieldset" $ do
