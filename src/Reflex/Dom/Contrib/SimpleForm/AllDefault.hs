@@ -162,8 +162,8 @@ isSimpleObserverItem = C.div # ".sf-observer-item"
 
 simpleObserverDefaultCss = do
   isSimpleObserver ? do
-    C.background C.linen
+    C.background C.whitesmoke
     isSimpleObserverItem ? do
-      cssOutlineTextBox 0.1 C.gray C.black
+      cssSolidTextBox 0.1 C.white C.black
       C.sym C.padding (C.rem 0.1)
 

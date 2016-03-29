@@ -14,6 +14,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
          DynMaybe
        , makeSimpleForm
        , observeDynamic
+       , observeDynMaybe
        , observeWidget
        , observeFlow
        , deriveSFRowBuilder
@@ -55,7 +56,7 @@ import Control.Applicative (liftA2)
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (ReaderT, runReaderT, ask, lift,local)
 import Control.Monad.Morph
-import Data.Maybe (fromJust,isJust)
+import Data.Maybe (isJust)
 import Data.Monoid ((<>))
 import qualified Data.Map as M
 import Language.Haskell.TH
@@ -112,12 +113,15 @@ makeSimpleForm cfg formClass ma =
   asSimpleForm formClass $ runSimpleFormR cfg $ B.buildA Nothing ma
 
 observeDynamic::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->R.Dynamic t a->m (DynMaybe t a)
-observeDynamic cfg observerClass aDyn =
+observeDynamic cfg observerClass aDyn = R.mapDyn Just aDyn >>= observeDynMaybe cfg observerClass
+
+observeDynMaybe::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->DynMaybe t a->m (DynMaybe t a)
+observeDynMaybe cfg observerClass aDynM =
   asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
-    startDyn <- R.mapDyn Just aDyn -- DynMaybe t a
-    builtDyn <- R.mapDyn (unSF . buildA Nothing) startDyn -- Dynamic t (SimpleFormR e t m (DynMaybe t a))
+    builtDyn <- R.mapDyn (maybe (return $ R.constDyn Nothing) (unSF . buildA Nothing . Just)) aDynM -- Dynamic t (ReaderT e m (DynMaybe t a))
     newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
-    lift $ R.joinDyn <$> R.foldDyn (\_ x-> x) startDyn newDynEv -- DynMaybe t a
+    lift $ R.joinDyn <$> R.foldDyn (\_ x-> x) aDynM newDynEv -- DynMaybe t a
+
 
 observeWidget::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->m a->m (DynMaybe t a)
 observeWidget cfg observerClass wa =
@@ -192,9 +196,9 @@ textAtLeft label ra = formRow $ do
 textOnTop::SimpleFormC e t m=>String->SFLayoutF e m a
 textOnTop = textOnTop' id 
 
-textOnTop'::SimpleFormC e t m=>SFLayoutF e m b ->String->SFLayoutF e m a
-textOnTop labelLayout label ra = formCol $ do
-  lableLayout . formItem $ RD.el "span" $ RD.text label
+textOnTop'::SimpleFormC e t m=>SFLayoutF e m () ->String->SFLayoutF e m a
+textOnTop' labelLayout label ra = formCol $ do
+  labelLayout . formItem $ RD.el "span" $ RD.text label
   formItem $ ra
 
 

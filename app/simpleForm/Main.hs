@@ -63,8 +63,8 @@ instance HasDatatypeInfo BRec
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) BRec where
   buildA mFN mBRec= liftF (textOnTop "BRec" . formRow) $ BRec
                <$> buildA Nothing (oneB <$> mBRec)
-               <*> liftF (textOnTop "Seq A") (buildA Nothing (seqOfA <$> mBRec))
-               <*> liftF (textOnTop "HashSet String") (buildA Nothing (hashSetOfString <$> mBRec))
+               <*> liftF (textOnTop' layoutHC "Seq A") (buildA Nothing (seqOfA <$> mBRec))
+               <*> liftF (textOnTop' layoutHC "HashSet String") (buildA Nothing (hashSetOfString <$> mBRec))
   
 instance Generic C
 instance HasDatatypeInfo C
@@ -95,9 +95,13 @@ flowTestWidget n = do
 
 test::(SimpleFormC e t m,MonadIO (PushM t))=>e->m ()
 test cfg = do
-  cDyn<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
-  mapDyn ppShow cDyn >>= dynText
-  _ <- flexFillR $ observeDynamic cfg (CssClass "sf-observer") cDyn
+  cDynM<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
+  el "p" $ text "C from form:"
+  mapDyn ppShow cDynM >>= dynText
+  el "p" $ text "Observed C:"
+  el "p" blank
+  _ <- flexFillR $ observeDynMaybe cfg (CssClass "sf-observer") cDynM
+  el "p" blank
   _ <- observeFlow cfg (CssClass "sf-form") (CssClass "sf-observer") flowTestWidget 2
   return ()
 
