@@ -86,23 +86,23 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
 
-instance (MonadIO(PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg t m where
+instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg t m where
   failureF = defFailureF
   sumF = defSumF
-  formItem = liftLF $ flexLayoutItemSimple 
-  dynamicDiv attrsDyn = liftLF $ RD.elDynAttr "div" attrsDyn
-  layoutVert = liftLF $ flexLayoutColSimple 
+  dynamicDiv  = liftLF . RD.elDynAttr "div" 
+  formItem    = liftLF $ flexLayoutItemSimple 
+  layoutVert  = liftLF $ flexLayoutColSimple 
   layoutHoriz = liftLF $ flexLayoutRowSimple
-  layoutL = liftLF $ flexFillR 
-  layoutR  = liftLF $ flexFillL
-  layoutHC = liftLF $ flexHCenter
-  layoutT = liftLF $ flexFillD 
-  layoutB  = liftLF $ flexFillU
-  layoutVC = liftLF $ flexVCenter
-  validItemStyle = cfgValidStyle <$> ask 
+  layoutL     = liftLF $ flexFillR 
+  layoutR     = liftLF $ flexFillL
+  layoutHC    = liftLF $ flexHCenter
+  layoutT     = liftLF $ flexFillD 
+  layoutB     = liftLF $ flexFillU
+  layoutVC    = liftLF $ flexVCenter
+  validItemStyle   = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask
-  observerStyle = cfgObserverStyle <$> ask
-  observer = cfgObserver <$> ask
+  observerStyle    = cfgObserverStyle <$> ask
+  observer         = cfgObserver <$> ask
   setToObserve = local (\cfg -> cfg {cfgObserver = True })
   setLayoutFieldName f = local (\cfg -> cfg { cfgLabelF = f })
   getLayoutFieldName = do
