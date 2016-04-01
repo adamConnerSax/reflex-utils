@@ -25,7 +25,7 @@ setup-info:
 packages:
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
-    commit: "507a6d0"
+    commit: "18f6538"
 - location:
     git: https://github.com/ryantrinkle/reflex
     commit: "cc62c11a6cde31412582758c236919d4bb766ada"

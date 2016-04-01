@@ -20,7 +20,7 @@ import qualified Data.Map as M
 import qualified Data.Sequence as Seq
 import qualified Data.HashSet as HS
 import Data.Time.Clock (UTCTime(..))
-import Data.Time.Calendar (Day(..))
+import Data.Time.Calendar (Day(..),fromGregorian)
 
 import Reflex
 import Reflex.Dynamic.TH
@@ -29,15 +29,18 @@ import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 
 import Reflex.Dom.Contrib.Layout.All (CssClasses(..),CssClass(..),emptyCss,flexCssBS,flexFillR,cssToBS)
 import Reflex.Dom.Contrib.SimpleForm
+--import DataBuilder
 
 -- Some types to demonstrate what we can make into a form
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
 data Shape = Square | Circle | Triangle deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
-data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | AD Day | ADT UTCTime | AET (Either (Shape,Color) (Shape,Int,Int)) deriving (Show,GHC.Generic)
+data DateOrDateTime = D Day | DT UTCTime deriving (Show)
+data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) deriving (Show,GHC.Generic)
 data B = B { int::Int, listOfA::[A] } deriving (Show,GHC.Generic)
 newtype MyMap = MyMap { map_String_B::M.Map String B } deriving (Show,GHC.Generic)
-data BRec = BRec { oneB::B, seqOfA::Seq.Seq A, hashSetOfString::HS.HashSet String } deriving (Show,GHC.Generic)
+data BRec = BRec { oneB::B, seqOfA::Seq.Seq A, hashSetOfString::HS.HashSet String } deriving (Show)
 data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Generic)
+
 
 
 -- generic instances
@@ -58,14 +61,36 @@ instance Generic MyMap
 instance HasDatatypeInfo MyMap
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) MyMap 
 
-instance Generic BRec
-instance HasDatatypeInfo BRec
+--instance Generic BRec
+--instance HasDatatypeInfo BRec
+
+-- handwritten single constructor instance
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) BRec where
   buildA mFN mBRec= liftF (textOnTop "BRec" . formRow) $ BRec
                <$> buildA Nothing (oneB <$> mBRec)
-               <*> liftF (textOnTop "Seq A") (buildA Nothing (seqOfA <$> mBRec))
-               <*> liftF (textOnTop "HashSet String") (buildA Nothing (hashSetOfString <$> mBRec))
-  
+               <*> liftF (textOnTop' layoutHC "Seq A") (buildA Nothing (seqOfA <$> mBRec))
+               <*> liftF (textOnTop' layoutHC "HashSet String") (buildA Nothing (hashSetOfString <$> mBRec))
+
+
+-- handwritten sum instance.  This is more complex because you need to know which, if any, matched the input.
+buildDate::SimpleFormC e t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SimpleFormR e t m) DateOrDateTime
+buildDate mFN ms =
+  let (matched,mDay) = case ms of
+        Just (D day) -> (True,Just day)
+        _            -> (False, Nothing)
+  in MDWrapped matched ("D",mFN) (D <$> liftF (textAtLeft "Date") (buildA Nothing mDay))
+
+buildDateTime::SimpleFormC e t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SimpleFormR e t m) DateOrDateTime
+buildDateTime mFN ms =
+  let (matched,mDateTime) = case ms of
+        Just (DT dt) -> (True,Just dt)
+        _            -> (False, Nothing)
+  in MDWrapped matched ("DT",mFN) (DT <$> liftF (textAtLeft "DateTime") (buildA Nothing mDateTime))
+
+instance SimpleFormC e t m=>Builder (SimpleFormR e t m) DateOrDateTime where
+  buildA = buildAFromConList [buildDate,buildDateTime]
+
+
 instance Generic C
 instance HasDatatypeInfo C
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) C where
@@ -83,7 +108,7 @@ deriveSFColBuilder ''C
 
 -- put some data in for demo purposes
 b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
-b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, AC Red ]
+b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
 
 flowTestWidget::MonadWidget t m=>Int->m (Dynamic t String)

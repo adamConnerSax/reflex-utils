@@ -69,7 +69,7 @@ import Reflex.Dom.Contrib.Layout.Core()
 --import Reflex.Orphans()
 
 import qualified DataBuilder as B
-import DataBuilder as BExport (Builder(..),GBuilder(..),FieldName)
+import DataBuilder as BExport (Builder(..),GBuilder(..),FieldName,MDWrapped(..),buildAFromConList)
 import DataBuilder.GenericSOP as GSOP (Generic,HasDatatypeInfo,deriveGeneric)
 import DataBuilder.TH (deriveBuilder)
 
@@ -192,9 +192,9 @@ textAtLeft label ra = formRow $ do
 textOnTop::SimpleFormC e t m=>String->SFLayoutF e m a
 textOnTop = textOnTop' id 
 
-textOnTop'::SimpleFormC e t m=>SFLayoutF e m b ->String->SFLayoutF e m a
-textOnTop labelLayout label ra = formCol $ do
-  lableLayout . formItem $ RD.el "span" $ RD.text label
+textOnTop'::SimpleFormC e t m=>SFLayoutF e m () ->String->SFLayoutF e m a
+textOnTop' labelLayout label ra = formCol $ do
+  labelLayout . formItem $ RD.el "span" $ RD.text label
   formItem $ ra
 
 
