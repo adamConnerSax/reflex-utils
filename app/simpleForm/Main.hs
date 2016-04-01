@@ -46,7 +46,7 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 -- generic instances
 -- NB: "Generic" below is the Generics.SOP sort.  
 -- NB: You don't need the "buildA .. = .. gBuildA .. " lines if the default formatting is okay.  But this allows you to insert layout on a per type basis.
--- More layout options are available if you write custom instances. 
+
 instance Generic A
 instance HasDatatypeInfo A
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) A where 
@@ -61,9 +61,13 @@ instance Generic MyMap
 instance HasDatatypeInfo MyMap
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) MyMap 
 
---instance Generic BRec
---instance HasDatatypeInfo BRec
+instance Generic C
+instance HasDatatypeInfo C
+instance SimpleFormC e t m=>Builder (SimpleFormR e t m) C where
+  buildA mFN = liftF (legend "C" . formCol) . gBuildA mFN
 
+
+-- More layout options are available if you write custom instances. 
 -- handwritten single constructor instance
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) BRec where
   buildA mFN mBRec= liftF (textOnTop "BRec" . formRow) $ BRec
@@ -72,7 +76,7 @@ instance SimpleFormC e t m=>Builder (SimpleFormR e t m) BRec where
                <*> liftF (textOnTop' layoutHC "HashSet String") (buildA Nothing (hashSetOfString <$> mBRec))
 
 
--- handwritten sum instance.  This is more complex because you need to know which, if any, matched the input.
+-- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
 buildDate::SimpleFormC e t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SimpleFormR e t m) DateOrDateTime
 buildDate mFN ms =
   let (matched,mDay) = case ms of
@@ -91,19 +95,12 @@ instance SimpleFormC e t m=>Builder (SimpleFormR e t m) DateOrDateTime where
   buildA = buildAFromConList [buildDate,buildDateTime]
 
 
-instance Generic C
-instance HasDatatypeInfo C
-instance SimpleFormC e t m=>Builder (SimpleFormR e t m) C where
-  buildA mFN = liftF (legend "C" . formCol) . gBuildA mFN
-
--- (Almost) Equivalent TH-built instances
+-- Equivalent TH-built instances
+-- Can't do extra formatting.  Row and column templates are all you get.
 {-
 -- template derivation is simpler but may be a compile time issues for ghcjs.  And some people don't like TH.
 deriveSFRowBuilder ''A
-deriveSFRowBuilder ''B
 deriveSFRowBuilder ''MyMap
-deriveSFRowBuilder ''BRec
-deriveSFColBuilder ''C
 -}
 
 -- put some data in for demo purposes
