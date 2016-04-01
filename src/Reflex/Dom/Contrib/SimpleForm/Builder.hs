@@ -70,7 +70,7 @@ import Reflex.Dom.Contrib.Layout.Core()
 --import Reflex.Orphans()
 
 import qualified DataBuilder as B
-import DataBuilder as BExport (Builder(..),GBuilder(..),FieldName)
+import DataBuilder as BExport (Builder(..),GBuilder(..),FieldName,MDWrapped(..),buildAFromConList)
 import DataBuilder.GenericSOP as GSOP (Generic,HasDatatypeInfo,deriveGeneric)
 import DataBuilder.TH (deriveBuilder)
 
