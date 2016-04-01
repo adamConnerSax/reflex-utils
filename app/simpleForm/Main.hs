@@ -78,18 +78,18 @@ instance SimpleFormC e t m=>Builder (SimpleFormR e t m) BRec where
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
 buildDate::SimpleFormC e t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SimpleFormR e t m) DateOrDateTime
-buildDate mFN ms =
-  let (matched,mDay) = case ms of
-        Just (D day) -> (True,Just day)
-        _            -> (False, Nothing)
-  in MDWrapped matched ("D",mFN) (D <$> liftF (textAtLeft "Date") (buildA Nothing mDay))
+buildDate mFN ms = MDWrapped matched ("D",mFN) bldr where
+  (matched,mDay) = case ms of
+    Just (D day) -> (True,Just day)
+    _            -> (False, Nothing)
+  bldr = D <$> liftF (textAtLeft "Date") (buildA Nothing mDay)
 
 buildDateTime::SimpleFormC e t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SimpleFormR e t m) DateOrDateTime
-buildDateTime mFN ms =
-  let (matched,mDateTime) = case ms of
-        Just (DT dt) -> (True,Just dt)
-        _            -> (False, Nothing)
-  in MDWrapped matched ("DT",mFN) (DT <$> liftF (textAtLeft "DateTime") (buildA Nothing mDateTime))
+buildDateTime mFN ms = MDWrapped matched ("DT",mFN) bldr where
+  (matched,mDateTime) = case ms of
+    Just (DT dt) -> (True,Just dt)
+    _            -> (False, Nothing)
+  bldr = DT <$> liftF (textAtLeft "DateTime") (buildA Nothing mDateTime)
 
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) DateOrDateTime where
   buildA = buildAFromConList [buildDate,buildDateTime]
