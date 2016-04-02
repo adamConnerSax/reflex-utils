@@ -27,6 +27,7 @@ import qualified Reflex as R
 import qualified Reflex.Class as RC
 import qualified Reflex.Dom as RD
 import qualified GHCJS.DOM.Element as E
+import GHCJS.DOM.Types (IsElement)
 
 
 import Control.Monad.IO.Class (liftIO,MonadIO)
@@ -137,7 +138,7 @@ cssToAttr::IsCssClass c=>c->RD.AttributeMap
 cssToAttr cssClass = ("class" RD.=: (toCssString cssClass)) 
 
 -- add attributes to element.  If no events are hooked up, do it statically
-addClassesStatic::(RD.MonadWidget t m, E.IsElement e)=>CssClasses->e->m ()
+addClassesStatic::(RD.MonadWidget t m, IsElement e)=>CssClasses->e->m ()
 addClassesStatic css elt = RD.addAttributes (cssToAttr css) elt
 
 updateCss::LayoutNodeCss->CssUpdate->LayoutNodeCss
@@ -147,13 +148,13 @@ updateCss (LayoutNodeCss s d) (AddToDynamic d') = LayoutNodeCss s (d <> d')
 updateCssNE::NE.NonEmpty CssUpdate->LayoutNodeCss->LayoutNodeCss
 updateCssNE cssUpdates nodeCss = foldl' updateCss nodeCss (NE.toList cssUpdates)
 
-addClassesDynamic::(RD.MonadWidget t m, E.IsElement e)=>CssClasses->e->R.Dynamic t CssClasses->m ()
+addClassesDynamic::(RD.MonadWidget t m, IsElement e)=>CssClasses->e->R.Dynamic t CssClasses->m ()
 addClassesDynamic staticCss elt dynamicCssDyn = do
   cssDyn <- RD.mapDyn (\x->(LayoutNodeCss staticCss x)) dynamicCssDyn 
   attrsDyn <- RD.mapDyn cssToAttr cssDyn
   RD.addAttributes attrsDyn elt
 
-addClasses::(RD.MonadWidget t m, E.IsElement e)=>CssClasses->Maybe (R.Dynamic t CssClasses)->e->m ()
+addClasses::(RD.MonadWidget t m, IsElement e)=>CssClasses->Maybe (R.Dynamic t CssClasses)->e->m ()
 addClasses css mCssDyn elt = maybe (addClassesStatic css elt) (addClassesDynamic css elt) mCssDyn
 
 
