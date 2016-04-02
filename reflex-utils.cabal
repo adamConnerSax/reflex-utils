@@ -38,7 +38,8 @@ library
                      , reflex
                      , reflex-dom
                      , reflex-dom-contrib
-                     , ghcjs-base
+                     , webkitgtk3
+--                     , ghcjs-base
                      , ghcjs-dom
                      , transformers
                      , mtl
