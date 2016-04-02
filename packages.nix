@@ -3,8 +3,8 @@
     dataBuilder = self.callPackage (reflex-platform.cabal2nixResult (reflex-platform.nixpkgs.fetchgit (builtins.fromJSON ''
       {
         "url": "https://github.com/adamConnerSax/dataBuilder",
-        "rev": "507a6d0c1679fb21428fdb188c9d929d622be951",
-        "sha256": "10mq48djchhrdxh3b78c5yyz3dywqy96nv7nzw7yplikib2gxydj"
+        "rev": "18f65388a3cad7e3687cc59e112402767a1942bd",
+        "sha256": "0kymfw47zwkqgd3z3v4al8c27w9ngvjhdyndjnab8b8pi999kwjf"
       }
     ''))) {};
   };
