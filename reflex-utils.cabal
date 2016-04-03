@@ -38,8 +38,6 @@ library
                      , reflex
                      , reflex-dom
                      , reflex-dom-contrib
---                     , webkitgtk3
-                     , ghcjs-base
                      , ghcjs-dom
                      , transformers
                      , mtl
@@ -58,7 +56,8 @@ library
                      , hashable
                      , unordered-containers
 --                     , reflex-orphans
-
+  if impl(ghcjs)
+    build-depends:     ghcjs-base
 
   default-language:    Haskell2010
 
