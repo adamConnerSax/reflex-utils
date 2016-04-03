@@ -2,31 +2,27 @@
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
 #resolver: nightly-2015-11-14
-resolver: lts-3.21
-#resolver: lts-5.1
+#resolver: lts-3.21
+resolver: lts-5.1
 
 
-compiler: ghcjs-0.2.0.20151230.3_ghc-7.10.2
-compiler-check: match-exact
-setup-info:
-  ghcjs:
-    source:
-      ghcjs-0.2.0.20151230.3_ghc-7.10.2:
-        url: "https://github.com/nrolland/ghcjs/releases/download/v.0.2.0.20151230.3/ghcjs-0.2.0.20151230.3.tar.gz"
+#compiler: ghcjs-0.2.0.20151230.3_ghc-7.10.2
+#compiler-check: match-exact
+#setup-info:
+#  ghcjs:
+#    source:
+#      ghcjs-0.2.0.20151230.3_ghc-7.10.2:
+#        url: "https://github.com/nrolland/ghcjs/releases/download/v.0.2.0.20151230.3/ghcjs-0.2.0.20151230.3.tar.gz"
 
 
-#nix:
-#  enable: true
-#  pure: true
-#  path: [nixpkgs=/Users/adam/Development/ryanTrinkleNix/nixpkgs]
-#  shell-file: shell.nix
+nix:
+  enable: true
+  pure: true
+  path: [nixpkgs=/Users/adam/Development/ryanTrinkleNix/nixpkgs]
+  shell-file: shell.nix
 
 # Local packages, usually specified by relative directory name
 packages:
-#- location:
-#    git: https://github.com/gtk2hs/tree/master/gtk
-#    commit: "9fe3c15"
-#- ../../github/gtk2hs/gtk
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
     commit: "18f6538"
@@ -39,11 +35,11 @@ packages:
 - location:
     git: https://github.com/ghcjs/ghcjs-dom
     commit: "1644ab2a058618ebbffefa12ee95cd7484169275"
-#-  ../../github/reflex/reflex-dom-contrib-0.4
-- location:
-    git: https://github.com/reflex-frp/reflex-dom-contrib
-    commit: "52fcdca"    
-- '.'
+-  ../../github/reflex/reflex-dom-contrib
+#- location:
+#    git: https://github.com/reflex-frp/reflex-dom-contrib
+#    commit: "52fcdca"    
+#- '.'
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
@@ -54,19 +50,19 @@ extra-deps:
    - readable-0.3.1
    - string-conv-0.1
    - generics-sop-0.2.1.0
-#   - webkitgtk3-0.14.1.1
-#   - webkitgtk3-javascriptcore-0.13.1.2
-#   - haskell-src-exts-1.16.0.1
-#   - syb-0.5.1
-#   - reflex-orphans-0.1
+   - webkitgtk3-0.14.1.1
+   - webkitgtk3-javascriptcore-0.13.1.2
+   - haskell-src-exts-1.16.0.1
+   - syb-0.5.1
+
    
 # Override default flag values for local packages and extra-deps
 flags:
-#  gtk:
-#    have-quartz-gtk: true
   ghcjs-dom:
-    jsffi: true
-
+#   jsffi: true
+    gtk3: true
+    webkit: true
+    
 # Extra package databases containing global packages
 extra-package-dbs: []
 
