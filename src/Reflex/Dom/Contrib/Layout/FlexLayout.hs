@@ -43,16 +43,28 @@ import Data.String (fromString)
 flexFillStyles = do
   ".flexFillH" ? do
     ("display" -: "flex")
+    ("display" -: "-webkit-flex")
     ("flex-direction" -: "row")
+    ("-webkit-flex-direction" -: "row")		
     ("align-items" -: "stretch")
+    ("-webkit-align-items" -: "stretch")    
     ("flex" -: "1 0 auto")
-    ".fill" <? do ("flex" -: "1")
+    ("-webkit-flex" -: "1 0 auto")	
+    ".fill" <? do
+      ("flex" -: "1")
+      ("-webkit-flex" -: "1")
   ".flexFillV" ? do
     ("display" -: "flex")
+    ("display" -: "-webkit-flex")    
     ("flex-direction" -: "column")
+    ("-webkit-flex-direction" -: "column")    
     ("align-items" -: "stretch")
+    ("-webkit-align-items" -: "stretch")    
     ("flex" -: "1 0 auto")
-    ".fill" <? do ("flex" -: "1")
+    ("-webkit-flex" -: "1 0 auto")	
+    ".fill" <? do
+      ("flex" -: "1")
+      ("-webkit-flex" -: "1")	
 
 numberFlexGrowOptions = 12::Int
 
@@ -60,21 +72,26 @@ numberFlexGrowOptions = 12::Int
 
 flexContainerStyle = do
   "display" -: "flex"
+  "display" -: "-webkit-flex"
   "align-items" -: "stretch"
+  "-webkit-align-items" -: "stretch"  
   "flex" -: "1 0 auto"
+  "-webkit-flex" -: "1 0 auto"  
 
 flexGridStyles = do
   ".gl-flex-row" ? do
     "flex-direction" -: "row"
+    "-webkit-flex-direction" -: "row"    
     flexContainerStyle
   ".gl-flex-col" ? do
     "flex-direction" -: "column"
+    "-webkit-flex-direction" -: "column"    
     flexContainerStyle
-  let flexItemStyle n = (fromString (".gl-flex-item-" ++ show n)) <? ("flex" -: fromString (show n ++ " 0 auto"))
+  let flexItemStyle n = (fromString (".gl-flex-item-" ++ show n)) <? do { "flex" -: fromString (show n ++ " 0 auto"); "-webkit-flex" -: fromString (show n ++ " 0 auto") }
   mapM_ flexItemStyle [1..numberFlexGrowOptions]
---    let flexRowStyle n = (fromString (".gl-flex-row-" ++ show n)) <? ("flex" -: fromString (show n ++ " 0 auto"))
+--    let flexRowStyle n = (fromString (".gl-flex-row-" ++ show n)) <? do ("flex" -: fromString (show n ++ " 0 auto"))
 --    mapM_ flexRowStyle [1..numberFlexGrowOptions]
-  let flexJustifyStyle s = (fromString (".gl-justify-" ++ s)) ? do { ("display" -: "flex"); ("justify-content" -: fromString s) }
+  let flexJustifyStyle s = (fromString (".gl-justify-" ++ s)) ? do { ("display" -: "flex"); ("display" -: "-webkit-flex"); ("justify-content" -: fromString s); ("-webkit-justify-content" -: fromString s) }
       flexJustifyStyles = ["flex-start","flex-end","center","space-between","space-around"]
   mapM_ flexJustifyStyle flexJustifyStyles
 
