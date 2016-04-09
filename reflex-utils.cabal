@@ -38,7 +38,7 @@ library
                      , reflex
                      , reflex-dom
                      , reflex-dom-contrib
-                     , ghcjs-dom
+                     , ghcjs-dom 
                      , transformers
                      , mtl
                      , lens

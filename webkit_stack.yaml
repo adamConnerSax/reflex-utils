@@ -3,18 +3,17 @@
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
 resolver: lts-5.1
 
-
 nix:
   enable: true
   pure: true
-  path: [nixpkgs=/Users/adam/Development/ryanTrinkleNix/nixpkgs]
+#  path: [nixpkgs=~/Development/nix/nixpkgs] # in case you want to use a version other than what is on your $NIX_PATH
   shell-file: shell.nix
 
 # Local packages, usually specified by relative directory name
 packages:
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
-    commit: "18f6538"
+    commit: "18f65388a3cad7e3687cc59e112402767a1942bd"
 - location:
     git: https://github.com/ryantrinkle/reflex
     commit: "cc62c11a6cde31412582758c236919d4bb766ada"
@@ -23,11 +22,12 @@ packages:
     commit: "639d9ca13c2def075e83344c9afca6eafaf24219"
 - location:
     git: https://github.com/ghcjs/ghcjs-dom
-    commit: "1644ab2a058618ebbffefa12ee95cd7484169275"
+#    commit: "1644ab2a058618ebbffefa12ee95cd7484169275" # 0.2.3.1
+    commit: "a316f84795d8c4a444eb0d0b46a4ff2a4387e104"  # 0.2.3.0
 - location:
     git: https://github.com/reflex-frp/reflex-dom-contrib
-    commit: "41c67daf2ad74281f2488cb80ceab7d12292142b"    
-#- '.'
+    commit: "41c67daf2ad74281f2488cb80ceab7d12292142b"
+- '.'
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
