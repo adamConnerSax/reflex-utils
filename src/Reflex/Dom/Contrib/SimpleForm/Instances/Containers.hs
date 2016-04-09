@@ -212,7 +212,7 @@ buildTraversableSFA' crI buildOne md mfa =
 buildTraversableSFA::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m fa 
 buildTraversableSFA crI md mfa = do
   validClasses <- validItemStyle
-  formCol' (R.constDyn $ cssClassAttr validClasses) $ buildTraversableSFA' crI (\x -> itemL . unSF . B.buildA x) md mfa
+  formCol' (R.constDyn $ cssClassAttr validClasses) $ layoutCollapsible "" True $ buildTraversableSFA' crI (\x -> itemL . unSF . B.buildA x) md mfa
 
 buildSFContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
 buildSFContainer aI buildTr mFN mfa = do
@@ -221,17 +221,17 @@ buildSFContainer aI buildTr mFN mfa = do
   mdo
     attrsDyn <- sfAttrs dmfa mFN Nothing
     let initial = maybe (Just $ emptyT aI) (Just . (toT aI)) mfa 
-    dmfa <- formCol' attrsDyn $ mdo
+    dmfa <- formCol' attrsDyn $ layoutCollapsible "" True $ mdo
       dmfa' <- unSF $ (fromT aI) <$> (SimpleFormR $ R.joinDyn <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [newSFREv,resizedEv]))
       sizemDyn <- R.mapDyn (\mfa -> (sizeFa aI) <$> mfa) dmfa'
       let resizedEv = R.attachDynWithMaybe (\mfa ms -> maybe Nothing (const $ buildTr mFN . Just . (toT aI) <$> mfa) ms) dmfa' (R.updated $ R.nubDyn sizemDyn)
       addEv <- formRow $ do
         let emptyB = unSF $ B.buildA Nothing Nothing -- we don't pass the fieldname here since it's the name of the parent 
-        dmb <- itemL $ RD.joinDyn <$> RD.widgetHold (emptyB) (fmap (const emptyB) $ R.updated dmfa')
+        dmb <- itemL $ RD.joinDyn <$> RD.widgetHold (emptyB) (emptyB <$ R.updated dmfa')
         clickEv <-  layoutVC . itemR . lift $ RD.button "+"
         return $ R.attachDynWithMaybe (\mb _ -> mb) dmb clickEv -- only fires if button is clicked when mb is a Just.
       let insert mfa b = (insertB aI) <$> (Just b) <*> mfa 
-          newFaEv = R.attachDynWithMaybe insert dmfa' addEv -- Event t (tr a), only fires if traverable is not Nothing
+          newFaEv = R.attachDynWithMaybe insert dmfa' addEv -- Event t (tr a), only fires if traversable is not Nothing
           newSFREv = fmap (buildTr mFN . Just . (toT aI)) newFaEv -- Event t (SFRW e t m (g b))
       return dmfa'
     return dmfa

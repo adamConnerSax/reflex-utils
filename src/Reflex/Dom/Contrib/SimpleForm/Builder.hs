@@ -174,6 +174,7 @@ class SimpleFormConfiguration e t m | m->t  where
   layoutT::SFLayoutF e m a
   layoutB::SFLayoutF e m a
   layoutVC::SFLayoutF e m a
+  layoutCollapsible::String->Bool->SFLayoutF e m a
   validItemStyle::ReaderT e m CssClasses
   invalidItemStyle::ReaderT e m CssClasses
   observerStyle::ReaderT e m CssClasses

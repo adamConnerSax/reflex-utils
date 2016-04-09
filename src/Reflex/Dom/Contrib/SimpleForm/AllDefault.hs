@@ -99,6 +99,7 @@ instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCf
   layoutT     = liftLF $ flexFillD 
   layoutB     = liftLF $ flexFillU
   layoutVC    = liftLF $ flexVCenter
+  layoutCollapsible = collapsibleWidget 
   validItemStyle   = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask
   observerStyle    = cfgObserverStyle <$> ask
@@ -108,6 +109,13 @@ instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCf
   getLayoutFieldName = do
     mf <- asks cfgLabelF
     return $ mf >>= (\f -> Just $ textAtLeft . f)
+
+
+collapsibleWidget::(MonadIO (PushM t),RD.MonadWidget t m)=>String->Bool->m a->m a
+collapsibleWidget summary isOpen w = do
+  RD.elAttr "details" (if isOpen then ("open" RD.=: "") else mempty) $ do
+    RD.el "summary" $ RD.text summary
+    w
 
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 
@@ -139,6 +147,7 @@ isSimpleForm = C.form # ".sf-form"
 simpleFormElements = do
   isSimpleForm ? do
     C.background C.ghostwhite
+    C.summary ? C.cursor C.pointer 
     C.button ? cssSolidTextBox 0.1 C.whitesmoke C.black
     C.input ? do
       C.verticalAlign C.middle
@@ -162,8 +171,9 @@ isSimpleObserverItem = C.div # ".sf-observer-item"
 
 simpleObserverDefaultCss = do
   isSimpleObserver ? do
-    C.background C.whitesmoke
+    C.background C.ghostwhite
+    C.summary ? C.cursor C.pointer 
     isSimpleObserverItem ? do
-      cssSolidTextBox 0.1 C.white C.black
+      cssSolidTextBox 0.1 C.lightslategrey C.black
       C.sym C.padding (C.rem 0.1)
 

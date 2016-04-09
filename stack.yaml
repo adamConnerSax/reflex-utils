@@ -28,8 +28,8 @@ packages:
     commit: "1644ab2a058618ebbffefa12ee95cd7484169275"
 - location:
     git: https://github.com/reflex-frp/reflex-dom-contrib
-    commit: "41c67daf2ad74281f2488cb80ceab7d12292142b"    
-#- '.'
+    commit: "41c67daf2ad74281f2488cb80ceab7d12292142b"
+- '.'
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
