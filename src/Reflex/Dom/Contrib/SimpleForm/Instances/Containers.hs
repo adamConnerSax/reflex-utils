@@ -215,6 +215,7 @@ buildTraversableSFA crI md mfa = do
   validClasses <- validItemStyle
   formCol' (R.constDyn $ cssClassAttr validClasses) $ layoutCollapsible "" CollapsibleStartsOpen $ buildTraversableSFA' crI (\x -> itemL . unSF . B.buildA x) md mfa
 
+-- TODO: need a new version to do widgetHold over whole thing if collapsible depends on size
 buildSFContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
 buildSFContainer aI buildTr mFN mfa = mdo
     attrsDyn <- sfAttrs dmfa mFN Nothing
