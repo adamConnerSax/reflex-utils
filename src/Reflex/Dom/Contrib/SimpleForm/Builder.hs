@@ -21,6 +21,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , deriveSFColBuilder
        , SFRW
        , SimpleFormR(..)
+       , CollapsibleInitialState(..)
        , SimpleFormConfiguration(..)
        , SFLayoutF
        , runSimpleFormR
@@ -51,12 +52,12 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , sfAttrs
        ) where
 
-import Control.Monad (liftM2)
-import Control.Applicative (liftA2)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader (ReaderT, runReaderT, ask, lift,local)
+--import Control.Monad (liftM2)
+--import Control.Applicative (liftA2)
+--import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Reader (ReaderT, runReaderT, ask) --, lift,local)
 import Control.Monad.Morph
-import Data.Maybe (isJust)
+import Data.Maybe (isJust,fromMaybe)
 import Data.Monoid ((<>))
 import qualified Data.Map as M
 import Language.Haskell.TH
@@ -65,7 +66,7 @@ import qualified Reflex as R
 import Reflex as ReflexExport (PushM)
 import qualified Reflex.Dom as RD
 
-import Reflex.Dom.Contrib.Layout.Types (LayoutM,CssClass,CssClasses(..),IsCssClass(..))
+import Reflex.Dom.Contrib.Layout.Types (CssClass,CssClasses(..),IsCssClass(..))
 import Reflex.Dom.Contrib.Layout.Core()
 --import Reflex.Orphans()
 
@@ -157,6 +158,7 @@ liftRAction ac sf = SimpleFormR $ ac >> unSF sf
 liftAction::Monad m=>m b->SimpleFormR e t m a->SimpleFormR e t m a
 liftAction ac = liftRAction (lift ac) 
 
+data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)
 
 -- | class to hold form configuration.  For different configurations, declare an env type and then
 -- | instantiate the class for that type.
@@ -174,7 +176,7 @@ class SimpleFormConfiguration e t m | m->t  where
   layoutT::SFLayoutF e m a
   layoutB::SFLayoutF e m a
   layoutVC::SFLayoutF e m a
-  layoutCollapsible::String->Bool->SFLayoutF e m a
+  layoutCollapsible::String->CollapsibleInitialState->SFLayoutF e m a
   validItemStyle::ReaderT e m CssClasses
   invalidItemStyle::ReaderT e m CssClasses
   observerStyle::ReaderT e m CssClasses
@@ -186,13 +188,13 @@ class SimpleFormConfiguration e t m | m->t  where
 layoutFieldNameHelper::SimpleFormC e t m=>Maybe FieldName->SFLayoutF e m a
 layoutFieldNameHelper mFN sfra = do
   mf <- getLayoutFieldName
-  let lf = maybe id id $ mf <*> mFN
+  let lf = fromMaybe id $ mf <*> mFN
   lf sfra
 
 textAtLeft::SimpleFormC e t m=>String->SFLayoutF e m a
 textAtLeft label ra = formRow $ do
   formItem $ RD.el "span" $ RD.text label
-  formItem $ ra
+  formItem ra
 
 textOnTop::SimpleFormC e t m=>String->SFLayoutF e m a
 textOnTop = textOnTop' id 
@@ -200,7 +202,7 @@ textOnTop = textOnTop' id
 textOnTop'::SimpleFormC e t m=>SFLayoutF e m () ->String->SFLayoutF e m a
 textOnTop' labelLayout label ra = formCol $ do
   labelLayout . formItem $ RD.el "span" $ RD.text label
-  formItem $ ra
+  formItem ra
 
 
 legend::SimpleFormC e t m=>String->SFLayoutF e m a

@@ -102,11 +102,13 @@ flexCss = do
 flexCssBS::B.ByteString
 flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty [] $ flexCss
 
+wrapWidget::RD.MonadWidget t m=>m a->m a
+wrapWidget = RD.divClass "" 
 
 flexFillR::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexFillR w = do
   RD.divClass "flexFillH" $ do
-    a <- RD.divClass "" w
+    a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
@@ -114,13 +116,13 @@ flexFillL::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexFillL w = do
   RD.divClass "flexFillH" $ do  
     RD.divClass "fill" RD.blank
-    RD.divClass "" w
+    wrapWidget w
 
 flexHCenter::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexHCenter w = do
   RD.divClass "flexFillH" $ do
     RD.divClass "fill" RD.blank
-    a <- RD.divClass "" w
+    a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
@@ -128,14 +130,14 @@ flexVCenter::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexVCenter w = do
   RD.divClass "flexFillV" $ do
     RD.divClass "fill" RD.blank
-    a <- RD.divClass "" w
+    a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
 flexFillD::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexFillD w = do
   RD.divClass "flexFillV" $ do
-    a <- RD.divClass "" w
+    a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
@@ -143,8 +145,9 @@ flexFillU::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexFillU w = do
   RD.divClass "flexFillV" $ do  
     RD.divClass "fill" RD.blank
-    RD.divClass "" w
+    wrapWidget w
 
+{-
 flexLayoutRowSimple::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexLayoutRowSimple = RD.divClass "gl-flex-row"
 
@@ -153,6 +156,16 @@ flexLayoutColSimple = RD.divClass "gl-flex-col"
 
 flexLayoutItemSimple::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexLayoutItemSimple = RD.divClass "gl-flex-item-1"
+-}
+
+flexLayoutRowSimple::AddStyle a=>a->a
+flexLayoutRowSimple = addStyle (CssClasses [CssClass "gl-flex-row"])
+
+flexLayoutColSimple::AddStyle a=>a->a
+flexLayoutColSimple = addStyle (CssClasses [CssClass "gl-flex-col"])
+
+flexLayoutItemSimple::AddStyle a=>a->a
+flexLayoutItemSimple = addStyle (CssClasses [CssClass "gl-flex-item-1"])
 
 
 flexLayoutRowF::R.Reflex t=>LayoutF t

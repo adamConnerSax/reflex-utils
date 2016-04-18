@@ -29,6 +29,9 @@ packages:
 - location:
     git: https://github.com/reflex-frp/reflex-dom-contrib
     commit: "41c67daf2ad74281f2488cb80ceab7d12292142b"
+#- location:
+#    git: https://github.com/Saulzar/reflex-html
+#    commit: f9db71e9a0fc0ef52d3f2214234aa031f6fced27
 - '.'
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
@@ -40,6 +43,7 @@ extra-deps:
    - readable-0.3.1
    - string-conv-0.1
    - generics-sop-0.2.1.0
+
  
 
    

@@ -79,7 +79,7 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
   observerClasses <- observerStyle
   isObserver <- observer
   let classes = if isObserver then observerClasses else validClasses 
-      attrsDyn = R.constDyn (cssClassAttr (classes) <> titleAttr ("Constructor"))
+      attrsDyn = R.constDyn (cssClassAttr (classes) <> titleAttr "Constructor")
       wc = WidgetConfig RD.never defPair attrsDyn
   formRow $ do
     sfrpCW <- itemL $ sfWidget id sfrpCN Nothing wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
@@ -90,15 +90,15 @@ instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCf
   failureF = defFailureF
   sumF = defSumF
   dynamicDiv  attrsDyn = liftLF $ RD.elDynAttr "div" attrsDyn
-  formItem    = liftLF $ flexLayoutItemSimple 
-  layoutVert  = liftLF $ flexLayoutColSimple 
-  layoutHoriz = liftLF $ flexLayoutRowSimple
-  layoutL     = liftLF $ flexFillR 
-  layoutR     = liftLF $ flexFillL
-  layoutHC    = liftLF $ flexHCenter
-  layoutT     = liftLF $ flexFillD 
-  layoutB     = liftLF $ flexFillU
-  layoutVC    = liftLF $ flexVCenter
+  formItem    = liftLF flexLayoutItemSimple 
+  layoutVert  = liftLF flexLayoutColSimple 
+  layoutHoriz = liftLF flexLayoutRowSimple
+  layoutL     = liftLF flexFillR 
+  layoutR     = liftLF flexFillL
+  layoutHC    = liftLF flexHCenter
+  layoutT     = liftLF flexFillD 
+  layoutB     = liftLF flexFillU
+  layoutVC    = liftLF flexVCenter
   layoutCollapsible = collapsibleWidget 
   validItemStyle   = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask
@@ -111,9 +111,9 @@ instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCf
     return $ mf >>= (\f -> Just $ textAtLeft . f)
 
 
-collapsibleWidget::(MonadIO (PushM t),RD.MonadWidget t m)=>String->Bool->m a->m a
-collapsibleWidget summary isOpen w = do
-  RD.elAttr "details" (if isOpen then ("open" RD.=: "") else mempty) $ do
+collapsibleWidget::(MonadIO (PushM t),RD.MonadWidget t m)=>String->CollapsibleInitialState->m a->m a
+collapsibleWidget summary cis w = 
+  RD.elAttr "details" (if cis == CollapsibleStartsOpen then "open" RD.=: "" else mempty) $ do
     RD.el "summary" $ RD.text summary
     w
 
