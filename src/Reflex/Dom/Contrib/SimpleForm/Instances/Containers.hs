@@ -218,7 +218,7 @@ buildTraversableSFA crI md mfa = do
 buildSFContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
 buildSFContainer aI buildTr mFN mfa = mdo
     attrsDyn <- sfAttrs dmfa mFN Nothing
-    let (initial,size0) = Just $ maybe (emptyT aI,0) (toT aI &&& sizeFa) mfa 
+    let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
     dmfa <- formCol' attrsDyn $ layoutCollapsible "" CollapsibleStartsOpen $ mdo
       dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ R.joinDyn <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [newSFREv,resizedEv]))
       sizemDyn <- R.mapDyn (\mfa' -> sizeFa aI <$> mfa') dmfa'
