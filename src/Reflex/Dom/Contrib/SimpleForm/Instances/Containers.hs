@@ -201,6 +201,13 @@ instance (R.Reflex t, R.MonadHold t m)=>Applicative (SSFR s e t m) where
 liftLF'::Monad m=>(forall b.m b->m b)->StateT s m a -> StateT s m a
 liftLF' = hoist 
 
+{-
+-- utilities for collapsing
+widgetToggle::MonadWidget t m=>Dynamic t Bool -> m a -> m a -> m a
+widgetToggle condDyn trueW falseW = do
+  widgetDyn <- R.forDyn condDyn $ \b -> if b then trueW else falseW -- Dynamic t (m a)
+  newWidgetEv <- RD.dyn widgetDyn
+-}  
 
 -- unstyled, for use within other instances which will deal with the styling.
 buildTraversableSFA'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m b->BuildF e t m fa
