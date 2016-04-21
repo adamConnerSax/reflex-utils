@@ -201,13 +201,15 @@ instance (R.Reflex t, R.MonadHold t m)=>Applicative (SSFR s e t m) where
 liftLF'::Monad m=>(forall b.m b->m b)->StateT s m a -> StateT s m a
 liftLF' = hoist 
 
-{-
+
 -- utilities for collapsing
-widgetToggle::MonadWidget t m=>Dynamic t Bool -> m a -> m a -> m a
-widgetToggle condDyn trueW falseW = do
-  widgetDyn <- R.forDyn condDyn $ \b -> if b then trueW else falseW -- Dynamic t (m a)
-  newWidgetEv <- RD.dyn widgetDyn
--}  
+widgetToggle::RD.MonadWidget t m=>Bool->R.Event t Bool -> m a -> m a -> m (R.Dynamic t a)
+widgetToggle startCond condEv trueW falseW = do
+  let condW b = if b then trueW else falseW
+  RD.widgetHold (condW startCond) (condW <$> condEv)
+
+widgetToggleDyn::RD.MonadWidget t m=>Bool->R.Event t Bool -> m (R.Dynamic t a) -> m (R.Dynamic t a) -> m (R.Dynamic t a)
+widgetToggleDyn startCond condEv trueW falseW = R.joinDyn <$> widgetToggle startCond condEv trueW falseW
 
 -- unstyled, for use within other instances which will deal with the styling.
 buildTraversableSFA'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m b->BuildF e t m fa
@@ -241,6 +243,25 @@ buildSFContainer aI buildTr mFN mfa = mdo
           newSFREv = fmap (buildTr mFN . Just . toT aI) newFaEv -- Event t (SFRW e t m (g b))
       return dmfa'
     return dmfa
+
+buildSFContainer'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
+buildSFContainer' aI buildTr mFN mfa = mdo
+    attrsDyn <- sfAttrs dmfa mFN Nothing
+    let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
+    dmfa <- formCol' attrsDyn $ mdo
+      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ R.joinDyn <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [newSFREv,resizedEv]))
+      sizemDyn <- R.mapDyn (\mfa' -> sizeFa aI <$> mfa') dmfa'
+      let resizedEv = R.attachDynWithMaybe (\mfa' ms -> maybe Nothing (const $ buildTr mFN . Just . toT aI <$> mfa') ms) dmfa' (R.updated $ R.nubDyn sizemDyn)
+      addEv <- formRow $ do
+        let emptyB = unSF $ B.buildA Nothing Nothing -- we don't pass the fieldname here since it's the name of the parent 
+        dmb <- itemL $ RD.joinDyn <$> RD.widgetHold emptyB (emptyB <$ R.updated dmfa')
+        clickEv <-  layoutVC . itemR . lift $ RD.button "+"
+        return $ R.attachDynWithMaybe const dmb clickEv -- only fires if button is clicked when mb is a Just.
+      let insert mfa' b = insertB aI <$> Just b <*> mfa' 
+          newFaEv = R.attachDynWithMaybe insert dmfa' addEv -- Event t (tr a), only fires if traversable is not Nothing
+          newSFREv = fmap (buildTr mFN . Just . toT aI) newFaEv -- Event t (SFRW e t m (g b))
+      return dmfa'
+    return dmfa    
 
 buildOneDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b)
                    =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (ReaderT e m) (DynMaybe t b)
