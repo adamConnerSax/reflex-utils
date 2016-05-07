@@ -41,6 +41,7 @@ library
                      , reflex-dom-contrib
                      , ghcjs-dom 
                      , transformers
+                     , exception-transformers
                      , mtl
                      , lens
                      , ref-tf
