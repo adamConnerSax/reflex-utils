@@ -42,29 +42,13 @@ instance (RD.HasPostGui rt h m, Ref (StackedMW t m) ~ Ref h) => RD.HasPostGui rt
 
                           
 class MonadLayout t n where
-  layout::t n a->n a
+  doLayout::t n a->n a
+  beforeInsert::t n a->t n a
 
 
 --newtype StatefulMW s m a = SMW {  unSMW::StateT s m a }
 type StatefulMW s = StackedMW (StateT s) 
 
-{-
--- GeneralizedNewtypeDeriving, FTW!
-instance Functor m=>Functor (StatefulMW s m)
-instance Applicative m=>Applicative (StatefulMW s m)
-instance Monad m=>Monad (StatefulMW s m)
-instance MFunctor (StatefulMW s)
-instance MonadFix m=>MonadFix (StatefulMW s m)
-instance MonadException m => MonadException (StatefulMW s m)
-instance MonadIO m => MonadIO (StatefulMW s m)
-instance (MonadException m, MonadIO (StatefulMW s m)) => MonadAsyncException (StatefulMW s m)
-instance MonadTrans (StatefulMW s) 
-instance MonadRef m=>MonadRef (StatefulMW s m)
-instance RD.HasWebView m => RD.HasWebView (StatefulMW s m) 
-instance RD.HasDocument m => RD.HasDocument (StatefulMW s m) 
-instance RHC.MonadReflexCreateTrigger t m => RHC.MonadReflexCreateTrigger t (StatefulMW s m) 
-instance (RD.HasPostGui t h m, Ref (StatefulMW s m) ~ Ref h) => RD.HasPostGui t h (StatefulMW s m)
--}
 
 instance (RC.MonadSample t m, MonadTrans l, Monad (l m))   => RC.MonadSample t (l m) where
   sample = lift . RC.sample
@@ -78,7 +62,8 @@ instance (RD.MonadWidget t m,RD.MonadIORestore m, MonadIO (RD.PushM t)) => RD.Mo
   askRestore = LayoutP $ do
     parentRestore <- lift RD.askRestore
     curState <- get
-    return $ RD.Restore $ \(LayoutP sma) -> RD.restore parentRestore $ execStateT sma curState
+    return $ RD.Restore $ \(Layoutinstance RD.HasWebView m => RD.HasWebView (LayoutP t m) where
+  askWebView = LayoutP RD.askWebViewP sma) -> RD.restore parentRestore $ execStateT sma curState
 -}
 
 {-
@@ -91,7 +76,7 @@ liftAction f action lpa = StackedMW $ do
 -}
 
 layoutInside::(MonadTrans l, MonadLayout l m, Monad m)=>(m a -> m b)->l m a->l m b
-layoutInside f ma = lift . f $ layout ma  
+layoutInside f ma = lift . f $ doLayout ma  
 
 
 instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
@@ -100,8 +85,8 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
   type WidgetHost (StatefulMW s m) = RD.WidgetHost m
   type GuiAction  (StatefulMW s m) = RD.GuiAction m
   askParent = lift RD.askParent
-  subWidget n = hoist (RD.subWidget n)
-  subWidgetWithVoidActions n = layoutInside (RD.subWidgetWithVoidActions n)
+  subWidget n = hoist (RD.subWidget n) . beforeInsert 
+  subWidgetWithVoidActions n = layoutInside (RD.subWidgetWithVoidActions n) . beforeInsert
   --liftAction  (\((a,s),ev)->((a,ev),s)) (RD.subWidgetWithVoidActions n)
   liftWidgetHost = lift . RD.liftWidgetHost
   schedulePostBuild = lift . RD.schedulePostBuild
@@ -110,7 +95,7 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
 -- What happens if w changes the state??
   getRunWidget = do
     runWidget <- lift RD.getRunWidget
-    return  (\n w -> runWidget n (layout w))
+    return  (\n w -> runWidget n (doLayout w))
 
 
 {-
