@@ -19,6 +19,7 @@ import Control.Monad.State (StateT,runStateT,evalStateT,get,put)
 import Control.Monad.Trans (MonadIO,MonadTrans,lift)
 import Control.Monad.Ref (MonadRef,Ref)
 import Control.Monad.Morph
+import Data.Sequence (Seq,singleton,(|>),(<|),(><),empty)
 
 import qualified Reflex.Dom.Contrib.Layout.Types as LT
 
@@ -85,8 +86,8 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
   type WidgetHost (StatefulMW s m) = RD.WidgetHost m
   type GuiAction  (StatefulMW s m) = RD.GuiAction m
   askParent = lift RD.askParent
-  subWidget n = hoist (RD.subWidget n) . beforeInsert 
-  subWidgetWithVoidActions n = layoutInside (RD.subWidgetWithVoidActions n) . beforeInsert
+  subWidget n = beforeInsert . hoist (RD.subWidget n) 
+  subWidgetWithVoidActions n = beforeInsert . layoutInside (RD.subWidgetWithVoidActions n) 
   --liftAction  (\((a,s),ev)->((a,ev),s)) (RD.subWidgetWithVoidActions n)
   liftWidgetHost = lift . RD.liftWidgetHost
   schedulePostBuild = lift . RD.schedulePostBuild
@@ -121,9 +122,45 @@ data LayoutConstraint = OpensNode | InNode | ClosesNode
 data LayoutNodeType = LDiv 
 data LayoutInstruction = LayoutInstruction LayoutConstraint LayoutNodeType LT.CssClasses
 
-newtype LPS = LPS [LayoutInstruction]
+newtype LPS = LPS (S.Seq LayoutInstruction)
 
-type LayoutP m a = StatefulMW LPS m a
+type LayoutP = StatefulMW LPS
+
+newtype LayoutNode = LayoutNode LayoutNodeType LT.CssClasses 
+
+--only called if lnt /= currentNodeType
+newNodeType::LayoutInstruction -> (Seq LayoutNode,(Maybe LayoutNodeType,CssClasses)) -> (Seq LayoutNode,(Maybe LayoutNodeType,CssClasses))
+newNodeType (LayoutInstruction lc lnt css) (lnodes,(mLnt,currentCss)) =
+  let newNodes = if currentNodeType == LNone then empty else singleton $ LayoutNode currentNodeType currentCss 
+  in if lc /= ClosesNode then (lnodes >< newNodes,(Just lnt,css)) else (lnodes >< newNodes |> LayoutNode lnt css,(Nothing,emptyCss))
+
+sameNodeType::LayoutInstruction -> (Seq LayoutNode,(LayoutNodeType,CssClasses)) -> (Seq LayoutNode,(LayoutNodeType,CssClasses))
+sameNodeType (LayoutInstruction lc lnt css) (lnodes,(currentNodeType,currentCss)) =
+  case lc of
+    ClosesNode -> (lnodes |> LayoutNode lnt (css <> currentCss), (LNone,emptyCss))
+    OpensNode -> (lNodes |> LayoutNode currentNodeType currentCss,(lnt,css))
+    InNode -> (lNodes,(lnt,currentCss <> css))
+
+    
+f::LayoutInstruction -> (Seq LayoutNode,(LayoutNodeType,CssClasses)) -> (Seq LayoutNode,(LayoutNodeType,CssClasses))
+f (LayoutInstruction lc lnt css) (lnodes,(currentNodeType,currentCss))
+  | lnt /= currentNodeType && LT.nullCss currentCss = (lnodes,(lnt,emptyCss))
+  |   
+  if lnt /= currentNodeType
+  then if LT.nullCss currentCss then 
+    if lc == closes(lnodes |> LayoutNode currentNodeType currentCss,(lnt,css))
+
+optimizeLayoutInstructions::Seq LayoutInstruction -> Seq LayoutNode
+optimizeLayoutInstructions insts = flip evalState (empty,LT.emptyCss) $ do
+  
+
+doLayoutP::LayoutP m a -> m a
+doLayoutP lma = do
+  (a,linsts) <- runStateT lma empty
+
+    
+  return a
+  
 
 
 
