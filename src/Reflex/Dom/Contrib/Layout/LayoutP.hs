@@ -20,6 +20,8 @@ import Control.Monad.Trans (MonadIO,MonadTrans,lift)
 import Control.Monad.Ref (MonadRef,Ref)
 import Control.Monad.Morph
 import Data.Sequence (Seq,singleton,(|>),(<|),(><),empty)
+import Data.Monoid ((<>))
+import Data.Maybe (fromJust)
 
 import qualified Reflex.Dom.Contrib.Layout.Types as LT
 
@@ -118,40 +120,50 @@ instance (MonadTrans l, MFunctor l, Monad (l m), RD.MonadWidget t m,
     return $ layoutInside . runWidget
 
 -}
-data LayoutConstraint = OpensNode | InNode | ClosesNode
-data LayoutNodeType = LDiv 
-data LayoutInstruction = LayoutInstruction LayoutConstraint LayoutNodeType LT.CssClasses
+data LNodeConstraint = OpensLNode | InLNode | ClosesLNode deriving (Show)
+data LNodeType = LDiv deriving (Show)
+data LNode = LNode LNodeType LT.CssClasses deriving (Show)
+data OpenLNode = OpenLNode { olnType::LNodeType, olnCss::LT.CssClasses }
+closeLNode::OpenLNode -> LNode
+closeLNode (OpenLNode nt css) = LNode nt css
 
-newtype LPS = LPS (S.Seq LayoutInstruction)
+openNAddCss::LT.CssClasses -> OpenLNode -> OpenLNode
+openNAddCss css (OpenLNode nt css') = OpenLNode nt (css <> css')
 
-type LayoutP = StatefulMW LPS
+data LayoutInstruction = LayoutInstruction LNodeConstraint OpenLNode deriving (Show)
+data LS = LS (Seq LNode) (Maybe OpenLNode)
 
-newtype LayoutNode = LayoutNode LayoutNodeType LT.CssClasses 
+type LayoutP = StatefulMW (Seq LNode)
 
---only called if lnt /= currentNodeType
-newNodeType::LayoutInstruction -> (Seq LayoutNode,(Maybe LayoutNodeType,CssClasses)) -> (Seq LayoutNode,(Maybe LayoutNodeType,CssClasses))
-newNodeType (LayoutInstruction lc lnt css) (lnodes,(mLnt,currentCss)) =
-  let newNodes = if currentNodeType == LNone then empty else singleton $ LayoutNode currentNodeType currentCss 
-  in if lc /= ClosesNode then (lnodes >< newNodes,(Just lnt,css)) else (lnodes >< newNodes |> LayoutNode lnt css,(Nothing,emptyCss))
+closeCurrentNode::LS -> LS
+closeCurrentNode (LS nodes mONode) =
+  let nodes' = maybe nodes ((nodes |>) . closeLNode) mONode
+  in LS nodes' Nothing
 
-sameNodeType::LayoutInstruction -> (Seq LayoutNode,(LayoutNodeType,CssClasses)) -> (Seq LayoutNode,(LayoutNodeType,CssClasses))
-sameNodeType (LayoutInstruction lc lnt css) (lnodes,(currentNodeType,currentCss)) =
+newNodeType::LayoutInstruction -> LS -> LS
+newNodeType (LayoutInstruction lc oln) ls =
+  let (LS nodes' _) = closeCurrentNode ls
+  in case lc of
+    ClosesLNode -> LS (nodes' |> closeNode oln) Nothing
+    _           -> LS nodes' (Just oln)
+
+sameNodeType::LConstraint->LT.CssClasses->Seq LNode->OpenLNode->LS
+sameNodeType lc css nodes oln =
   case lc of
-    ClosesNode -> (lnodes |> LayoutNode lnt (css <> currentCss), (LNone,emptyCss))
-    OpensNode -> (lNodes |> LayoutNode currentNodeType currentCss,(lnt,css))
-    InNode -> (lNodes,(lnt,currentCss <> css))
+    OpensLNode  -> LS (nodes |> closeLNode oln) (Just $ OpenLNode (olnType oln) css)
+    InLNode     -> LS nodes (Just $ openNAddCss css oln)
+    ClosesLNode -> LS (nodes |> closeLNode (openNAddCss css oln)) Nothing
 
+
+doOneInstruction::LayoutInstruction -> LS -> LS
+doOneInstruction li@(LayoutInstruction lc oln) ls@(LS nodes mONode) =
+  let isNew = maybe True (\on -> olnType on == olnType oln) mONode
+  in if isNew
+     then newNodeType li ls
+     else sameNodeType lc (olnCss oln) nodes (fromJust mONode) -- safe because mONode == Nothing => isNew == True 
     
-f::LayoutInstruction -> (Seq LayoutNode,(LayoutNodeType,CssClasses)) -> (Seq LayoutNode,(LayoutNodeType,CssClasses))
-f (LayoutInstruction lc lnt css) (lnodes,(currentNodeType,currentCss))
-  | lnt /= currentNodeType && LT.nullCss currentCss = (lnodes,(lnt,emptyCss))
-  |   
-  if lnt /= currentNodeType
-  then if LT.nullCss currentCss then 
-    if lc == closes(lnodes |> LayoutNode currentNodeType currentCss,(lnt,css))
 
-optimizeLayoutInstructions::Seq LayoutInstruction -> Seq LayoutNode
-optimizeLayoutInstructions insts = flip evalState (empty,LT.emptyCss) $ do
+
   
 
 doLayoutP::LayoutP m a -> m a

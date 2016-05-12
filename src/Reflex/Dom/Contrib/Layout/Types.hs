@@ -22,7 +22,6 @@ import Data.Monoid ((<>))
 
 class IsCssClass a where
   toCssString::a->String
-  nullCss::a->Bool
   
 toStaticAttributes::IsCssClass a=>a->M.Map String String
 toStaticAttributes x = ("class" =: toCssString x)
@@ -30,12 +29,10 @@ toStaticAttributes x = ("class" =: toCssString x)
 data CssClass = CssClass String deriving (Show,Ord,Eq)
 instance IsCssClass CssClass where
   toCssString (CssClass c) = c
-  nullCss (CssClass c) = null c
 
 data CssClasses = CssClasses [CssClass] deriving (Show,Ord,Eq)
 instance IsCssClass CssClasses where
   toCssString (CssClasses cs) = unwords $ toCssString <$> cs
-  nullCss (CssClasses cs) = mconcat $ map nullCss cs
   
 instance Monoid CssClasses where
   mempty = CssClasses []
