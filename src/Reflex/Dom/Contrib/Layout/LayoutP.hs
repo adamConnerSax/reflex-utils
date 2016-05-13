@@ -13,15 +13,17 @@ import qualified Reflex.Class as RC
 import qualified Reflex.Host.Class as RHC
 import qualified Reflex.Dom as RD
 
+import Control.Monad (join)
 import Control.Monad.Fix (MonadFix(..))
 import Control.Monad.Exception (MonadException,MonadAsyncException)
 import Control.Monad.State (StateT,runStateT,evalStateT,get,put)
 import Control.Monad.Trans (MonadIO,MonadTrans,lift)
 import Control.Monad.Ref (MonadRef,Ref)
-import Control.Monad.Morph
+import Control.Monad.Morph (MFunctor,hoist)
 import Data.Sequence (Seq,singleton,(|>),(<|),(><),empty)
 import Data.Monoid ((<>))
 import Data.Maybe (fromJust)
+import Data.Foldable (foldl')
 
 import qualified Reflex.Dom.Contrib.Layout.Types as LT
 
@@ -121,9 +123,14 @@ instance (MonadTrans l, MFunctor l, Monad (l m), RD.MonadWidget t m,
 
 -}
 data LNodeConstraint = OpensLNode | InLNode | ClosesLNode deriving (Show)
-data LNodeType = LDiv deriving (Show)
+data LNodeType = LDiv deriving (Eq,Show)
 data LNode = LNode LNodeType LT.CssClasses deriving (Show)
-data OpenLNode = OpenLNode { olnType::LNodeType, olnCss::LT.CssClasses }
+
+lNodeToFunction::RD.MonadWidget t m=> LNode -> m a -> m a
+lNodeToFunction (LNode LDiv css) = RD.divClass (LT.toCssString css)
+
+
+data OpenLNode = OpenLNode { olnType::LNodeType, olnCss::LT.CssClasses } deriving (Show)
 closeLNode::OpenLNode -> LNode
 closeLNode (OpenLNode nt css) = LNode nt css
 
@@ -133,7 +140,6 @@ openNAddCss css (OpenLNode nt css') = OpenLNode nt (css <> css')
 data LayoutInstruction = LayoutInstruction LNodeConstraint OpenLNode deriving (Show)
 data LS = LS (Seq LNode) (Maybe OpenLNode)
 
-type LayoutP = StatefulMW (Seq LNode)
 
 closeCurrentNode::LS -> LS
 closeCurrentNode (LS nodes mONode) =
@@ -144,10 +150,10 @@ newNodeType::LayoutInstruction -> LS -> LS
 newNodeType (LayoutInstruction lc oln) ls =
   let (LS nodes' _) = closeCurrentNode ls
   in case lc of
-    ClosesLNode -> LS (nodes' |> closeNode oln) Nothing
+    ClosesLNode -> LS (nodes' |> closeLNode oln) Nothing
     _           -> LS nodes' (Just oln)
 
-sameNodeType::LConstraint->LT.CssClasses->Seq LNode->OpenLNode->LS
+sameNodeType::LNodeConstraint->LT.CssClasses->Seq LNode->OpenLNode->LS
 sameNodeType lc css nodes oln =
   case lc of
     OpensLNode  -> LS (nodes |> closeLNode oln) (Just $ OpenLNode (olnType oln) css)
@@ -161,17 +167,20 @@ doOneInstruction li@(LayoutInstruction lc oln) ls@(LS nodes mONode) =
   in if isNew
      then newNodeType li ls
      else sameNodeType lc (olnCss oln) nodes (fromJust mONode) -- safe because mONode == Nothing => isNew == True 
-    
-
-
   
+type LayoutP = StatefulMW (Seq LayoutInstruction)
 
-doLayoutP::LayoutP m a -> m a
+doLayoutP::RD.MonadWidget t m=>LayoutP m a -> m a
 doLayoutP lma = do
-  (a,linsts) <- runStateT lma empty
-
-    
-  return a
+  let optimize = foldl' (flip doOneInstruction) (LS empty Nothing)
+      getNodes (LS nodes _) = nodes
+      mPair = runStateT (unS lma) empty
+      mLNodes = (fmap lNodeToFunction . getNodes . optimize . snd) <$> mPair
+      ma = fst <$> mPair
+  mLF <- foldl' (.) id <$> mLNodes
+  mLF ma
+--  join $ (foldl' (.) id <$> mLNodes) <*> (return $ fst <$> mPair)
+  
   
 
 
