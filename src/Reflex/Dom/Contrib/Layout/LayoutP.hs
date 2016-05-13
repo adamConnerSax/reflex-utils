@@ -5,7 +5,16 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Reflex.Dom.Contrib.Layout.LayoutP where
+module Reflex.Dom.Contrib.Layout.LayoutP
+  (
+    LNodeConstraint(..)
+  , layoutDiv
+  , layoutDivSimple
+  , doOptimizedLayout
+  , doUnoptimizedLayout
+--  , MonadLayout(layoutInstruction)
+    
+  ) where
 
 
 import qualified Reflex as R
@@ -200,8 +209,18 @@ instance RD.MonadWidget t m=>MonadLayout IdentityT m where
   doLayout = runIdentityT
   beforeInsert = id
 
-  
+doUnoptimizedLayout::RD.MonadWidget t m=>IdentityT m a -> m a
+doUnoptimizedLayout = doLayout
 
+doOptimizedLayout::RD.MonadWidget t m=>LayoutP m a -> m a
+doOptimizedLayout = doLayout
 
+layoutDiv::(MonadLayout l m, RD.MonadWidget t m)=>LNodeConstraint->LT.CssClasses->l m a -> l m a
+layoutDiv lc css = layoutInstruction (LayoutInstruction lc (OpenLNode LDiv css))
 
+layoutDivSimple::(MonadLayout l m, RD.MonadWidget t m)=>LNodeConstraint->String->l m a -> l m a
+layoutDivSimple lc cls = layoutDiv lc (LT.CssClasses [LT.CssClass cls])
+
+--flexItem::(MonadLayout l m, RD.MonadWidget t m)=>l m a -> l m a
+--flexItem = layoutDivSimple InLNode "flex-item"
 
