@@ -13,7 +13,6 @@ module Reflex.Dom.Contrib.Layout.LayoutP
   , doOptimizedLayout
   , doUnoptimizedLayout
 --  , MonadLayout(layoutInstruction)
-    
   ) where
 
 
@@ -22,15 +21,15 @@ import qualified Reflex.Class as RC
 import qualified Reflex.Host.Class as RHC
 import qualified Reflex.Dom as RD
 
-import Control.Monad (join)
+
 import Control.Monad.Fix (MonadFix(..))
 import Control.Monad.Exception (MonadException,MonadAsyncException)
-import Control.Monad.State (StateT,runStateT,evalStateT,get,put,modify,MonadState(..))
+import Control.Monad.State (StateT,runStateT,modify,MonadState(..))
 import Control.Monad.Trans (MonadIO,MonadTrans,lift)
 import Control.Monad.Trans.Identity (IdentityT,runIdentityT)
 import Control.Monad.Ref (MonadRef,Ref)
 import Control.Monad.Morph (MFunctor,hoist)
-import Data.Sequence (Seq,singleton,(|>),(<|),(><),empty)
+import Data.Sequence (Seq,(|>),empty)
 import Data.Monoid ((<>))
 import Data.Maybe (fromJust)
 import Data.Foldable (foldl')
@@ -55,19 +54,7 @@ instance RD.HasDocument m => RD.HasDocument (StackedMW t m)
 instance RHC.MonadReflexCreateTrigger rt m => RHC.MonadReflexCreateTrigger rt (StackedMW t m) 
 instance (RD.HasPostGui rt h m, Ref (StackedMW t m) ~ Ref h) => RD.HasPostGui rt h (StackedMW t m)
 
-                          
-class MonadLayout l m where
-  layoutInstruction::LayoutInstruction -> l m a -> l m a
-  doLayout::l m a->m a
-  beforeInsert::l m a->l m a
-
-
---newtype StatefulMW s m a = SMW {  unSMW::StateT s m a }
-type StatefulMW s = StackedMW (StateT s) 
-
-instance Monad m => MonadState s (StackedMW (StateT s) m) where
-  get = StackedMW  get
-  put = StackedMW . put
+instance Monad m => MonadState s (StackedMW (StateT s) m)
 
 instance (RC.MonadSample t m, MonadTrans l, Monad (l m))   => RC.MonadSample t (l m) where
   sample = lift . RC.sample
@@ -75,15 +62,11 @@ instance (RC.MonadSample t m, MonadTrans l, Monad (l m))   => RC.MonadSample t (
 instance (RC.MonadHold t m, MonadTrans l, Monad (l m)) => RC.MonadHold t (l m) where
   hold a0 = lift . RC.hold a0 
 
+class MonadLayout l m where
+  layoutInstruction::LayoutInstruction -> l m a -> l m a
+  doLayout::l m a->m a
+  beforeInsert::l m a->l m a
 
-{-
-instance (RD.MonadWidget t m,RD.MonadIORestore m, MonadIO (RD.PushM t)) => RD.MonadIORestore (LayoutP t m) where
-  askRestore = LayoutP $ do
-    parentRestore <- lift RD.askRestore
-    curState <- get
-    return $ RD.Restore $ \(Layoutinstance RD.HasWebView m => RD.HasWebView (LayoutP t m) where
-  askWebView = LayoutP RD.askWebViewP sma) -> RD.restore parentRestore $ execStateT sma curState
--}
 
 {-
 liftAction::Monad m=>(d->(b,s))->(m (a,s) -> m d)->StatefulMW s m a->StatefulMW s m b
@@ -97,6 +80,7 @@ liftAction f action lpa = StackedMW $ do
 layoutInside::(MonadTrans l, MonadLayout l m, Monad m)=>(m a -> m b)->l m a->l m b
 layoutInside f ma = lift . f $ doLayout ma  
 
+type StatefulMW s = StackedMW (StateT s) 
 
 instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
           Ref (StatefulMW s m) ~ Ref IO,
@@ -204,12 +188,14 @@ instance RD.MonadWidget t m=>MonadLayout LayoutP m where
 --type MW = RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider))
 --newtype MWT a = MWT { unMW::RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider)) a }
 
-instance RD.MonadWidget t m=>MonadLayout IdentityT m where
+type IdentityMW = StackedMW IdentityT
+
+instance RD.MonadWidget t m=>MonadLayout IdentityMW m where
   layoutInstruction (LayoutInstruction _ oln) = hoist (lNodeToFunction $ closeLNode oln)
-  doLayout = runIdentityT
+  doLayout = runIdentityT . unS
   beforeInsert = id
 
-doUnoptimizedLayout::RD.MonadWidget t m=>IdentityT m a -> m a
+doUnoptimizedLayout::RD.MonadWidget t m=>IdentityMW m a -> m a
 doUnoptimizedLayout = doLayout
 
 doOptimizedLayout::RD.MonadWidget t m=>LayoutP m a -> m a
