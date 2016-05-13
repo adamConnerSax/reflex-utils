@@ -16,8 +16,9 @@ import qualified Reflex.Dom as RD
 import Control.Monad (join)
 import Control.Monad.Fix (MonadFix(..))
 import Control.Monad.Exception (MonadException,MonadAsyncException)
-import Control.Monad.State (StateT,runStateT,evalStateT,get,put)
+import Control.Monad.State (StateT,runStateT,evalStateT,get,put,modify,MonadState(..))
 import Control.Monad.Trans (MonadIO,MonadTrans,lift)
+import Control.Monad.Trans.Identity (IdentityT,runIdentityT)
 import Control.Monad.Ref (MonadRef,Ref)
 import Control.Monad.Morph (MFunctor,hoist)
 import Data.Sequence (Seq,singleton,(|>),(<|),(><),empty)
@@ -46,14 +47,18 @@ instance RHC.MonadReflexCreateTrigger rt m => RHC.MonadReflexCreateTrigger rt (S
 instance (RD.HasPostGui rt h m, Ref (StackedMW t m) ~ Ref h) => RD.HasPostGui rt h (StackedMW t m)
 
                           
-class MonadLayout t n where
-  doLayout::t n a->n a
-  beforeInsert::t n a->t n a
+class MonadLayout l m where
+  layoutInstruction::LayoutInstruction -> l m a -> l m a
+  doLayout::l m a->m a
+  beforeInsert::l m a->l m a
 
 
 --newtype StatefulMW s m a = SMW {  unSMW::StateT s m a }
 type StatefulMW s = StackedMW (StateT s) 
 
+instance Monad m => MonadState s (StackedMW (StateT s) m) where
+  get = StackedMW  get
+  put = StackedMW . put
 
 instance (RC.MonadSample t m, MonadTrans l, Monad (l m))   => RC.MonadSample t (l m) where
   sample = lift . RC.sample
@@ -177,11 +182,26 @@ doLayoutP lma = do
       mPair = runStateT (unS lma) empty
       mLNodes = (fmap lNodeToFunction . getNodes . optimize . snd) <$> mPair
       ma = fst <$> mPair
-  mLF <- foldl' (.) id <$> mLNodes
-  mLF ma
+  layoutF <- foldl' (.) id <$> mLNodes
+  layoutF ma
 --  join $ (foldl' (.) id <$> mLNodes) <*> (return $ fst <$> mPair)
   
+instance RD.MonadWidget t m=>MonadLayout LayoutP m where
+  layoutInstruction li w = modify (|> li) >> w
+  doLayout = doLayoutP
+  beforeInsert = lift . doLayoutP
+
+-- So we can use Layout functions without doing the optimization
+--type MW = RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider))
+--newtype MWT a = MWT { unMW::RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider)) a }
+
+instance RD.MonadWidget t m=>MonadLayout IdentityT m where
+  layoutInstruction (LayoutInstruction _ oln) = hoist (lNodeToFunction $ closeLNode oln)
+  doLayout = runIdentityT
+  beforeInsert = id
+
   
+
 
 
 
