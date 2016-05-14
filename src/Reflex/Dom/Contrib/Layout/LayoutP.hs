@@ -12,7 +12,10 @@ module Reflex.Dom.Contrib.Layout.LayoutP
   , layoutDivSimple
   , doOptimizedLayout
   , doUnoptimizedLayout
---  , MonadLayout(layoutInstruction)
+  , StackedMW
+--  , IdentityMW
+--  , LayoutP
+  , MonadLayout
   ) where
 
 
@@ -39,34 +42,45 @@ import qualified Reflex.Dom.Contrib.Layout.Types as LT
 newtype StackedMW (t :: (* -> *) -> * -> *) m a = StackedMW { unS::t m a }
 
 -- GeneralizedNewtypeDeriving, FTW!
-instance Functor m=>Functor (StackedMW t m)
-instance Applicative m=>Applicative (StackedMW t m)
-instance Monad m=>Monad (StackedMW t m)
+instance Functor (t m)=>Functor (StackedMW t m)
+instance Applicative (t m)=>Applicative (StackedMW t m)
+instance Monad (t m)=>Monad (StackedMW t m)
 instance MFunctor (StackedMW t)
-instance MonadFix m=>MonadFix (StackedMW t m)
-instance MonadException m => MonadException (StackedMW t m)
-instance MonadIO m => MonadIO (StackedMW t m)
-instance (MonadException m, MonadIO (StackedMW t m)) => MonadAsyncException (StackedMW t m)
+instance MonadFix (t m)=>MonadFix (StackedMW t m)
+instance MonadException (t m) => MonadException (StackedMW t m)
+instance MonadIO (t m) => MonadIO (StackedMW t m)
+instance (MonadException (t m), MonadIO (StackedMW t m)) => MonadAsyncException (StackedMW t m)
 instance MonadTrans (StackedMW t) 
-instance MonadRef m=>MonadRef (StackedMW t m)
-instance RD.HasWebView m => RD.HasWebView (StackedMW t m) 
-instance RD.HasDocument m => RD.HasDocument (StackedMW t m) 
-instance RHC.MonadReflexCreateTrigger rt m => RHC.MonadReflexCreateTrigger rt (StackedMW t m) 
-instance (RD.HasPostGui rt h m, Ref (StackedMW t m) ~ Ref h) => RD.HasPostGui rt h (StackedMW t m)
+instance MonadRef (t m)=>MonadRef (StackedMW t m)
+
+instance (MonadTrans t, Monad (t m), RD.HasWebView m) => RD.HasWebView (StackedMW t m) where
+  askWebView = StackedMW $ lift RD.askWebView
+  
+instance (MonadTrans t, Monad (t m), RD.HasDocument m) => RD.HasDocument (StackedMW t m) where
+  askDocument = StackedMW $ lift RD.askDocument
+  
+instance (MonadTrans t, Monad (t m),
+          RHC.MonadReflexCreateTrigger rt m) => RHC.MonadReflexCreateTrigger rt (StackedMW t m) where
+  newEventWithTrigger  = StackedMW . lift . RHC.newEventWithTrigger  
+  newFanEventWithTrigger f = StackedMW . lift  $  RHC.newFanEventWithTrigger f
+  
+instance (MonadTrans t, RD.HasPostGui rt h m, MonadRef (t m),
+          Ref (StackedMW t m) ~ Ref h) => RD.HasPostGui rt h (StackedMW t m) where
+  askPostGui = StackedMW $ lift RD.askPostGui
+  askRunWithActions = StackedMW $ lift RD.askRunWithActions
+
+instance (RC.MonadSample t m, MonadTrans l, Monad (l m))   => RC.MonadSample t (StackedMW l m) where
+  sample = StackedMW . lift . R.sample
+
+instance (RC.MonadHold t m, MonadTrans l, Monad (l m)) => RC.MonadHold t (StackedMW l m) where
+  hold x ev = StackedMW . lift $ R.hold x ev
 
 instance Monad m => MonadState s (StackedMW (StateT s) m)
-
-instance (RC.MonadSample t m, MonadTrans l, Monad (l m))   => RC.MonadSample t (l m) where
-  sample = lift . RC.sample
-
-instance (RC.MonadHold t m, MonadTrans l, Monad (l m)) => RC.MonadHold t (l m) where
-  hold a0 = lift . RC.hold a0 
 
 class MonadLayout l m where
   layoutInstruction::LayoutInstruction -> l m a -> l m a
   doLayout::l m a->m a
   beforeInsert::l m a->l m a
-
 
 {-
 liftAction::Monad m=>(d->(b,s))->(m (a,s) -> m d)->StatefulMW s m a->StatefulMW s m b
@@ -83,10 +97,11 @@ layoutInside f ma = lift . f $ doLayout ma
 type StatefulMW s = StackedMW (StateT s) 
 
 instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
-          Ref (StatefulMW s m) ~ Ref IO,
-          MonadLayout (StatefulMW s) m)=>RD.MonadWidget t (StatefulMW s m) where
-  type WidgetHost (StatefulMW s m) = RD.WidgetHost m
-  type GuiAction  (StatefulMW s m) = RD.GuiAction m
+          MonadFix (l m), MonadIO (l m),MonadRef (l m), MonadException (l m),
+          MonadTrans l, Monad (l m), Ref (StackedMW l m) ~ Ref IO,
+          MonadLayout (StackedMW l) m)=>RD.MonadWidget t (StackedMW l m) where
+  type WidgetHost (StackedMW l m) = RD.WidgetHost m
+  type GuiAction  (StackedMW l m) = RD.GuiAction m
   askParent = lift RD.askParent
   subWidget n = beforeInsert . hoist (RD.subWidget n) 
   subWidgetWithVoidActions n = beforeInsert . layoutInside (RD.subWidgetWithVoidActions n) 
@@ -195,7 +210,7 @@ instance RD.MonadWidget t m=>MonadLayout IdentityMW m where
   doLayout = runIdentityT . unS
   beforeInsert = id
 
-doUnoptimizedLayout::RD.MonadWidget t m=>IdentityMW m a -> m a
+doUnoptimizedLayout::RD.MonadWidget t m =>IdentityMW m a -> m a
 doUnoptimizedLayout = doLayout
 
 doOptimizedLayout::RD.MonadWidget t m=>LayoutP m a -> m a

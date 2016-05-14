@@ -32,6 +32,7 @@ import qualified Data.Map as M
 
 import Reflex.Dom.Contrib.Layout.Core
 import Reflex.Dom.Contrib.Layout.Types
+import Reflex.Dom.Contrib.Layout.LayoutP
 --import Reflex.Dom.Contrib.Layout.GridLayout
 
 import Clay
@@ -158,14 +159,14 @@ flexLayoutItemSimple::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexLayoutItemSimple = RD.divClass "gl-flex-item-1"
 -}
 
-flexLayoutRowSimple::AddStyle a=>a->a
-flexLayoutRowSimple = addStyle (CssClasses [CssClass "gl-flex-row"])
+flexLayoutRowSimple::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
+flexLayoutRowSimple = layoutDivSimple ClosesLNode "gl-flex-row"
 
-flexLayoutColSimple::AddStyle a=>a->a
-flexLayoutColSimple = addStyle (CssClasses [CssClass "gl-flex-col"])
+flexLayoutColSimple::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
+flexLayoutColSimple = layoutDivSimple ClosesLNode "gl-flex-col"
 
-flexLayoutItemSimple::AddStyle a=>a->a
-flexLayoutItemSimple = addStyle (CssClasses [CssClass "gl-flex-item-1"])
+flexLayoutItemSimple::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
+flexLayoutItemSimple = layoutDivSimple InLNode "gl-flex-item-1"
 
 
 flexLayoutRowF::R.Reflex t=>LayoutF t

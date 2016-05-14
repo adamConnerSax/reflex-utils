@@ -26,6 +26,8 @@ module Reflex.Dom.Contrib.SimpleForm.AllDefault
 import Control.Monad.IO.Class (MonadIO)
 import Control.Lens ((^.))
 import Control.Monad.Reader (ReaderT, runReaderT, ask, asks, lift,local)
+import Control.Monad.Trans (MonadTrans)
+import Control.Monad.Ref (MonadRef,Ref)
 import Data.Maybe (fromJust)
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -40,6 +42,7 @@ import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..))
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexLayoutColSimple,flexLayoutRowSimple,flexLayoutItemSimple,
                                              flexFillR,flexFillL,flexHCenter,
                                              flexFillU,flexFillD,flexVCenter)
+import Reflex.Dom.Contrib.Layout.LayoutP (MonadLayout,StackedMW)
 
 import Reflex.Dom.Contrib.SimpleForm.Builder
 import Reflex.Dom.Contrib.SimpleForm.Instances(sfWidget)
@@ -86,7 +89,9 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
 
-instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg t m where
+instance (MonadIO (PushM t),RD.MonadWidget t m,
+          MonadTrans l, Monad (l m),MonadLayout (StackedMW l) m,
+          Ref (StackedMW l m) ~ Ref IO)=>SimpleFormConfiguration DefSFCfg t (StackedMW l m) where
   failureF = defFailureF
   sumF = defSumF
   dynamicDiv  attrsDyn = liftLF $ RD.elDynAttr "div" attrsDyn

@@ -11,6 +11,8 @@ module Main where
 import Prelude hiding (rem,div,span)
 import Control.Monad (foldM)
 import Control.Monad.IO.Class as IOC (MonadIO)
+import Control.Monad.Trans (MonadTrans)
+import Control.Monad.Ref (Ref)
 import Data.Monoid ((<>))
 import Data.FileEmbed
 import Text.Show.Pretty (ppShow)
@@ -28,6 +30,7 @@ import Reflex.Dom
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 
 import Reflex.Dom.Contrib.Layout.All (CssClasses(..),CssClass(..),emptyCss,flexCssBS,flexFillR,cssToBS)
+import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout,StackedMW,MonadLayout)
 import Reflex.Dom.Contrib.SimpleForm
 --import DataBuilder
 
@@ -115,7 +118,8 @@ flowTestWidget n = do
   allTrueDyn <- foldM (\x bDyn -> combineDyn (&&) x bDyn) (constDyn True) boolDyns
   forDyn allTrueDyn $ \b -> if b then "All Checked!" else "Some Unchecked."
 
-test::(SimpleFormC e t m,MonadIO (PushM t))=>e->m ()
+test::(MonadTrans l, Monad (l m), MonadLayout (StackedMW l) m, 
+       SimpleFormC e t (StackedMW l m),MonadIO (PushM t))=>e->StackedMW l m ()
 test cfg = do
   cDynM<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
   el "p" $ text "C from form:"
@@ -142,9 +146,10 @@ demoCfg = DefSFCfg {
   , cfgObserver = False
   }
 
-
 main  :: IO ()
-main  = mainWidgetWithCss (flexCssBS <> cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss) $ test demoCfg
+main  = mainWidgetWithCss (flexCssBS
+                           <> cssToBS simpleFormDefaultCss
+                           <> cssToBS simpleObserverDefaultCss) . doUnoptimizedLayout $  test demoCfg
 
 
 

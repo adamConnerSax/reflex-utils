@@ -75,6 +75,7 @@ executable reflex-utils-simpleForm-exe
                      , reflex-utils
                      , transformers
                      , mtl
+                     , ref-tf
                      , file-embed
                      , clay
                      , text
