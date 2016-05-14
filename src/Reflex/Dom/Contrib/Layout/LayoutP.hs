@@ -200,6 +200,7 @@ doOneInstruction' (LayoutInstruction lc oln) (LS nodes _) = LS (nodes |> closeLN
           
 type LayoutP = StatefulMW (Seq LayoutInstruction)
 
+{-
 doLayoutP::forall t m a.(RD.MonadWidget t m)=>LayoutP m a -> m a
 doLayoutP lma = do
   liftIO $ putStrLn "doLayoutP"
@@ -212,6 +213,20 @@ doLayoutP lma = do
       mLayoutF:: m (m a -> m a) 
       mLayoutF = foldl' (.) id <$> mLFs -- m (m a -> m a)
   join $ fmap ($ ma) mLayoutF -- m a
+-}
+
+doLayoutP::forall t m a.(RD.MonadWidget t m)=>LayoutP m a -> m a
+doLayoutP lma = 
+  liftIO (putStrLn "doLayoutP") >> runStateT (unS lma) empty >>= f where
+  f (a,instrs) = do
+    let optimize = foldl' (flip doOneInstruction') (LS empty Nothing)
+        getNodes (LS nodes _) = nodes
+        lfs:: Seq (m a -> m a)
+        lfs = fmap lNodeToFunction . getNodes $ optimize instrs
+        layoutF:: (m a -> m a) 
+        layoutF = foldl' (.) id lfs -- (m a -> m a)
+    layoutF (return a)
+--  join $ fmap ($ ma) mLayoutF -- m a
 
 instance RD.MonadWidget t m=>MonadLayout LayoutP m where
   layoutInstruction li w = modify (|> li) >> w
