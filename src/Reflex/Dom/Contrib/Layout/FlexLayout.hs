@@ -148,7 +148,7 @@ flexFillU w = do
     RD.divClass "fill" RD.blank
     wrapWidget w
 
-{-
+
 flexLayoutRowSimple::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexLayoutRowSimple = RD.divClass "gl-flex-row"
 
@@ -157,8 +157,8 @@ flexLayoutColSimple = RD.divClass "gl-flex-col"
 
 flexLayoutItemSimple::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexLayoutItemSimple = RD.divClass "gl-flex-item-1"
--}
 
+{-
 flexLayoutRowSimple::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
 flexLayoutRowSimple = layoutDivSimple ClosesLNode "gl-flex-row"
 
@@ -167,7 +167,7 @@ flexLayoutColSimple = layoutDivSimple ClosesLNode "gl-flex-col"
 
 flexLayoutItemSimple::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
 flexLayoutItemSimple = layoutDivSimple InLNode "gl-flex-item-1"
-
+-}
 
 flexLayoutRowF::R.Reflex t=>LayoutF t
 flexLayoutRowF _ lTree =

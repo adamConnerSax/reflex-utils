@@ -4,6 +4,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Reflex.Dom.Contrib.Layout.LayoutP
   (
@@ -25,13 +26,15 @@ import qualified Reflex.Host.Class as RHC
 import qualified Reflex.Dom as RD
 
 
+import Control.Monad (join)
 import Control.Monad.Fix (MonadFix(..))
 import Control.Monad.Exception (MonadException,MonadAsyncException)
-import Control.Monad.State (StateT,runStateT,modify,MonadState(..))
+import Control.Monad.State (StateT,runStateT,execStateT,evalStateT,modify,MonadState(..),put)
 import Control.Monad.Trans (MonadIO,MonadTrans,lift)
 import Control.Monad.Trans.Identity (IdentityT,runIdentityT)
 import Control.Monad.Ref (MonadRef(..),Ref)
 import Control.Monad.Morph (MFunctor,hoist)
+import Control.Monad.IO.Class (liftIO)
 import Data.Sequence (Seq,(|>),empty)
 import Data.Monoid ((<>))
 import Data.Maybe (fromJust)
@@ -114,8 +117,8 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
   type WidgetHost (StackedMW l m) = RD.WidgetHost m
   type GuiAction  (StackedMW l m) = RD.GuiAction m
   askParent = lift RD.askParent
-  subWidget n = beforeInsert . hoist (RD.subWidget n) 
-  subWidgetWithVoidActions n = beforeInsert . layoutInside (RD.subWidgetWithVoidActions n) 
+  subWidget n = layoutInside (RD.subWidget n)
+  subWidgetWithVoidActions n = layoutInside (RD.subWidgetWithVoidActions n) 
   --liftAction  (\((a,s),ev)->((a,ev),s)) (RD.subWidgetWithVoidActions n)
   liftWidgetHost = lift . RD.liftWidgetHost
   schedulePostBuild = lift . RD.schedulePostBuild
@@ -191,24 +194,29 @@ doOneInstruction li@(LayoutInstruction lc oln) ls@(LS nodes mONode) =
   in if isNew
      then newNodeType li ls
      else sameNodeType lc (olnCss oln) nodes (fromJust mONode) -- safe because mONode == Nothing => isNew == True 
-  
+
+doOneInstruction'::LayoutInstruction -> LS -> LS
+doOneInstruction' (LayoutInstruction lc oln) (LS nodes _) = LS (nodes |> closeLNode oln) Nothing
+          
 type LayoutP = StatefulMW (Seq LayoutInstruction)
 
-doLayoutP::RD.MonadWidget t m=>LayoutP m a -> m a
+doLayoutP::forall t m a.(RD.MonadWidget t m)=>LayoutP m a -> m a
 doLayoutP lma = do
-  let optimize = foldl' (flip doOneInstruction) (LS empty Nothing)
-      getNodes (LS nodes _) = nodes
-      mPair = runStateT (unS lma) empty
-      mLNodes = (fmap lNodeToFunction . getNodes . optimize . snd) <$> mPair
+  liftIO $ putStrLn "doLayoutP"
+  let mPair = runStateT (unS lma) empty
       ma = fst <$> mPair
-  layoutF <- foldl' (.) id <$> mLNodes
-  layoutF ma
---  join $ (foldl' (.) id <$> mLNodes) <*> (return $ fst <$> mPair)
-  
+      optimize = foldl' (flip doOneInstruction') (LS empty Nothing)
+      getNodes (LS nodes _) = nodes
+      mLFs:: m (Seq (m a -> m a))
+      mLFs = (fmap lNodeToFunction . getNodes . optimize . snd) <$> mPair
+      mLayoutF:: m (m a -> m a) 
+      mLayoutF = foldl' (.) id <$> mLFs -- m (m a -> m a)
+  join $ fmap ($ ma) mLayoutF -- m a
+
 instance RD.MonadWidget t m=>MonadLayout LayoutP m where
   layoutInstruction li w = modify (|> li) >> w
   doLayout = doLayoutP
-  beforeInsert = lift . doLayoutP
+  beforeInsert w = lift $ doLayoutP w
 
 -- So we can use Layout functions without doing the optimization
 --type MW = RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider))
@@ -225,7 +233,7 @@ doUnoptimizedLayout::RD.MonadWidget t m =>IdentityMW m a -> m a
 doUnoptimizedLayout = doLayout
 
 doOptimizedLayout::RD.MonadWidget t m=>LayoutP m a -> m a
-doOptimizedLayout = doLayout
+doOptimizedLayout = doLayout --flip evalStateT empty . unS
 
 layoutDiv::(MonadLayout l m, RD.MonadWidget t m)=>LNodeConstraint->LT.CssClasses->l m a -> l m a
 layoutDiv lc css = layoutInstruction (LayoutInstruction lc (OpenLNode LDiv css))
