@@ -28,6 +28,10 @@ import Control.Lens ((^.))
 import Control.Monad.Reader (ReaderT, runReaderT, ask, asks, lift,local)
 import Control.Monad.Trans (MonadTrans)
 import Control.Monad.Ref (MonadRef,Ref)
+import Control.Monad.Fix (MonadFix)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Morph (MFunctor)
+import Control.Monad.Exception (MonadException,MonadAsyncException)
 import Data.Maybe (fromJust)
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -90,7 +94,9 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
 
 
 instance (MonadIO (PushM t),RD.MonadWidget t m,
-          MonadTrans l, Monad (l m),MonadLayout (StackedMW l) m,
+          MonadAsyncException (l m),
+          MonadTrans l, MFunctor l, Monad (l m),MonadLayout (StackedMW l) m,
+          MonadFix (l m), MonadIO (l m), MonadRef (l m),MonadException (l m),
           Ref (StackedMW l m) ~ Ref IO)=>SimpleFormConfiguration DefSFCfg t (StackedMW l m) where
   failureF = defFailureF
   sumF = defSumF

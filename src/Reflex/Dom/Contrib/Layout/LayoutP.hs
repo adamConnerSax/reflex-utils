@@ -30,7 +30,7 @@ import Control.Monad.Exception (MonadException,MonadAsyncException)
 import Control.Monad.State (StateT,runStateT,modify,MonadState(..))
 import Control.Monad.Trans (MonadIO,MonadTrans,lift)
 import Control.Monad.Trans.Identity (IdentityT,runIdentityT)
-import Control.Monad.Ref (MonadRef,Ref)
+import Control.Monad.Ref (MonadRef(..),Ref)
 import Control.Monad.Morph (MFunctor,hoist)
 import Data.Sequence (Seq,(|>),empty)
 import Data.Monoid ((<>))
@@ -40,18 +40,29 @@ import Data.Foldable (foldl')
 import qualified Reflex.Dom.Contrib.Layout.Types as LT
 
 newtype StackedMW (t :: (* -> *) -> * -> *) m a = StackedMW { unS::t m a }
+  deriving (Functor,Applicative,Monad,
+            MonadFix,MonadIO,
+            MonadException,MonadAsyncException,
+            MonadTrans,MFunctor)
 
--- GeneralizedNewtypeDeriving, FTW!
-instance Functor (t m)=>Functor (StackedMW t m)
-instance Applicative (t m)=>Applicative (StackedMW t m)
-instance Monad (t m)=>Monad (StackedMW t m)
-instance MFunctor (StackedMW t)
-instance MonadFix (t m)=>MonadFix (StackedMW t m)
-instance MonadException (t m) => MonadException (StackedMW t m)
-instance MonadIO (t m) => MonadIO (StackedMW t m)
-instance (MonadException (t m), MonadIO (StackedMW t m)) => MonadAsyncException (StackedMW t m)
-instance MonadTrans (StackedMW t) 
-instance MonadRef (t m)=>MonadRef (StackedMW t m)
+--instance MonadTrans t=>MFunctor (StackedMW t)
+
+{-
+instance (MonadTrans t, Functor m)=>Functor (StackedMW t m)
+instance (MonadTrans t, Applicative m)=>Applicative (StackedMW t m)
+instance (MonadTrans t, Monad m)=>Monad (StackedMW t m)
+
+instance (MonadTrans t, MonadFix m)=>MonadFix (StackedMW t m)
+instance (MonadTrans t, MonadException m) => MonadException (StackedMW t m)
+instance (MonadTrans t, MonadIO m) => MonadIO (StackedMW t m)
+
+instance (MonadException (StackedMW t m), MonadIO (StackedMW t m)) => MonadAsyncException (StackedMW t m)
+-}
+instance (MonadTrans t, Monad (t m), MonadRef m)=>MonadRef (StackedMW t m) where
+  type Ref (StackedMW t m) = Ref m
+  newRef = StackedMW . lift . newRef
+  readRef = lift . readRef
+  
 
 instance (MonadTrans t, Monad (t m), RD.HasWebView m) => RD.HasWebView (StackedMW t m) where
   askWebView = StackedMW $ lift RD.askWebView
@@ -97,8 +108,8 @@ layoutInside f ma = lift . f $ doLayout ma
 type StatefulMW s = StackedMW (StateT s) 
 
 instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
-          MonadFix (l m), MonadIO (l m),MonadRef (l m), MonadException (l m),
-          MonadTrans l, Monad (l m), Ref (StackedMW l m) ~ Ref IO,
+          MonadFix (l m), MonadAsyncException (l m), MonadRef (l m),
+          MonadTrans l, MFunctor l, Monad (l m), Ref (StackedMW l m) ~ Ref IO,
           MonadLayout (StackedMW l) m)=>RD.MonadWidget t (StackedMW l m) where
   type WidgetHost (StackedMW l m) = RD.WidgetHost m
   type GuiAction  (StackedMW l m) = RD.GuiAction m
