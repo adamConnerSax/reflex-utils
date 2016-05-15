@@ -149,7 +149,7 @@ demoCfg = DefSFCfg {
 main  :: IO ()
 main  = mainWidgetWithCss (flexCssBS
                            <> cssToBS simpleFormDefaultCss
-                           <> cssToBS simpleObserverDefaultCss) . doOptimizedLayout $  test demoCfg
+                           <> cssToBS simpleObserverDefaultCss) . doUnoptimizedLayout $  test demoCfg
 
 
 

@@ -25,12 +25,12 @@ import qualified Reflex as R
 import qualified Reflex.Class as RC
 import qualified Reflex.Host.Class as RHC
 import qualified Reflex.Dom as RD
-
+import GHCJS.DOM.Node (Node)
 
 import Control.Monad (join)
 import Control.Monad.Fix (MonadFix(..))
 import Control.Monad.Exception (MonadException,MonadAsyncException)
-import Control.Monad.State (StateT,runStateT,execStateT,evalStateT,modify,MonadState(..),put)
+import Control.Monad.State (StateT,runStateT,execStateT,evalStateT,modify,mapStateT,MonadState(..),put)
 import Control.Monad.Trans (MonadIO,MonadTrans,lift)
 import Control.Monad.Trans.Identity (IdentityT,runIdentityT)
 import Control.Monad.Ref (MonadRef(..),Ref)
@@ -95,7 +95,9 @@ instance Monad m => MonadState s (StackedMW (StateT s) m)
 class MonadLayout l m where
   layoutInstruction::LayoutInstruction -> l m a -> l m a
   doLayout::l m a->m a
-  beforeInsert::l m a->l m a
+  liftF::(m a -> m b) -> l m a -> l m b
+  lower::l m a->m a --loses information!
+  insertLayout::Node -> l m Node
 
 {-
 liftAction::Monad m=>(d->(b,s))->(m (a,s) -> m d)->StatefulMW s m a->StatefulMW s m b
@@ -104,10 +106,10 @@ liftAction f action lpa = StackedMW $ do
   (x,s') <- f <$> (lift . action $ runStateT (unSMW lpa) s)
   put s' 
   return x
--}
 
 layoutInside::(MonadTrans l, MonadLayout l m, Monad m)=>(m a -> m b)->l m a->l m b
 layoutInside f lma = lift . f $ doLayout lma  
+-}
 
 type StatefulMW s = StackedMW (StateT s) 
 
@@ -117,10 +119,9 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
           MonadLayout (StackedMW l) m)=>RD.MonadWidget t (StackedMW l m) where
   type WidgetHost (StackedMW l m) = RD.WidgetHost m
   type GuiAction  (StackedMW l m) = RD.GuiAction m
-  askParent = lift RD.askParent
-  subWidget n = layoutInside (RD.subWidget n)
-  subWidgetWithVoidActions n = layoutInside (RD.subWidgetWithVoidActions n) 
-  --liftAction  (\((a,s),ev)->((a,ev),s)) (RD.subWidgetWithVoidActions n)
+  askParent = lift RD.askParent >>= insertLayout
+  subWidget n = liftF (RD.subWidget n)
+  subWidgetWithVoidActions n = liftF (RD.subWidgetWithVoidActions n) 
   liftWidgetHost = lift . RD.liftWidgetHost
   schedulePostBuild = lift . RD.schedulePostBuild
   addVoidAction = lift . RD.addVoidAction
@@ -128,7 +129,7 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
 -- What happens if w changes the state??
   getRunWidget = do
     runWidget <- lift RD.getRunWidget
-    return  (\n w -> runWidget n (doLayout w))
+    return  (\n w -> runWidget n (lower w))
 
 
 {-
@@ -229,11 +230,19 @@ doLayoutP lma =
     layoutF (return a)
 --  join $ fmap ($ ma) mLayoutF -- m a
 
+--liftAction'::(MonadTrans l, Monad m, Monad (l m))=>(m a->m b)->l m a->l m b
+--liftAction' f lma = let g mas = (,) <$> f (fst <$> mas) <*> (snd <$> mas) in mapStateT g lma
+
+
 instance RD.MonadWidget t m=>MonadLayout LayoutP m where
   layoutInstruction li w = modify (|> li) >> w
   doLayout = doLayoutP
-  beforeInsert w = lift $ doLayoutP w
-
+  liftF f lma = StackedMW $ do
+    let g mas = (,) <$> f (fst <$> mas) <*> (snd <$> mas)
+    mapStateT g (unS lma)
+  lower lma = evalStateT (unS lma) empty 
+  insertLayout n = undefined -- this is the hard part!
+  
 -- So we can use Layout functions without doing the optimization
 --type MW = RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider))
 --newtype MWT a = MWT { unMW::RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider)) a }
@@ -243,7 +252,9 @@ type IdentityMW = StackedMW IdentityT
 instance RD.MonadWidget t m=>MonadLayout IdentityMW m where
   layoutInstruction (LayoutInstruction _ oln) = hoist (lNodeToFunction $ closeLNode oln)
   doLayout = runIdentityT . unS
-  beforeInsert = id
+  liftF f = StackedMW . lift . f . runIdentityT . unS 
+  lower = runIdentityT . unS
+  insertLayout = return
 
 doUnoptimizedLayout::RD.MonadWidget t m =>IdentityMW m a -> m a
 doUnoptimizedLayout = doLayout
