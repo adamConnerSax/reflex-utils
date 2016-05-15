@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Reflex.Dom.Contrib.Layout.LayoutP
   (
@@ -106,7 +107,7 @@ liftAction f action lpa = StackedMW $ do
 -}
 
 layoutInside::(MonadTrans l, MonadLayout l m, Monad m)=>(m a -> m b)->l m a->l m b
-layoutInside f ma = lift . f $ doLayout ma  
+layoutInside f lma = lift . f $ doLayout lma  
 
 type StatefulMW s = StackedMW (StateT s) 
 
@@ -255,6 +256,11 @@ layoutDiv lc css = layoutInstruction (LayoutInstruction lc (OpenLNode LDiv css))
 
 layoutDivSimple::(MonadLayout l m, RD.MonadWidget t m)=>LNodeConstraint->String->l m a -> l m a
 layoutDivSimple lc cls = layoutDiv lc (LT.CssClasses [LT.CssClass cls])
+
+{-}
+addContent::(MonadLayout l m, RD.MonadWidget t m)=>l m a -> l m a
+addContent lma = do
+-}
 
 --flexItem::(MonadLayout l m, RD.MonadWidget t m)=>l m a -> l m a
 --flexItem = layoutDivSimple InLNode "flex-item"
