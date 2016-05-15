@@ -25,9 +25,12 @@ import qualified Reflex as R
 import qualified Reflex.Class as RC
 import qualified Reflex.Host.Class as RHC
 import qualified Reflex.Dom as RD
-import GHCJS.DOM.Node (Node)
+import GHCJS.DOM.Node (Node,toNode,appendChild)
+import GHCJS.DOM.Element (Element)
+import GHCJS.DOM.Document (createElement)
+--import GHCJS.DOM.Types hiding (Event)
 
-import Control.Monad (join)
+import Control.Monad (join,foldM)
 import Control.Monad.Fix (MonadFix(..))
 import Control.Monad.Exception (MonadException,MonadAsyncException)
 import Control.Monad.State (StateT,runStateT,execStateT,evalStateT,modify,mapStateT,MonadState(..),put)
@@ -202,21 +205,6 @@ doOneInstruction' (LayoutInstruction lc oln) (LS nodes _) = LS (nodes |> closeLN
           
 type LayoutP = StatefulMW (Seq LayoutInstruction)
 
-{-
-doLayoutP::forall t m a.(RD.MonadWidget t m)=>LayoutP m a -> m a
-doLayoutP lma = do
-  liftIO $ putStrLn "doLayoutP"
-  let mPair = runStateT (unS lma) empty
-      ma = fst <$> mPair
-      optimize = foldl' (flip doOneInstruction') (LS empty Nothing)
-      getNodes (LS nodes _) = nodes
-      mLFs:: m (Seq (m a -> m a))
-      mLFs = (fmap lNodeToFunction . getNodes . optimize . snd) <$> mPair
-      mLayoutF:: m (m a -> m a) 
-      mLayoutF = foldl' (.) id <$> mLFs -- m (m a -> m a)
-  join $ fmap ($ ma) mLayoutF -- m a
--}
-
 doLayoutP::forall t m a.(RD.MonadWidget t m)=>LayoutP m a -> m a
 doLayoutP lma = 
   liftIO (putStrLn "doLayoutP") >> runStateT (unS lma) empty >>= f where
@@ -234,14 +222,31 @@ doLayoutP lma =
 --liftAction' f lma = let g mas = (,) <$> f (fst <$> mas) <*> (snd <$> mas) in mapStateT g lma
 
 
-instance RD.MonadWidget t m=>MonadLayout LayoutP m where
+instance (RD.MonadWidget t m,MonadIO (R.PushM t))=>MonadLayout LayoutP m where
   layoutInstruction li w = modify (|> li) >> w
   doLayout = doLayoutP
   liftF f lma = StackedMW $ do
     let g mas = (,) <$> f (fst <$> mas) <*> (snd <$> mas)
     mapStateT g (unS lma)
   lower lma = evalStateT (unS lma) empty 
-  insertLayout n = undefined -- this is the hard part!
+  insertLayout = insertLayout'
+
+addLNode::RD.MonadWidget t m=> Node -> LNode -> m Node
+addLNode n (LNode LDiv css) = do
+  doc <- RD.askDocument
+  Just e <- createElement doc (Just "div")
+  RD.addAttributes ("class" RD.=: LT.toCssString css) e
+  _ <- appendChild n $ Just e
+  return $ toNode e
+  
+insertLayout'::(RD.MonadWidget t m, MonadIO (R.PushM t))=>Node -> LayoutP m Node
+insertLayout' n = do
+  instrs <- get
+  let optimize = foldl' (flip doOneInstruction') (LS empty Nothing)
+      getNodes (LS nodes _) = nodes
+      lNodes = getNodes $ optimize instrs
+  lift $ foldM addLNode n lNodes
+      
   
 -- So we can use Layout functions without doing the optimization
 --type MW = RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider))
@@ -257,10 +262,10 @@ instance RD.MonadWidget t m=>MonadLayout IdentityMW m where
   insertLayout = return
 
 doUnoptimizedLayout::RD.MonadWidget t m =>IdentityMW m a -> m a
-doUnoptimizedLayout = doLayout
+doUnoptimizedLayout = lower
 
-doOptimizedLayout::RD.MonadWidget t m=>LayoutP m a -> m a
-doOptimizedLayout = doLayout --flip evalStateT empty . unS
+doOptimizedLayout::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutP m a -> m a
+doOptimizedLayout = lower 
 
 layoutDiv::(MonadLayout l m, RD.MonadWidget t m)=>LNodeConstraint->LT.CssClasses->l m a -> l m a
 layoutDiv lc css = layoutInstruction (LayoutInstruction lc (OpenLNode LDiv css))
