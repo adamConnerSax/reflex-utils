@@ -159,6 +159,7 @@ flexLayoutItemSimple::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexLayoutItemSimple = RD.divClass "gl-flex-item-1"
 -}
 
+
 flexLayoutRowSimple::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
 flexLayoutRowSimple = layoutDivSimple ClosesLNode "gl-flex-row"
 
