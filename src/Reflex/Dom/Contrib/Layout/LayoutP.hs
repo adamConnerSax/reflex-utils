@@ -33,7 +33,7 @@ import GHCJS.DOM.Document (createElement)
 import Control.Monad (join,foldM)
 import Control.Monad.Fix (MonadFix(..))
 import Control.Monad.Exception (MonadException,MonadAsyncException)
-import Control.Monad.State (StateT,runStateT,execStateT,evalStateT,modify,mapStateT,MonadState(..),put)
+import Control.Monad.State (StateT(..),runStateT,execStateT,evalStateT,modify,mapStateT,MonadState(..),put)
 import Control.Monad.Trans (MonadIO,MonadTrans,lift)
 import Control.Monad.Trans.Identity (IdentityT,runIdentityT)
 import Control.Monad.Ref (MonadRef(..),Ref)
@@ -97,7 +97,7 @@ instance Monad m => MonadState s (StackedMW (StateT s) m)
 
 class MonadLayout l m where
   layoutInstruction::LayoutInstruction -> l m a -> l m a
-  doLayout::l m a->m a
+--  doLayout::l m a->m a
   liftF::(m a -> m b) -> l m a -> l m b
   lower::l m a->m a --loses information!
   insertLayout::Node -> l m Node
@@ -122,17 +122,17 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
           MonadLayout (StackedMW l) m)=>RD.MonadWidget t (StackedMW l m) where
   type WidgetHost (StackedMW l m) = RD.WidgetHost m
   type GuiAction  (StackedMW l m) = RD.GuiAction m
-  askParent = lift RD.askParent >>= insertLayout
-  subWidget n = liftF (RD.subWidget n)
-  subWidgetWithVoidActions n = liftF (RD.subWidgetWithVoidActions n) 
+  askParent = {- (liftIO $ putStrLn "askParent") >> -} lift RD.askParent >>= insertLayout
+  subWidget n w = {- (liftIO $ putStrLn "subWidget") >> -} liftF (RD.subWidget n) w
+  subWidgetWithVoidActions n w = {- (liftIO $ putStrLn "subWidgetWVA") >> -} liftF (RD.subWidgetWithVoidActions n) w 
   liftWidgetHost = lift . RD.liftWidgetHost
   schedulePostBuild = lift . RD.schedulePostBuild
   addVoidAction = lift . RD.addVoidAction
-
--- What happens if w changes the state??
+  
   getRunWidget = do
+--    liftIO $ putStrLn "getRunWidget"
     runWidget <- lift RD.getRunWidget
-    return  (\n w -> runWidget n (lower w))
+    return  (\n w -> {- (liftIO $ putStrLn "runWidget") >> -} runWidget n (lower w))
 
 
 {-
@@ -218,16 +218,13 @@ doLayoutP lma =
     layoutF (return a)
 --  join $ fmap ($ ma) mLayoutF -- m a
 
---liftAction'::(MonadTrans l, Monad m, Monad (l m))=>(m a->m b)->l m a->l m b
---liftAction' f lma = let g mas = (,) <$> f (fst <$> mas) <*> (snd <$> mas) in mapStateT g lma
-
+liftAction::Monad m=>(m a->m b)->LayoutP m a -> LayoutP m b
+liftAction f lpa = StackedMW $ StateT (\s -> flip (,) s <$> f (evalStateT (unS lpa) s))
 
 instance (RD.MonadWidget t m,MonadIO (R.PushM t))=>MonadLayout LayoutP m where
   layoutInstruction li w = modify (|> li) >> w
-  doLayout = doLayoutP
-  liftF f lma = StackedMW $ do
-    let g mas = (,) <$> f (fst <$> mas) <*> (snd <$> mas)
-    mapStateT g (unS lma)
+--  doLayout = doLayoutP
+  liftF = liftAction
   lower lma = evalStateT (unS lma) empty 
   insertLayout = insertLayout'
 
@@ -240,13 +237,14 @@ addLNode n (LNode LDiv css) = do
   return $ toNode e
   
 insertLayout'::(RD.MonadWidget t m, MonadIO (R.PushM t))=>Node -> LayoutP m Node
-insertLayout' n = do
+insertLayout' n = return n
+{-do
   instrs <- get
   let optimize = foldl' (flip doOneInstruction') (LS empty Nothing)
       getNodes (LS nodes _) = nodes
       lNodes = getNodes $ optimize instrs
   lift $ foldM addLNode n lNodes
-      
+-}    
   
 -- So we can use Layout functions without doing the optimization
 --type MW = RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider))
@@ -256,7 +254,7 @@ type IdentityMW = StackedMW IdentityT
 
 instance RD.MonadWidget t m=>MonadLayout IdentityMW m where
   layoutInstruction (LayoutInstruction _ oln) = hoist (lNodeToFunction $ closeLNode oln)
-  doLayout = runIdentityT . unS
+--  doLayout = runIdentityT . unS
   liftF f = StackedMW . lift . f . runIdentityT . unS 
   lower = runIdentityT . unS
   insertLayout = return
