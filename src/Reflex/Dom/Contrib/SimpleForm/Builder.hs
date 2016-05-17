@@ -1,3 +1,4 @@
+
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -121,7 +122,7 @@ observeDynMaybe cfg observerClass aDynM =
   asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
     builtDyn <- R.mapDyn (maybe (return $ R.constDyn Nothing) (unSF . buildA Nothing . Just)) aDynM -- Dynamic t (ReaderT e m (DynMaybe t a))
     newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
-    lift $ R.joinDyn <$> R.foldDyn (\_ x-> x) aDynM newDynEv -- DynMaybe t a
+    lift $ R.joinDyn <$> R.holdDyn aDynM newDynEv --R.foldDyn (\_ x-> x) aDynM newDynEv -- DynMaybe t a
 
 
 observeWidget::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->m a->m (DynMaybe t a)

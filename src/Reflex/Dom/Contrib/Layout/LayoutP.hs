@@ -30,7 +30,7 @@ import GHCJS.DOM.Element (Element)
 import GHCJS.DOM.Document (createElement)
 --import GHCJS.DOM.Types hiding (Event)
 
-import Control.Monad (join,foldM)
+import Control.Monad (join)
 import Control.Monad.Fix (MonadFix(..))
 import Control.Monad.Exception (MonadException,MonadAsyncException)
 import Control.Monad.State (StateT(..),runStateT,execStateT,evalStateT,modify,mapStateT,MonadState(..),put)
@@ -42,7 +42,7 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Sequence (Seq,(|>),empty)
 import Data.Monoid ((<>))
 import Data.Maybe (fromJust)
-import Data.Foldable (foldl')
+import Data.Foldable (foldl',foldlM)
 
 import qualified Reflex.Dom.Contrib.Layout.Types as LT
 
@@ -233,7 +233,7 @@ insertLayout' n = do
   let optimize = foldl' (flip doOneInstruction) (LS empty Nothing)
       getNodes (LS nodes _) = nodes
       lNodes = getNodes $ optimize instrs
-  lift $ foldM addLNode n lNodes
+  lift $ foldlM addLNode n lNodes
 
 -- So we can use Layout functions without doing the optimization
 --type MW = RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider))
