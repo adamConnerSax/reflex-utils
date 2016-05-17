@@ -211,10 +211,8 @@ liftAction::Monad m=>(m a->m b)->LayoutP m a -> LayoutP m b
 liftAction f lpa = StackedMW $ StateT (\s -> flip (,) s <$> f (evalStateT (unS lpa) s))
 
 wrapSubWidget::Monad m=>(m a -> m b)->LayoutP m a -> LayoutP m b
-wrapSubWidget f lpa = do
-  pNode  <- parent <$> get
-  result <- StackedMW . withStateT (\ls -> ls {parent=Nothing}) . unS $ liftAction f lpa
-  return result
+wrapSubWidget f lpa = StackedMW . withStateT (\ls -> ls {parent=Nothing}) . unS $ liftAction f lpa
+
   
 instance (RD.MonadWidget t m,MonadIO (R.PushM t))=>MonadLayout LayoutP m where
   layoutInstruction li w = addLI li >> w
