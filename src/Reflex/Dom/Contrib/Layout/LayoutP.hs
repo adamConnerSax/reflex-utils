@@ -33,7 +33,7 @@ import GHCJS.DOM.Document (createElement)
 import Control.Monad (join)
 import Control.Monad.Fix (MonadFix(..))
 import Control.Monad.Exception (MonadException,MonadAsyncException)
-import Control.Monad.State (StateT(..),runStateT,execStateT,evalStateT,modify,mapStateT,MonadState(..),put)
+import Control.Monad.State (StateT(..),runStateT,execStateT,evalStateT,modify,mapStateT,MonadState(..),put,withStateT)
 import Control.Monad.Trans (MonadIO,MonadTrans,lift)
 import Control.Monad.Trans.Identity (IdentityT,runIdentityT)
 import Control.Monad.Ref (MonadRef(..),Ref)
@@ -124,9 +124,9 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
           MonadLayout (StackedMW l) m)=>RD.MonadWidget t (StackedMW l m) where
   type WidgetHost (StackedMW l m) = RD.WidgetHost m
   type GuiAction  (StackedMW l m) = RD.GuiAction m
-  askParent = {- (liftIO $ putStrLn "askParent") >> -} lift RD.askParent >>= insertLayout
-  subWidget n w = {- (liftIO $ putStrLn "subWidget") >> -} liftF (RD.subWidget n) w
-  subWidgetWithVoidActions n w = {- (liftIO $ putStrLn "subWidgetWVA") >> -} liftF (RD.subWidgetWithVoidActions n) w 
+  askParent = lift RD.askParent >>= insertLayout 
+  subWidget n  = liftF (RD.subWidget n)
+  subWidgetWithVoidActions n  = liftF (RD.subWidgetWithVoidActions n)
   liftWidgetHost = lift . RD.liftWidgetHost
   schedulePostBuild = lift . RD.schedulePostBuild
   addVoidAction = lift . RD.addVoidAction
@@ -191,49 +191,55 @@ doOneInstruction li@(LayoutInstruction lc oln) ls@(LS nodes mONode) =
 doOneInstruction'::LayoutInstruction -> LS -> LS
 doOneInstruction' (LayoutInstruction lc oln) (LS nodes _) = LS (nodes |> closeLNode oln) Nothing
           
-type LayoutP = StatefulMW (Seq LayoutInstruction)
 
-doLayoutP::forall t m a.(RD.MonadWidget t m)=>LayoutP m a -> m a
-doLayoutP lma = 
-  liftIO (putStrLn "doLayoutP") >> runStateT (unS lma) empty >>= f where
-  f (a,instrs) = do
-    let optimize = foldl' (flip doOneInstruction) (LS empty Nothing)
-        getNodes (LS nodes _) = nodes
-        lfs:: Seq (m a -> m a)
-        lfs = fmap lNodeToFunction . getNodes $ optimize instrs
-        layoutF:: (m a -> m a) 
-        layoutF = foldl' (.) id lfs -- (m a -> m a)
-    layoutF (return a)
---  join $ fmap ($ ma) mLayoutF -- m a
+data LayoutS = LayoutS { parent::Maybe Node, instrs::Seq LayoutInstruction }
+getAndClear::MonadState LayoutS m=>m LayoutS
+getAndClear = do
+  r <- get
+  modify (\ls -> ls { instrs = empty })
+  return r
+
+setParent::MonadState LayoutS m=>Node -> m Node
+setParent n = modify (\ls -> ls {parent = Just n}) >> return n
+
+addLI::MonadState LayoutS m=>LayoutInstruction->m ()
+addLI li = modify (\(LayoutS mN instrs) -> LayoutS mN (instrs |> li))
+
+type LayoutP = StatefulMW LayoutS
 
 liftAction::Monad m=>(m a->m b)->LayoutP m a -> LayoutP m b
 liftAction f lpa = StackedMW $ StateT (\s -> flip (,) s <$> f (evalStateT (unS lpa) s))
 
+wrapSubWidget::Monad m=>(m a -> m b)->LayoutP m a -> LayoutP m b
+wrapSubWidget f lpa = do
+  pNode  <- parent <$> get
+  result <- StackedMW . withStateT (\ls -> ls {parent=Nothing}) . unS $ liftAction f lpa
+  return result
+  
 instance (RD.MonadWidget t m,MonadIO (R.PushM t))=>MonadLayout LayoutP m where
---  layoutInstruction li w = modify (\nodes-> nodes |> li) >>  w
-  layoutInstruction li w = get >>= put . (|> li) >> w
-  liftF = liftAction
-  lower lma = evalStateT (unS lma) empty 
+  layoutInstruction li w = addLI li >> w
+  liftF = wrapSubWidget
+  lower lma = evalStateT (unS lma) (LayoutS Nothing empty) 
   insertLayout = insertLayout'
 
 addLNode::RD.MonadWidget t m=> Node -> LNode -> m Node
 addLNode n (LNode nt css) = do
   doc <- RD.askDocument
-  Just e <- liftIO $ createElement doc (Just "div")
+  Just e <- liftIO $ createElement doc (Just $ nodeTypeTag nt)
   RD.addAttributes ("class" RD.=: LT.toCssString css) e
-  mNode <- appendChild n $ Just e -- do I need to subWidget these to each other?
-  _ <- case mNode of
-    Nothing -> liftIO $ putStrLn "Nothing in addLNode"
-    Just n' -> RD.subWidget n $ return () -- SCREM
-  return $ toNode e
+  _ <- appendChild n $ Just e -- do I need to subWidget these to each other?
+  RD.subWidget n $ return $ toNode e
   
 insertLayout'::(RD.MonadWidget t m, MonadIO (R.PushM t))=>Node -> LayoutP m Node
 insertLayout' n = do
-  instrs <- get
-  let optimize = foldl' (flip doOneInstruction) (LS empty Nothing)
+  LayoutS mNode instrs <- getAndClear
+  let n' = maybe n id mNode
+      optimize = foldl' (flip doOneInstruction') (LS empty Nothing)
       getNodes (LS nodes _) = nodes
       lNodes = getNodes $ optimize instrs
-  lift $ foldlM addLNode n lNodes
+  newParentNode <- foldlM addLNode n' lNodes
+  setParent newParentNode
+  
 
 -- So we can use Layout functions without doing the optimization
 --type MW = RD.Widget R.Spider (RD.Gui R.Spider (RD.WithWebView R.SpiderHost) (RHC.HostFrame R.Spider))

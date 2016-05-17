@@ -11,6 +11,8 @@ import Reflex.Dom.Contrib.Layout.All
 import Reflex.Dom.Contrib.Layout.Core()
 import Reflex.Dom.Contrib.Layout.GridConfigs
 
+import Reflex.Dom.Contrib.Layout.LayoutP (doOptimizedLayout,doUnoptimizedLayout)
+
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans (lift)
 import Data.Monoid ((<>))
@@ -148,6 +150,24 @@ sfTab::MonadWidget t m=>TabInfo t (LayoutM t m) ()
 sfTab = TabInfo "sf" "Simple Flex" simpleFlexWidget
 
 
+simpleLayoutPWidget::(MonadWidget t m,MonadIO (PushM t))=>LayoutM t m ()
+simpleLayoutPWidget = lift . doOptimizedLayout $ do
+  let c s = flexLayoutColSimple $ flexLayoutItemSimple $ text s
+      r s = flexLayoutRowSimple $ flexLayoutItemSimple $ text s
+  flexLayoutRowSimple $ do
+    c "Col 1"
+    divClass "" $ text "text"
+    c "Col 2"
+    c "Col 3"
+    flexLayoutColSimple $ do
+     r "Row 1"
+     r "Row 2"
+     r "Row 3"
+   
+sflpTab::MonadWidget t m=>TabInfo t (LayoutM t m) ()
+sflpTab = TabInfo "sflp" "LayoutP" simpleLayoutPWidget
+
+
 boxesWidget::(MonadWidget t m, MonadIO (PushM t))=>LayoutM t m ()
 boxesWidget = do
   ev1 <- testControl never
@@ -173,7 +193,7 @@ laidOut w = mainWidgetWithCss allCss $
 tabbedWidget = do
   el "p" $ text ""
   el "br" $ blank
-  dynamicTabbedLayout sfTab (constDyn [sfTab,boxesTab]) 
+  dynamicTabbedLayout sfTab (constDyn [sfTab,sflpTab,boxesTab]) 
 
 allCss = tabCssBS
          <> flexCssBS
