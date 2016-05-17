@@ -139,7 +139,11 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
 
 
 data LNodeConstraint = OpensLNode | InLNode | ClosesLNode deriving (Show)
+
 data LNodeType = LDiv deriving (Eq,Show)
+nodeTypeTag::LNodeType -> String
+nodeTypeTag LDiv = "div"
+
 data LNode = LNode LNodeType LT.CssClasses deriving (Show)
 
 lNodeToFunction::RD.MonadWidget t m=> LNode -> m a -> m a
@@ -213,12 +217,14 @@ instance (RD.MonadWidget t m,MonadIO (R.PushM t))=>MonadLayout LayoutP m where
   insertLayout = insertLayout'
 
 addLNode::RD.MonadWidget t m=> Node -> LNode -> m Node
-addLNode n (LNode LDiv css) = do
+addLNode n (LNode nt css) = do
   doc <- RD.askDocument
-  Just e <- createElement doc (Just "div")
+  Just e <- liftIO $ createElement doc (Just "div")
   RD.addAttributes ("class" RD.=: LT.toCssString css) e
---  _ <- appendChild n $ Just e -- do I need to subWidget these to each other?
-  _ <- RD.subWidget n $ appendChild n $ Just e -- do I need to subWidget these to each other?
+  mNode <- appendChild n $ Just e -- do I need to subWidget these to each other?
+  _ <- case mNode of
+    Nothing -> liftIO $ putStrLn "Nothing in addLNode"
+    Just n' -> RD.subWidget n $ return () -- SCREM
   return $ toNode e
   
 insertLayout'::(RD.MonadWidget t m, MonadIO (R.PushM t))=>Node -> LayoutP m Node
