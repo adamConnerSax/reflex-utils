@@ -132,11 +132,8 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
   addVoidAction = lift . RD.addVoidAction
   
   getRunWidget = do
---    liftIO $ putStrLn "getRunWidget"
     runWidget <- lift RD.getRunWidget
-    return  (\n w -> {- (liftIO $ putStrLn "runWidget") >> -}  runWidget n (lower w))
-
-
+    return  (\n w -> runWidget n (lower w))
 
 data LNodeConstraint = OpensLNode | InLNode | ClosesLNode deriving (Show)
 
