@@ -52,19 +52,6 @@ newtype StackedMW (t :: (* -> *) -> * -> *) m a = StackedMW { unS::t m a }
             MonadException,MonadAsyncException,
             MonadTrans,MFunctor)
 
---instance MonadTrans t=>MFunctor (StackedMW t)
-
-{-
-instance (MonadTrans t, Functor m)=>Functor (StackedMW t m)
-instance (MonadTrans t, Applicative m)=>Applicative (StackedMW t m)
-instance (MonadTrans t, Monad m)=>Monad (StackedMW t m)
-
-instance (MonadTrans t, MonadFix m)=>MonadFix (StackedMW t m)
-instance (MonadTrans t, MonadException m) => MonadException (StackedMW t m)
-instance (MonadTrans t, MonadIO m) => MonadIO (StackedMW t m)
-
-instance (MonadException (StackedMW t m), MonadIO (StackedMW t m)) => MonadAsyncException (StackedMW t m)
--}
 instance (MonadTrans t, Monad (t m), MonadRef m)=>MonadRef (StackedMW t m) where
   type Ref (StackedMW t m) = Ref m
   newRef = StackedMW . lift . newRef
@@ -135,6 +122,7 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
     runWidget <- lift RD.getRunWidget
     return  (\n w -> runWidget n (lower w))
 
+
 data LNodeConstraint = OpensLNode | InLNode | ClosesLNode deriving (Show)
 
 data LNodeType = LDiv deriving (Eq,Show)
@@ -145,7 +133,6 @@ data LNode = LNode LNodeType LT.CssClasses deriving (Show)
 
 lNodeToFunction::RD.MonadWidget t m=> LNode -> m a -> m a
 lNodeToFunction (LNode LDiv css) = RD.divClass (LT.toCssString css)
-
 
 data OpenLNode = OpenLNode { olnType::LNodeType, olnCss::LT.CssClasses } deriving (Show)
 closeLNode::OpenLNode -> LNode
