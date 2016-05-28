@@ -142,20 +142,20 @@ openNAddCss::LT.CssClasses -> OpenLNode -> OpenLNode
 openNAddCss css (OpenLNode nt css') = OpenLNode nt (css <> css')
 
 data LayoutInstruction = LayoutInstruction LNodeConstraint OpenLNode deriving (Show)
-data LS = LS (Seq LNode) (Maybe OpenLNode)
+data LS = LS (Maybe OpenLNode)
+
+closeCurrentNode::MonadWidget m=>LS -> m a -> m a
+closeCurrentNode (LS mONode) = case mONode of
+  Nothing -> id
+  Just on = let node = closeLnode on in lNodeToFunction node
 
 
-closeCurrentNode::LS -> LS
-closeCurrentNode (LS nodes mONode) =
-  let nodes' = maybe nodes ((nodes |>) . closeLNode) mONode
-  in LS nodes' Nothing
-
-newNodeType::LayoutInstruction -> LS -> LS
+newNodeType::LayoutInstruction -> LS -> m a -> m a
 newNodeType (LayoutInstruction lc oln) ls =
-  let (LS nodes' _) = closeCurrentNode ls
+  let f1 = closeCurrentNode ls
   in case lc of
-    ClosesLNode -> LS (nodes' |> closeLNode oln) Nothing
-    _           -> LS nodes' (Just oln)
+    ClosesLNode -> f1 . (closeCurrentNode closeLNode oln) 
+    _           -> put LS nodes' (Just oln)
 
 sameNodeType::LNodeConstraint->LT.CssClasses->Seq LNode->OpenLNode->LS
 sameNodeType lc css nodes oln =
