@@ -53,9 +53,6 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , sfAttrs
        ) where
 
---import Control.Monad (liftM2)
---import Control.Applicative (liftA2)
---import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (ReaderT, runReaderT, ask) --, lift,local)
 import Control.Monad.Morph
 import Data.Maybe (isJust,fromMaybe)
@@ -69,7 +66,6 @@ import qualified Reflex.Dom as RD
 
 import Reflex.Dom.Contrib.Layout.Types (CssClass,CssClasses(..),IsCssClass(..))
 import Reflex.Dom.Contrib.Layout.Core()
---import Reflex.Orphans()
 
 import qualified DataBuilder as B
 import DataBuilder as BExport (Builder(..),GBuilder(..),FieldName,MDWrapped(..),buildAFromConList)
