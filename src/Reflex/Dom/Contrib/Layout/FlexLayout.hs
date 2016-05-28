@@ -168,7 +168,6 @@ flexLayoutColSimple = layoutDivSimple ClosesLNode "gl-flex-col"
 
 flexLayoutItemSimple::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
 flexLayoutItemSimple = layoutDivSimple InLNode "gl-flex-item-1"
---flexLayoutItemSimple = layoutDivSimple ClosesLNode "gl-flex-item-1"
 
 
 flexLayoutRowF::R.Reflex t=>LayoutF t

@@ -31,7 +31,7 @@ import Reflex.Dom
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 
 import Reflex.Dom.Contrib.Layout.All (CssClasses(..),CssClass(..),emptyCss,flexCssBS,flexFillR,cssToBS)
-import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout,StackedMW,MonadLayout)
+import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout,StackedMW,MonadLayout,MonadLayoutC)
 import Reflex.Dom.Contrib.SimpleForm
 --import DataBuilder
 
@@ -119,8 +119,7 @@ flowTestWidget n = do
   allTrueDyn <- foldM (\x bDyn -> combineDyn (&&) x bDyn) (constDyn True) boolDyns
   forDyn allTrueDyn $ \b -> if b then "All Checked!" else "Some Unchecked."
 
-test::(MonadTrans l, Monad (l m), MonadLayout (StackedMW l) m, 
-       SimpleFormC e t (StackedMW l m),MonadIO (PushM t))=>e->StackedMW l m ()
+test::(SimpleFormC e t m, MonadIO (PushM t))=>e->m ()
 test cfg = do
   cDynM<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
   el "p" $ text "C from form:"

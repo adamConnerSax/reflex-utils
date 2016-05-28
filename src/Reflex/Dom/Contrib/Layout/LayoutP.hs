@@ -6,6 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Reflex.Dom.Contrib.Layout.LayoutP
   (
@@ -18,6 +19,7 @@ module Reflex.Dom.Contrib.Layout.LayoutP
 --  , IdentityMW
 --  , LayoutP
   , MonadLayout
+  , MonadLayoutC
   ) where
 
 
@@ -28,7 +30,6 @@ import qualified Reflex.Dom as RD
 import GHCJS.DOM.Node (Node,toNode,appendChild)
 import GHCJS.DOM.Element (Element)
 import GHCJS.DOM.Document (createElement)
---import GHCJS.DOM.Types hiding (Event)
 
 import Control.Monad (join)
 import Control.Monad.Fix (MonadFix(..))
@@ -84,11 +85,13 @@ instance Monad m => MonadState s (StackedMW (StateT s) m) where
   get = StackedMW get
   put = StackedMW . put
   
-class MonadLayout l m where
+class (MonadTrans l, Monad (l m))=>MonadLayout l m where
   layoutInstruction::LayoutInstruction -> l m a -> l m a
   liftF::(m a -> m b) -> l m a -> l m b
   lower::l m a->m a --loses information!
   insertLayout::Node -> l m Node
+
+type MonadLayoutC lmw mw m = (MonadLayout lmw mw, m ~ lmw mw)  
 
 type StatefulMW s = StackedMW (StateT s)
 
@@ -137,7 +140,6 @@ getAndClear = do
   put Nothing
   return x
 
-
 closeCurrentNode::(RD.MonadWidget t m,MonadIO (R.PushM t)) => Maybe OpenLNode -> LayoutP m a -> LayoutP m a
 closeCurrentNode Nothing = id
 closeCurrentNode (Just oln) = lNodeToFunction $ closeLNode oln
@@ -146,30 +148,30 @@ newNodeType::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutInstruction -> Mayb
 newNodeType li@(LayoutInstruction lc oln) mOln lma = do
 --  liftIO $ putStrLn $ "newNodeType " ++ show li ++ " " ++ show mOln
   let f1 = closeCurrentNode mOln
-      f2 = put (Just oln) >> f1 lma 
+      f2 x = put (Just oln) >> f1 x
   case lc of
     ClosesLNode -> f1 $ (closeCurrentNode $ Just oln) lma 
-    _           -> f2
+    _           -> f2 lma
 
 sameNodeType::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LNodeConstraint->LT.CssClasses->OpenLNode->LayoutP m a ->LayoutP m a
 sameNodeType lc css oln lma = do
 --  liftIO $ putStrLn $ "sameNodeType " ++ show lc ++ " " ++ show css ++ " " ++ show oln  
-  let nType = olnType oln
+  let oln' = openNAddCss css oln
   case lc of
     OpensLNode  -> put (Just $ OpenLNode (olnType oln) css) >> closeCurrentNode (Just oln) lma
-    InLNode     -> put (Just $ openNAddCss css oln) >> lma
-    ClosesLNode -> closeCurrentNode (Just $ openNAddCss css oln) lma 
+    InLNode     -> put (Just oln') >> lma
+    ClosesLNode -> closeCurrentNode (Just oln') lma 
 
 
 doOneInstruction::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutInstruction -> LayoutP m a -> LayoutP m a
 doOneInstruction li@(LayoutInstruction lc oln) lma = do
   mOln <- getAndClear
---  liftIO $ putStrLn $ "doOneInstruction " ++ show li ++ " (state was: " ++ show mOln ++ ")" 
-  let isNew = maybe True (\on -> olnType on /= olnType oln) mOln
-  if isNew
-    then newNodeType li mOln lma
-    else sameNodeType lc (olnCss oln) (fromJust mOln) lma -- safe because mONode == Nothing => isNew == True 
-
+--  liftIO $ putStrLn $ "doOneInstruction " ++ show li ++ " (state was: " ++ show mOln ++ ")"
+  case mOln of
+    Nothing -> newNodeType li Nothing lma
+    (Just on) -> if (olnType on == olnType oln)
+                 then sameNodeType lc (olnCss oln) on lma
+                 else newNodeType li (Just on) lma -- newNodeType also handles no previous node
 
 -- for debugging purposes
 doOneInstruction'::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutInstruction -> LayoutP m a -> LayoutP m a
