@@ -19,7 +19,8 @@ module Reflex.Dom.Contrib.Layout.LayoutP
 --  , IdentityMW
 --  , LayoutP
   , MonadLayout
-  , MonadLayoutC
+--  , MonadLayoutC
+  , MonadWidgetLC
   ) where
 
 
@@ -57,7 +58,7 @@ instance (MonadTrans t, Monad (t m), MonadRef m)=>MonadRef (StackedMW t m) where
   type Ref (StackedMW t m) = Ref m
   newRef = StackedMW . lift . newRef
   readRef = lift . readRef
-  
+  writeRef a  = lift . writeRef a 
 
 instance (MonadTrans t, Monad (t m), RD.HasWebView m) => RD.HasWebView (StackedMW t m) where
   askWebView = StackedMW $ lift RD.askWebView
@@ -91,7 +92,9 @@ class (MonadTrans l, Monad (l m))=>MonadLayout l m where
   lower::l m a->m a --loses information!
   insertLayout::Node -> l m Node
 
-type MonadLayoutC lmw mw m = (MonadLayout lmw mw, m ~ lmw mw)  
+type MonadWidgetLC lmw mw t m = (RD.MonadWidget t mw, MonadLayout lmw mw, m ~ lmw mw, RD.MonadWidget t m)  
+
+--class (RD.MonadWidget t mw, MonadLayout lmw mw, RD.MonadWidget t (lmw mw),m ~ lmw mw)=>MonadWidgetL t m
 
 type StatefulMW s = StackedMW (StateT s)
 
@@ -186,11 +189,16 @@ instance (RD.MonadWidget t m,MonadIO (R.PushM t))=>MonadLayout LayoutP m where
   lower lma = evalStateT (unS lma) Nothing 
   insertLayout = lpInsertLayout
 
-lpInsertLayout::(RD.MonadWidget t m,MonadIO (R.PushM t))=>Node -> LayoutP m Node
+lpInsertLayout::forall t m.(RD.MonadWidget t m,MonadIO (R.PushM t))=>Node -> LayoutP m Node
 lpInsertLayout n = do
+  let buildNode::LNode->m Node
+      buildNode (LNode nType css) = do
+        e <- RD.buildEmptyElement (nodeTypeTag nType) ("class" RD.=: LT.toCssString css)
+        return $ toNode e
   mOln <- getAndClear
-  let f = closeCurrentNode mOln
-  f $ return n
+  case mOln of
+    Nothing -> return n
+    Just oln -> lift . buildNode $ closeLNode oln
 
 -- so we can doUnoptimizedlayout for debugging
 type IdentityMW = StackedMW IdentityT

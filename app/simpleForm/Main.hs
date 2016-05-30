@@ -31,7 +31,7 @@ import Reflex.Dom
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 
 import Reflex.Dom.Contrib.Layout.All (CssClasses(..),CssClass(..),emptyCss,flexCssBS,flexFillR,cssToBS)
-import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout,StackedMW,MonadLayout,MonadLayoutC)
+import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
 import Reflex.Dom.Contrib.SimpleForm
 --import DataBuilder
 

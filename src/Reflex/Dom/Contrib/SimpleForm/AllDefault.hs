@@ -45,7 +45,9 @@ import Reflex.Dom.Contrib.Widgets.Common (WidgetConfig(..),Widget0(..),htmlDropd
 import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..))
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexLayoutColSimple,flexLayoutRowSimple,flexLayoutItemSimple,
                                              flexFillR,flexFillL,flexHCenter,
-                                             flexFillU,flexFillD,flexVCenter)
+                                             flexFillU,flexFillD,flexVCenter,
+                                             flexFillR',flexFillL',flexHCenter',
+                                             flexFillU',flexFillD',flexVCenter')
 import Reflex.Dom.Contrib.Layout.LayoutP (MonadLayout,StackedMW)
 
 import Reflex.Dom.Contrib.SimpleForm.Builder
@@ -104,12 +106,12 @@ instance (MonadIO (PushM t),RD.MonadWidget t m,
   formItem    = liftLF flexLayoutItemSimple 
   layoutVert  = liftLF flexLayoutColSimple 
   layoutHoriz = liftLF flexLayoutRowSimple
-  layoutL     = liftLF flexFillR 
-  layoutR     = liftLF flexFillL
-  layoutHC    = liftLF flexHCenter
-  layoutT     = liftLF flexFillD 
-  layoutB     = liftLF flexFillU
-  layoutVC    = liftLF flexVCenter
+  layoutL     = liftLF flexFillR' 
+  layoutR     = liftLF flexFillL'
+  layoutHC    = liftLF flexHCenter'
+  layoutT     = liftLF flexFillD' 
+  layoutB     = liftLF flexFillU'
+  layoutVC    = liftLF flexVCenter'
   layoutCollapsible = collapsibleWidget 
   validItemStyle   = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask

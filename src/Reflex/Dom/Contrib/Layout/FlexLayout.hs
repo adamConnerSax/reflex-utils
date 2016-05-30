@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs #-}
 module Reflex.Dom.Contrib.Layout.FlexLayout
        (
          flexCssBS
@@ -9,6 +10,12 @@ module Reflex.Dom.Contrib.Layout.FlexLayout
        , flexVCenter
        , flexFillD
        , flexFillU
+       , flexFillR'
+       , flexFillL'
+       , flexHCenter'
+       , flexVCenter'
+       , flexFillD'
+       , flexFillU'
        , flexLayoutRowSimple
        , flexLayoutColSimple
        , flexLayoutItemSimple
@@ -103,8 +110,64 @@ flexCss = do
 flexCssBS::B.ByteString
 flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty [] $ flexCss
 
+flexLayoutRowSimple::MonadWidgetLC l mw t m=>m a->m a 
+flexLayoutRowSimple = layoutDivSimple ClosesLNode "gl-flex-row"
+
+flexLayoutColSimple::MonadWidgetLC l mw t m=>m a->m a 
+flexLayoutColSimple = layoutDivSimple ClosesLNode "gl-flex-col"
+
+flexLayoutItemSimple::MonadWidgetLC l mw t m=>m a->m a  
+flexLayoutItemSimple = layoutDivSimple InLNode "gl-flex-item-1"
+
+wrapWidget'::MonadWidgetLC l mw t m=>m a->m a
+wrapWidget' = RD.divClass "" --flexLayoutItemSimple
+
+flexFillH'::MonadWidgetLC l mw t m=>m a->m a
+flexFillH' =   layoutDivSimple ClosesLNode "flexFillH" 
+
+flexFillV'::MonadWidgetLC l mw t m=>m a->m a
+flexFillV' =   layoutDivSimple ClosesLNode "flexFillV" 
+
+flexFill'::MonadWidgetLC l mw t m=>m ()
+flexFill' = layoutDivSimple InLNode "fill" $ RD.text ""
+
+flexFillR'::MonadWidgetLC l mw t m=>m a->m a --(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexFillR' w = flexFillH' $ do
+  a <- wrapWidget' w
+  flexFill'
+  return a
+
+flexFillL'::MonadWidgetLC l mw t m=>m a->m a
+flexFillL' w = flexFillH' $ flexFill' >> wrapWidget w
+
+flexHCenter'::MonadWidgetLC l mw t m=>m a->m a
+flexHCenter' w = flexFillH' $ do
+  flexFill'
+  a <- wrapWidget' w
+  flexFill'
+  return a
+
+flexVCenter'::MonadWidgetLC l mw t m=>m a->m a
+flexVCenter' w = flexFillV' $ do
+  flexFill'
+  a <- wrapWidget' w
+  flexFill'
+  return a
+
+flexFillD'::MonadWidgetLC l mw t m=>m a->m a
+flexFillD' w = flexFillV' $ do
+  a <- wrapWidget' w
+  flexFill'
+  return a
+
+flexFillU'::MonadWidgetLC l mw t m=>m a->m a
+flexFillU' w = flexFillV' $ flexFill' >> wrapWidget' w
+
 wrapWidget::RD.MonadWidget t m=>m a->m a
 wrapWidget = RD.divClass "" 
+
+--flexLayoutFillH::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
+--flexLayoutFillH = layoutDivSimple InLNode "gl-flex-row"
 
 flexFillR::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexFillR w = do
@@ -148,26 +211,6 @@ flexFillU w = do
     RD.divClass "fill" RD.blank
     wrapWidget w
 
-{-
-flexLayoutRowSimple::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
-flexLayoutRowSimple = RD.divClass "gl-flex-row"
-
-flexLayoutColSimple::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
-flexLayoutColSimple = RD.divClass "gl-flex-col"
-
-flexLayoutItemSimple::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
-flexLayoutItemSimple = RD.divClass "gl-flex-item-1"
--}
-
-
-flexLayoutRowSimple::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
-flexLayoutRowSimple = layoutDivSimple ClosesLNode "gl-flex-row"
-
-flexLayoutColSimple::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
-flexLayoutColSimple = layoutDivSimple ClosesLNode "gl-flex-col"
-
-flexLayoutItemSimple::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
-flexLayoutItemSimple = layoutDivSimple InLNode "gl-flex-item-1"
 
 
 flexLayoutRowF::R.Reflex t=>LayoutF t

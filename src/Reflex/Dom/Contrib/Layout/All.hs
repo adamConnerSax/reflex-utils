@@ -15,7 +15,13 @@ module Reflex.Dom.Contrib.Layout.All
        , flexHCenter
        , flexFillU
        , flexFillD
-       , flexVCenter         
+       , flexVCenter
+       , flexFillL'
+       , flexFillR'
+       , flexHCenter'
+       , flexFillU'
+       , flexFillD'
+       , flexVCenter'         
        , cssToBS
        , tabCssBS
        , emptyCss
@@ -57,8 +63,11 @@ import Reflex.Dom.Contrib.Layout.Events (addClassesToLast,addKeyedClassesBelow,
                                          addKeyedCssUpdateEventBelow',addKeyedCssUpdateEventsBelow',getKeyedCssUpdateEvent)
 
 
-import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,flexFillR,flexFillL,flexHCenter,
+import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,
+                                             flexFillR,flexFillL,flexHCenter,
                                              flexFillD,flexFillU,flexVCenter,
+                                             flexFillR',flexFillL',flexHCenter',
+                                             flexFillD',flexFillU',flexVCenter',
                                              flexLayoutRow,flexCol,flexLayoutCol,flexRow,
                                              flexLayoutRow',flexCol',flexLayoutCol',flexRow',
                                              flexLayoutRowSimple, flexLayoutColSimple, flexLayoutItemSimple)
