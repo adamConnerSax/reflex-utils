@@ -53,11 +53,11 @@ flexFillStyles = do
     ("display" -: "flex")
     ("display" -: "-webkit-flex")
     ("flex-direction" -: "row")
-    ("-webkit-flex-direction" -: "row")		
+    ("-webkit-flex-direction" -: "row")	
     ("align-items" -: "stretch")
     ("-webkit-align-items" -: "stretch")    
     ("flex" -: "1 0 auto")
-    ("-webkit-flex" -: "1 0 auto")	
+    ("-webkit-flex" -: "1 0 auto")
     ".fill" <? do
       ("flex" -: "1")
       ("-webkit-flex" -: "1")
@@ -69,10 +69,10 @@ flexFillStyles = do
     ("align-items" -: "stretch")
     ("-webkit-align-items" -: "stretch")    
     ("flex" -: "1 0 auto")
-    ("-webkit-flex" -: "1 0 auto")	
+    ("-webkit-flex" -: "1 0 auto")
     ".fill" <? do
       ("flex" -: "1")
-      ("-webkit-flex" -: "1")	
+      ("-webkit-flex" -: "1")
 
 numberFlexGrowOptions = 12::Int
 
@@ -123,13 +123,13 @@ wrapWidget'::MonadWidgetLC l mw t m=>m a->m a
 wrapWidget' = RD.divClass "" --flexLayoutItemSimple
 
 flexFillH'::MonadWidgetLC l mw t m=>m a->m a
-flexFillH' =   layoutDivSimple ClosesLNode "flexFillH" 
+flexFillH' = layoutDivSimple ClosesLNode "flexFillH" 
 
 flexFillV'::MonadWidgetLC l mw t m=>m a->m a
-flexFillV' =   layoutDivSimple ClosesLNode "flexFillV" 
+flexFillV' = layoutDivSimple ClosesLNode "flexFillV" 
 
-flexFill'::MonadWidgetLC l mw t m=>m ()
-flexFill' = layoutDivSimple InLNode "fill" $ RD.text ""
+flexFill'::RD.MonadWidget t m=>m ()
+flexFill' = RD.divClass "fill" $ RD.blank
 
 flexFillR'::MonadWidgetLC l mw t m=>m a->m a --(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexFillR' w = flexFillH' $ do

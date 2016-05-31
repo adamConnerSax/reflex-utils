@@ -69,7 +69,7 @@ instance (MonadTrans t, Monad (t m), RD.HasDocument m) => RD.HasDocument (Stacke
 instance (MonadTrans t, Monad (t m),
           RHC.MonadReflexCreateTrigger rt m) => RHC.MonadReflexCreateTrigger rt (StackedMW t m) where
   newEventWithTrigger  = StackedMW . lift . RHC.newEventWithTrigger  
-  newFanEventWithTrigger f = StackedMW . lift  $  RHC.newFanEventWithTrigger f
+  newFanEventWithTrigger f = StackedMW $ lift  $  RHC.newFanEventWithTrigger f
   
 instance (MonadTrans t, RD.HasPostGui rt h m, MonadRef (t m),
           Ref (StackedMW t m) ~ Ref h) => RD.HasPostGui rt h (StackedMW t m) where
@@ -90,7 +90,7 @@ class (MonadTrans l, Monad (l m))=>MonadLayout l m where
   layoutInstruction::LayoutInstruction -> l m a -> l m a
   liftF::(m a -> m b) -> l m a -> l m b
   lower::l m a->m a --loses information!
-  insertLayout::Node -> l m Node
+  lAskParent::l m Node
 
 type MonadWidgetLC lmw mw t m = (RD.MonadWidget t mw, MonadLayout lmw mw, m ~ lmw mw, RD.MonadWidget t m)  
 
@@ -104,7 +104,7 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
           MonadLayout (StackedMW l) m)=>RD.MonadWidget t (StackedMW l m) where
   type WidgetHost (StackedMW l m) = RD.WidgetHost m
   type GuiAction  (StackedMW l m) = RD.GuiAction m
-  askParent = lift RD.askParent >>= insertLayout 
+  askParent = lAskParent 
   subWidget n  = liftF (RD.subWidget n)
   subWidgetWithVoidActions n  = liftF (RD.subWidgetWithVoidActions n)
   liftWidgetHost = lift . RD.liftWidgetHost
@@ -148,7 +148,7 @@ closeCurrentNode Nothing = id
 closeCurrentNode (Just oln) = lNodeToFunction $ closeLNode oln
 
 newNodeType::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutInstruction -> Maybe OpenLNode -> LayoutP m a -> LayoutP m a
-newNodeType li@(LayoutInstruction lc oln) mOln lma = do
+newNodeType (LayoutInstruction lc oln) mOln lma = do
 --  liftIO $ putStrLn $ "newNodeType " ++ show li ++ " " ++ show mOln
   let f1 = closeCurrentNode mOln
       f2 x = put (Just oln) >> f1 x
@@ -172,7 +172,7 @@ doOneInstruction li@(LayoutInstruction lc oln) lma = do
 --  liftIO $ putStrLn $ "doOneInstruction " ++ show li ++ " (state was: " ++ show mOln ++ ")"
   case mOln of
     Nothing -> newNodeType li Nothing lma
-    (Just on) -> if (olnType on == olnType oln)
+    (Just on) -> if olnType on == olnType oln
                  then sameNodeType lc (olnCss oln) on lma
                  else newNodeType li (Just on) lma -- newNodeType also handles no previous node
 
@@ -187,18 +187,19 @@ instance (RD.MonadWidget t m,MonadIO (R.PushM t))=>MonadLayout LayoutP m where
   layoutInstruction = doOneInstruction
   liftF = liftAction
   lower lma = evalStateT (unS lma) Nothing 
-  insertLayout = lpInsertLayout
+  lAskParent = lpInsertLayout
 
-lpInsertLayout::forall t m.(RD.MonadWidget t m,MonadIO (R.PushM t))=>Node -> LayoutP m Node
-lpInsertLayout n = do
-  let buildNode::LNode->m Node
-      buildNode (LNode nType css) = do
-        e <- RD.buildEmptyElement (nodeTypeTag nType) ("class" RD.=: LT.toCssString css)
-        return $ toNode e
+lpInsertLayout::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutP m Node
+lpInsertLayout = do
   mOln <- getAndClear
-  case mOln of
-    Nothing -> return n
-    Just oln -> lift . buildNode $ closeLNode oln
+  lift $ case mOln of
+           Nothing  -> RD.askParent
+           Just oln -> addLNode $ closeLNode oln
+
+addLNode::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LNode->m Node
+addLNode (LNode nType css) = do
+  e <- RD.buildEmptyElement (nodeTypeTag nType) ("class" RD.=: LT.toCssString css) 
+  return $ toNode e
 
 -- so we can doUnoptimizedlayout for debugging
 type IdentityMW = StackedMW IdentityT
@@ -207,7 +208,7 @@ instance RD.MonadWidget t m=>MonadLayout IdentityMW m where
   layoutInstruction (LayoutInstruction _ oln) = hoist (lNodeToFunction $ closeLNode oln)
   liftF f = StackedMW . lift . f . runIdentityT . unS 
   lower = runIdentityT . unS
-  insertLayout = return
+  lAskParent = lift RD.askParent
 
 doUnoptimizedLayout::RD.MonadWidget t m =>IdentityMW m a -> m a
 doUnoptimizedLayout = lower
