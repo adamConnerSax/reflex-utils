@@ -88,7 +88,8 @@ instance Monad m => MonadState s (StackedMW (StateT s) m) where
   
 class (MonadTrans l, Monad (l m))=>MonadLayout l m where
   layoutInstruction::LayoutInstruction -> l m a -> l m a
-  liftF::(m a -> m b) -> l m a -> l m b
+--  lSubWidget::Node->l m a -> l m a
+  liftSW::(Node -> m a -> m b) -> Node -> l m a -> l m b
   lower::l m a->m a --loses information!
   lAskParent::l m Node
 
@@ -105,8 +106,8 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
   type WidgetHost (StackedMW l m) = RD.WidgetHost m
   type GuiAction  (StackedMW l m) = RD.GuiAction m
   askParent = lAskParent 
-  subWidget n  = liftF (RD.subWidget n)
-  subWidgetWithVoidActions n  = liftF (RD.subWidgetWithVoidActions n)
+  subWidget n  = liftSW RD.subWidget n
+  subWidgetWithVoidActions n  = liftSW RD.subWidgetWithVoidActions n
   liftWidgetHost = lift . RD.liftWidgetHost
   schedulePostBuild = lift . RD.schedulePostBuild
   addVoidAction = lift . RD.addVoidAction
@@ -185,20 +186,23 @@ liftAction f lpa = StackedMW $ StateT (\s -> flip (,) s <$> f (evalStateT (unS l
 
 instance (RD.MonadWidget t m,MonadIO (R.PushM t))=>MonadLayout LayoutP m where
   layoutInstruction = doOneInstruction
-  liftF = liftAction
+  liftSW swF n lma = fixNode n >>= \n' -> liftAction (swF n') lma
   lower lma = evalStateT (unS lma) Nothing 
-  lAskParent = lpInsertLayout
+  lAskParent = lift RD.askParent >>= fixNode
 
-lpInsertLayout::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutP m Node
-lpInsertLayout = do
+fixNode::(RD.MonadWidget t m, MonadIO (R.PushM t))=>Node->LayoutP m Node
+fixNode n = do
   mOln <- getAndClear
   lift $ case mOln of
-           Nothing  -> RD.askParent
-           Just oln -> addLNode $ closeLNode oln
-
-addLNode::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LNode->m Node
-addLNode (LNode nType css) = do
-  e <- RD.buildEmptyElement (nodeTypeTag nType) ("class" RD.=: LT.toCssString css) 
+           Nothing  -> return n
+           Just oln -> addLNode n $ closeLNode oln
+ 
+addLNode::(RD.MonadWidget t m, MonadIO (R.PushM t))=>Node->LNode->m Node
+addLNode p (LNode nType css) = do
+  doc <- RD.askDocument
+  Just e <- liftIO $ createElement doc (Just $ nodeTypeTag nType)
+  RD.addAttributes ("class" RD.=: LT.toCssString css) e
+  _ <- appendChild p $ Just e
   return $ toNode e
 
 -- so we can doUnoptimizedlayout for debugging
@@ -206,7 +210,7 @@ type IdentityMW = StackedMW IdentityT
 
 instance RD.MonadWidget t m=>MonadLayout IdentityMW m where
   layoutInstruction (LayoutInstruction _ oln) = hoist (lNodeToFunction $ closeLNode oln)
-  liftF f = StackedMW . lift . f . runIdentityT . unS 
+  liftSW swF n = StackedMW . lift . (swF n) . runIdentityT . unS 
   lower = runIdentityT . unS
   lAskParent = lift RD.askParent
 
