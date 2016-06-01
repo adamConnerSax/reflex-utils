@@ -152,18 +152,18 @@ sfTab = TabInfo "sf" "Simple Flex" simpleFlexWidget
 
 simpleLayoutPWidget::(MonadWidget t m,MonadIO (PushM t))=>LayoutM t m ()
 simpleLayoutPWidget = lift . doOptimizedLayout $ do
-  let dc cs s =  (divClass (cs ++ "_1") $ text s) >> (divClass (cs ++ "_2") $ text s)
+  let dc::MonadWidget t m=>String->String->m ()
+      dc cs s =  (divClass (cs ++ "_1") $ text s) >> (divClass (cs ++ "_2") $ text s)
       c s = flexLayoutColSimple $ flexLayoutItemSimple $ dc "col" s
       r s = flexLayoutRowSimple $ flexLayoutItemSimple $ dc "row" s
-  flexLayoutRowSimple $ do
-    c "Col 1"
-    divClass "" $ text "text"
+  flexLayoutRowSimple $  c "Col 1"
+{-    divClass "" $ text "text"
     c "Col 2"
     c "Col 3"
     flexLayoutColSimple $ do
      r "Row 1"
      r "Row 2"
-     r "Row 3"
+     r "Row 3" -}
    
 sflpTab::MonadWidget t m=>TabInfo t (LayoutM t m) ()
 sflpTab = TabInfo "sflp" "LayoutP" simpleLayoutPWidget
