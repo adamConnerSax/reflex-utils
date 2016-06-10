@@ -29,6 +29,9 @@ module Reflex.Dom.Contrib.Layout.FlexLayout
        , flexRow'
        ) where
 
+import Reflex.Dom.Contrib.Layout.Core
+import Reflex.Dom.Contrib.Layout.Types
+import Reflex.Dom.Contrib.Layout.LayoutP
 
 import qualified Reflex as R
 import qualified Reflex.Dom as RD
@@ -37,9 +40,7 @@ import Control.Monad.IO.Class (MonadIO)
 
 import qualified Data.Map as M
 
-import Reflex.Dom.Contrib.Layout.Core
-import Reflex.Dom.Contrib.Layout.Types
-import Reflex.Dom.Contrib.Layout.LayoutP
+
 --import Reflex.Dom.Contrib.Layout.GridLayout
 
 import Clay
@@ -109,6 +110,11 @@ flexCss = do
 
 flexCssBS::B.ByteString
 flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty [] $ flexCss
+
+{-
+performLayouts::RD.MonadWidget t m=>[LayoutInstruction]->m a->m a
+performLayouts lis = 
+-}
 
 flexLayoutRowSimple::MonadWidgetLC l mw t m=>m a->m a 
 flexLayoutRowSimple = layoutDivSimple ClosesLNode "gl-flex-row"

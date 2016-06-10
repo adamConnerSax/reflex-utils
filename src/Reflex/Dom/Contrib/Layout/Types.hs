@@ -18,6 +18,7 @@ import qualified GHCJS.DOM.Element as E
 import Control.Monad.State (StateT)
 import Control.Monad.Reader (ReaderT)
 import Data.Monoid ((<>))
+import qualified Data.Sequence as S
 --import Data.Default (Default(..))
 
 class IsCssClass a where
@@ -41,7 +42,37 @@ instance Monoid CssClasses where
 emptyCss::CssClasses
 emptyCss = CssClasses []
 
+-- For Layout optimization
+data LNodeConstraint = OpensLNode | InLNode | ClosesLNode deriving (Show)
 
+data LNodeType = LDiv deriving (Eq,Show)
+nodeTypeTag::LNodeType -> String
+nodeTypeTag LDiv = "div"
+
+data LNode = LNode LNodeType CssClasses deriving (Show)
+
+lNodeToFunction::RD.MonadWidget t m=> LNode -> m a -> m a
+lNodeToFunction (LNode LDiv css) = RD.divClass (toCssString css)
+
+data OpenLNode = OpenLNode { olnType::LNodeType, olnCss::CssClasses } deriving (Show)
+closeLNode::OpenLNode -> LNode
+closeLNode (OpenLNode nt css) = LNode nt css
+
+openNAddCss::CssClasses -> OpenLNode -> OpenLNode
+openNAddCss css (OpenLNode nt css') = OpenLNode nt (css <> css')
+
+data LayoutInstruction = LayoutInstruction LNodeConstraint OpenLNode deriving (Show)
+
+type LISeq = S.Seq LayoutInstruction
+
+class AddLayout a where
+  addLayout::LISeq->a->a
+
+instance AddLayout LISeq where
+  addLayout lis lis' = lis S.>< lis'
+
+
+-- for LayoutM
 type CssGridRowClass = CssClass
 type CssColumnClasses = CssClasses
 type GridColWidth = Int

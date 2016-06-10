@@ -10,8 +10,8 @@
 
 module Reflex.Dom.Contrib.Layout.LayoutP
   (
-    LNodeConstraint(..)
-  , layoutDiv
+--    LNodeConstraint(..)
+    layoutDiv
   , layoutDivSimple
   , doOptimizedLayout
   , doUnoptimizedLayout
@@ -23,6 +23,7 @@ module Reflex.Dom.Contrib.Layout.LayoutP
   , MonadWidgetLC
   ) where
 
+import qualified Reflex.Dom.Contrib.Layout.Types as LT
 
 import qualified Reflex as R
 import qualified Reflex.Class as RC
@@ -46,7 +47,6 @@ import Data.Monoid ((<>))
 import Data.Maybe (fromJust)
 import Data.Foldable (foldl',foldlM)
 
-import qualified Reflex.Dom.Contrib.Layout.Types as LT
 
 newtype StackedMW (t :: (* -> *) -> * -> *) m a = StackedMW { unS::t m a }
   deriving (Functor,Applicative,Monad,
@@ -87,7 +87,7 @@ instance Monad m => MonadState s (StackedMW (StateT s) m) where
   put = StackedMW . put
   
 class (MonadTrans l, Monad (l m))=>MonadLayout l m where
-  layoutInstruction::LayoutInstruction -> l m a -> l m a
+  layoutInstruction::LT.LayoutInstruction -> l m a -> l m a
 --  lSubWidget::Node->l m a -> l m a
   liftSW::(Node -> m a -> m b) -> Node -> l m a -> l m b
   lower::l m a->m a --loses information!
@@ -117,69 +117,50 @@ instance (RD.MonadWidget t m, MonadIO (RD.PushM t),
     return  (\n w -> runWidget n (lower w))
 
 
-data LNodeConstraint = OpensLNode | InLNode | ClosesLNode deriving (Show)
 
-data LNodeType = LDiv deriving (Eq,Show)
-nodeTypeTag::LNodeType -> String
-nodeTypeTag LDiv = "div"
-
-data LNode = LNode LNodeType LT.CssClasses deriving (Show)
-
-lNodeToFunction::RD.MonadWidget t m=> LNode -> m a -> m a
-lNodeToFunction (LNode LDiv css) = RD.divClass (LT.toCssString css)
-
-data OpenLNode = OpenLNode { olnType::LNodeType, olnCss::LT.CssClasses } deriving (Show)
-closeLNode::OpenLNode -> LNode
-closeLNode (OpenLNode nt css) = LNode nt css
-
-openNAddCss::LT.CssClasses -> OpenLNode -> OpenLNode
-openNAddCss css (OpenLNode nt css') = OpenLNode nt (css <> css')
-
-data LayoutInstruction = LayoutInstruction LNodeConstraint OpenLNode deriving (Show)
-
-type LayoutP = StatefulMW (Maybe OpenLNode)
-getAndClear::Monad m => LayoutP m (Maybe OpenLNode)
+type LayoutP = StatefulMW (Maybe LT.OpenLNode)
+getAndClear::Monad m => LayoutP m (Maybe LT.OpenLNode)
 getAndClear = do
   x <- get
   put Nothing
   return x
 
-closeCurrentNode::(RD.MonadWidget t m,MonadIO (R.PushM t)) => Maybe OpenLNode -> LayoutP m a -> LayoutP m a
+closeCurrentNode::(RD.MonadWidget t m,MonadIO (R.PushM t)) => Maybe LT.OpenLNode -> LayoutP m a -> LayoutP m a
 closeCurrentNode Nothing = id
-closeCurrentNode (Just oln) = lNodeToFunction $ closeLNode oln
+closeCurrentNode (Just oln) = LT.lNodeToFunction $ LT.closeLNode oln
 
-newNodeType::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutInstruction -> Maybe OpenLNode -> LayoutP m a -> LayoutP m a
-newNodeType (LayoutInstruction lc oln) mOln lma = do
+newNodeType::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LT.LayoutInstruction -> Maybe LT.OpenLNode -> LayoutP m a -> LayoutP m a
+newNodeType (LT.LayoutInstruction lc oln) mOln lma = do
 --  liftIO $ putStrLn $ "newNodeType " ++ show li ++ " " ++ show mOln
   let f1 = closeCurrentNode mOln
       f2 x = put (Just oln) >> f1 x
   case lc of
-    ClosesLNode -> f1 $ (closeCurrentNode $ Just oln) lma 
+    LT.ClosesLNode -> f1 $ (closeCurrentNode $ Just oln) lma 
     _           -> f2 lma
 
-sameNodeType::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LNodeConstraint->LT.CssClasses->OpenLNode->LayoutP m a ->LayoutP m a
+sameNodeType::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LT.LNodeConstraint->LT.CssClasses->LT.OpenLNode->LayoutP m a ->LayoutP m a
 sameNodeType lc css oln lma = do
 --  liftIO $ putStrLn $ "sameNodeType " ++ show lc ++ " " ++ show css ++ " " ++ show oln  
-  let oln' = openNAddCss css oln
+  let oln' = LT.openNAddCss css oln
   case lc of
-    OpensLNode  -> put (Just $ OpenLNode (olnType oln) css) >> closeCurrentNode (Just oln) lma
-    InLNode     -> put (Just oln') >> lma
-    ClosesLNode -> closeCurrentNode (Just oln') lma 
+    LT.OpensLNode  -> put (Just $ LT.OpenLNode (LT.olnType oln) css) >> closeCurrentNode (Just oln) lma
+    LT.InLNode     -> put (Just oln') >> lma
+    LT.ClosesLNode -> closeCurrentNode (Just oln') lma 
 
 
-doOneInstruction::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutInstruction -> LayoutP m a -> LayoutP m a
-doOneInstruction li@(LayoutInstruction lc oln) lma = do
+doOneInstruction::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LT.LayoutInstruction -> LayoutP m a -> LayoutP m a
+doOneInstruction li@(LT.LayoutInstruction lc oln) lma = do
   mOln <- getAndClear
 --  liftIO $ putStrLn $ "doOneInstruction " ++ show li ++ " (state was: " ++ show mOln ++ ")"
   case mOln of
     Nothing -> newNodeType li Nothing lma
-    (Just on) -> if olnType on == olnType oln
-                 then sameNodeType lc (olnCss oln) on lma
+    (Just on) -> if LT.olnType on == LT.olnType oln
+                 then sameNodeType lc (LT.olnCss oln) on lma
                  else newNodeType li (Just on) lma -- newNodeType also handles no previous node
 
 -- for debugging purposes
-doOneInstruction'::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutInstruction -> LayoutP m a -> LayoutP m a
-doOneInstruction' (LayoutInstruction lc oln) = closeCurrentNode (Just oln)
+doOneInstruction'::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LT.LayoutInstruction -> LayoutP m a -> LayoutP m a
+doOneInstruction' (LT.LayoutInstruction lc oln) = closeCurrentNode (Just oln)
           
 liftAction::Monad m=>(m a->m b)->LayoutP m a -> LayoutP m b
 liftAction f lpa = StackedMW $ StateT (\s -> flip (,) s <$> f (evalStateT (unS lpa) s))
@@ -195,12 +176,12 @@ fixNode n = do
   mOln <- getAndClear
   lift $ case mOln of
            Nothing  -> return n
-           Just oln -> addLNode n $ closeLNode oln
+           Just oln -> addLNode n $ LT.closeLNode oln
  
-addLNode::(RD.MonadWidget t m, MonadIO (R.PushM t))=>Node->LNode->m Node
-addLNode p (LNode nType css) = do
+addLNode::(RD.MonadWidget t m, MonadIO (R.PushM t))=>Node->LT.LNode->m Node
+addLNode p (LT.LNode nType css) = do
   doc <- RD.askDocument
-  Just e <- liftIO $ createElement doc (Just $ nodeTypeTag nType)
+  Just e <- liftIO $ createElement doc (Just $ LT.nodeTypeTag nType)
   RD.addAttributes ("class" RD.=: LT.toCssString css) e
   _ <- appendChild p $ Just e
   return $ toNode e
@@ -209,7 +190,7 @@ addLNode p (LNode nType css) = do
 type IdentityMW = StackedMW IdentityT
 
 instance RD.MonadWidget t m=>MonadLayout IdentityMW m where
-  layoutInstruction (LayoutInstruction _ oln) = hoist (lNodeToFunction $ closeLNode oln)
+  layoutInstruction (LT.LayoutInstruction _ oln) = hoist (LT.lNodeToFunction $ LT.closeLNode oln)
   liftSW swF n = StackedMW . lift . (swF n) . runIdentityT . unS 
   lower = runIdentityT . unS
   lAskParent = lift RD.askParent
@@ -220,10 +201,10 @@ doUnoptimizedLayout = lower
 doOptimizedLayout::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutP m a -> m a
 doOptimizedLayout = lower 
 
-layoutDiv::(MonadLayout l m, RD.MonadWidget t m)=>LNodeConstraint->LT.CssClasses->l m a -> l m a
-layoutDiv lc css = layoutInstruction (LayoutInstruction lc (OpenLNode LDiv css))
+layoutDiv::(MonadLayout l m, RD.MonadWidget t m)=>LT.LNodeConstraint->LT.CssClasses->l m a -> l m a
+layoutDiv lc css = layoutInstruction (LT.LayoutInstruction lc (LT.OpenLNode LT.LDiv css))
 
-layoutDivSimple::(MonadLayout l m, RD.MonadWidget t m)=>LNodeConstraint->String->l m a -> l m a
+layoutDivSimple::(MonadLayout l m, RD.MonadWidget t m)=>LT.LNodeConstraint->String->l m a -> l m a
 layoutDivSimple lc cls = layoutDiv lc (LT.CssClasses [LT.CssClass cls])
 
 
