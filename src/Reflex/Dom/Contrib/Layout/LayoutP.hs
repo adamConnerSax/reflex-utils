@@ -167,9 +167,9 @@ liftAction f lpa = StackedMW $ StateT (\s -> flip (,) s <$> f (evalStateT (unS l
 
 instance (RD.MonadWidget t m,MonadIO (R.PushM t))=>MonadLayout LayoutP m where
   layoutInstruction = doOneInstruction
-  liftSW swF n lma = fixNode n >>= \n' -> liftAction (swF n') lma
+  liftSW swF n lma = liftIO (putStrLn "sw: ") >>  get >>= liftIO . putStr . show >> fixNode n >>= \n' -> liftAction (swF n') lma
   lower lma = evalStateT (unS lma) Nothing 
-  lAskParent = lift RD.askParent >>= fixNode
+  lAskParent = liftIO (putStrLn "ap: ") >> get >>= liftIO . putStr . show >> lift RD.askParent >>= fixNode
 
 fixNode::(RD.MonadWidget t m, MonadIO (R.PushM t))=>Node->LayoutP m Node
 fixNode n = do
@@ -184,7 +184,7 @@ addLNode p (LT.LNode nType css) = do
   Just e <- liftIO $ createElement doc (Just $ LT.nodeTypeTag nType)
   RD.addAttributes ("class" RD.=: LT.toCssString css) e
   _ <- appendChild p $ Just e
-  return $ toNode e
+  return $ toNode e 
 
 -- so we can doUnoptimizedlayout for debugging
 type IdentityMW = StackedMW IdentityT
