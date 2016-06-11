@@ -10,6 +10,11 @@ module Reflex.Dom.Contrib.Layout.All
        , flexLayoutRowSimple
        , flexLayoutColSimple
        , flexLayoutItemSimple
+       , (##)
+       , (#$)
+       , liFlexRow
+       , liFlexCol
+       , liFlexItem
        , flexFillL
        , flexFillR
        , flexHCenter
@@ -71,6 +76,8 @@ import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,
                                              flexLayoutRow,flexCol,flexLayoutCol,flexRow,
                                              flexLayoutRow',flexCol',flexLayoutCol',flexRow',
                                              flexLayoutRowSimple, flexLayoutColSimple, flexLayoutItemSimple)
+
+import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$),liFlexRow,liFlexCol,liFlexItem)
 
 import Reflex.Dom.Contrib.Layout.TabLayout (tabCssBS,TabInfo(..),staticTabbedLayout,dynamicTabbedLayout)
 

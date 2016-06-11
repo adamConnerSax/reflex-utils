@@ -1,5 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GADTs #-}
 module Reflex.Dom.Contrib.Layout.FlexLayout
        (
@@ -39,11 +41,11 @@ import qualified Reflex.Dom as RD
 import Control.Monad.IO.Class (MonadIO)
 
 import qualified Data.Map as M
-
-
+import qualified Data.Sequence as S
+import Data.Foldable (mapM_,foldl')
 --import Reflex.Dom.Contrib.Layout.GridLayout
 
-import Clay
+import Clay hiding (id)
 import Data.Text.Lazy.Encoding (encodeUtf8)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -110,11 +112,6 @@ flexCss = do
 
 flexCssBS::B.ByteString
 flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty [] $ flexCss
-
-{-
-performLayouts::RD.MonadWidget t m=>[LayoutInstruction]->m a->m a
-performLayouts lis = 
--}
 
 flexLayoutRowSimple::MonadWidgetLC l mw t m=>m a->m a 
 flexLayoutRowSimple = layoutDivSimple ClosesLNode "gl-flex-row"
@@ -218,7 +215,7 @@ flexFillU w = do
     wrapWidget w
 
 
-
+-- Below is all for LayoutM
 flexLayoutRowF::R.Reflex t=>LayoutF t
 flexLayoutRowF _ lTree =
   let flexRowClasses = CssClasses [CssClass "gl-flex-row"]

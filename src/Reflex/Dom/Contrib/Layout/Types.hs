@@ -65,12 +65,6 @@ data LayoutInstruction = LayoutInstruction LNodeConstraint OpenLNode deriving (S
 
 type LISeq = S.Seq LayoutInstruction
 
-class AddLayout a where
-  addLayout::LISeq->a->a
-
-instance AddLayout LISeq where
-  addLayout lis lis' = lis S.>< lis'
-
 
 -- for LayoutM
 type CssGridRowClass = CssClass
