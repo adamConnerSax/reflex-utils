@@ -12,6 +12,12 @@ module Reflex.Dom.Contrib.Layout.TabLayout
        ) where
 
 
+
+--import Reflex.Dom.Contrib.Layout.LayoutM
+import Reflex.Dom.Contrib.Layout.Types
+import Reflex.Dom.Contrib.Layout.ClayUtils
+
+
 import qualified Reflex as R
 import qualified Reflex.Dom as RD
 import Reflex.Dom.Contrib.Widgets.DynTabs
@@ -19,9 +25,6 @@ import Control.Monad.IO.Class (MonadIO)
 import qualified Data.ByteString as B
 import qualified Data.Map as M
 
-import Reflex.Dom.Contrib.Layout.Core
-import Reflex.Dom.Contrib.Layout.Types
-import Reflex.Dom.Contrib.Layout.ClayUtils
 
 import Prelude hiding (div)
 import Clay

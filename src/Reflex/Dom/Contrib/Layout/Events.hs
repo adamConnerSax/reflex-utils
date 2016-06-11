@@ -12,9 +12,13 @@ module Reflex.Dom.Contrib.Layout.Events
 --     , addCssUpdateEventToLast
        ) where
 
+
+import Reflex.Dom.Contrib.Layout.Types
+import Reflex.Dom.Contrib.Layout.LayoutM
+
 import qualified Reflex as R
 import qualified Reflex.Dom as RD
-import Reflex.Dom.Contrib.Layout.Core
+
 import qualified Data.Map as M
 import Control.Lens (set,(.~),(^.),(<>~),(<>=),(%=),(.=),use)
 import Data.Monoid (mappend)
@@ -23,7 +27,7 @@ import Data.List (foldl')
 import Control.Monad (foldM)
 import Control.Monad.Fix (MonadFix)
 
-import Reflex.Dom.Contrib.Layout.Types
+
 
 addClassesToLast::(R.Reflex t,Monad m)=>CssClasses->LayoutM t m ()
 addClassesToLast css = (lsTree.lnInfo.liNewClasses) <>= css

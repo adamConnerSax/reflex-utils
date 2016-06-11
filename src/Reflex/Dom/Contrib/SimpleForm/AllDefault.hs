@@ -23,6 +23,23 @@ module Reflex.Dom.Contrib.SimpleForm.AllDefault
 -- | Also serves as an example for building others
 -- | and defFailureF and defSumF can be re-used for other implementations
 
+import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..))
+import Reflex.Dom.Contrib.Layout.FlexLayout (flexCol,flexRow,flexItem,
+                                             flexFillR,flexFillL,flexHCenter,
+                                             flexFillU,flexFillD,flexVCenter)
+
+import Reflex.Dom.Contrib.SimpleForm.Builder
+import Reflex.Dom.Contrib.SimpleForm.Instances(sfWidget)
+
+import qualified DataBuilder as B
+
+import qualified Reflex as R 
+import qualified Reflex.Dom as RD
+import Reflex.Dom.Contrib.Widgets.Common (WidgetConfig(..),Widget0(..),htmlDropdownStatic)
+
+import Clay ((?),(@=),(#))
+import qualified Clay as C
+
 import Control.Monad.IO.Class (MonadIO)
 import Control.Lens ((^.))
 import Control.Monad.Reader (ReaderT, runReaderT, ask, asks, lift,local)
@@ -36,24 +53,6 @@ import Data.Maybe (fromJust)
 import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Monoid ((<>))
-import qualified Clay as C
-import Clay ((?),(@=),(#))
-
-import qualified Reflex as R 
-import qualified Reflex.Dom as RD
-import Reflex.Dom.Contrib.Widgets.Common (WidgetConfig(..),Widget0(..),htmlDropdownStatic)
-import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..))
-import Reflex.Dom.Contrib.Layout.FlexLayout (flexLayoutColSimple,flexLayoutRowSimple,flexLayoutItemSimple,
-                                             flexFillR,flexFillL,flexHCenter,
-                                             flexFillU,flexFillD,flexVCenter,
-                                             flexFillR',flexFillL',flexHCenter',
-                                             flexFillU',flexFillD',flexVCenter')
-import Reflex.Dom.Contrib.Layout.LayoutP (MonadLayout,StackedMW)
-
-import Reflex.Dom.Contrib.SimpleForm.Builder
-import Reflex.Dom.Contrib.SimpleForm.Instances(sfWidget)
-
-import qualified DataBuilder as B
 
 data DefSFCfg  = DefSFCfg
                  {
@@ -94,24 +93,26 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
     sfrpCW <- itemL $ sfWidget id sfrpCN Nothing wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
-
+{-
 instance (MonadIO (PushM t),RD.MonadWidget t m,
           MonadAsyncException (l m),
           MonadTrans l, MFunctor l, Monad (l m),MonadLayout (StackedMW l) m,
           MonadFix (l m), MonadIO (l m), MonadRef (l m),MonadException (l m),
           Ref (StackedMW l m) ~ Ref IO)=>SimpleFormConfiguration DefSFCfg t (StackedMW l m) where
+-}
+instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg t m where
   failureF = defFailureF
   sumF = defSumF
   dynamicDiv  attrsDyn = liftLF $ RD.elDynAttr "div" attrsDyn
-  formItem    = liftLF flexLayoutItemSimple 
-  layoutVert  = liftLF flexLayoutColSimple 
-  layoutHoriz = liftLF flexLayoutRowSimple
-  layoutL     = liftLF flexFillR' 
-  layoutR     = liftLF flexFillL'
-  layoutHC    = liftLF flexHCenter'
-  layoutT     = liftLF flexFillD' 
-  layoutB     = liftLF flexFillU'
-  layoutVC    = liftLF flexVCenter'
+  formItem    = liftLF flexItem 
+  layoutVert  = liftLF flexCol 
+  layoutHoriz = liftLF flexRow
+  layoutL     = liftLF flexFillR 
+  layoutR     = liftLF flexFillL
+  layoutHC    = liftLF flexHCenter
+  layoutT     = liftLF flexFillD 
+  layoutB     = liftLF flexFillU
+  layoutVC    = liftLF flexVCenter
   layoutCollapsible = collapsibleWidget 
   validItemStyle   = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask

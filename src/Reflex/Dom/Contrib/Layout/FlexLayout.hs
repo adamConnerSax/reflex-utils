@@ -12,28 +12,17 @@ module Reflex.Dom.Contrib.Layout.FlexLayout
        , flexVCenter
        , flexFillD
        , flexFillU
-       , flexFillR'
-       , flexFillL'
-       , flexHCenter'
-       , flexVCenter'
-       , flexFillD'
-       , flexFillU'
-       , flexLayoutRowSimple
-       , flexLayoutColSimple
-       , flexLayoutItemSimple
-       , flexLayoutRow
-       , flexCol
-       , flexLayoutCol
        , flexRow
-       , flexLayoutRow'
-       , flexCol'
-       , flexLayoutCol'
-       , flexRow'
+       , flexCol
+       , flexItem
+       , flexSizedItem
+       , numberFlexGrowOptions
        ) where
 
-import Reflex.Dom.Contrib.Layout.Core
-import Reflex.Dom.Contrib.Layout.Types
-import Reflex.Dom.Contrib.Layout.LayoutP
+--import Reflex.Dom.Contrib.Layout.Core
+import Reflex.Dom.Contrib.StackedMonadWidget
+import Reflex.Dom.Contrib.Layout.LayoutM
+
 
 import qualified Reflex as R
 import qualified Reflex.Dom as RD
@@ -113,64 +102,21 @@ flexCss = do
 flexCssBS::B.ByteString
 flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty [] $ flexCss
 
-flexLayoutRowSimple::MonadWidgetLC l mw t m=>m a->m a 
-flexLayoutRowSimple = layoutDivSimple ClosesLNode "gl-flex-row"
+flexRow::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexRow = RD.divClass "gl-flex-row" 
 
-flexLayoutColSimple::MonadWidgetLC l mw t m=>m a->m a 
-flexLayoutColSimple = layoutDivSimple ClosesLNode "gl-flex-col"
+flexCol::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexCol = RD.divClass "gl-flex-col" 
 
-flexLayoutItemSimple::MonadWidgetLC l mw t m=>m a->m a  
-flexLayoutItemSimple = layoutDivSimple InLNode "gl-flex-item-1"
+flexItem::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexItem = RD.divClass "gl-flex-item" 
 
-wrapWidget'::MonadWidgetLC l mw t m=>m a->m a
-wrapWidget' = RD.divClass "" --flexLayoutItemSimple
-
-flexFillH'::MonadWidgetLC l mw t m=>m a->m a
-flexFillH' = layoutDivSimple ClosesLNode "flexFillH" 
-
-flexFillV'::MonadWidgetLC l mw t m=>m a->m a
-flexFillV' = layoutDivSimple ClosesLNode "flexFillV" 
-
-flexFill'::RD.MonadWidget t m=>m ()
-flexFill' = RD.divClass "fill" $ RD.blank
-
-flexFillR'::MonadWidgetLC l mw t m=>m a->m a --(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
-flexFillR' w = flexFillH' $ do
-  a <- wrapWidget' w
-  flexFill'
-  return a
-
-flexFillL'::MonadWidgetLC l mw t m=>m a->m a
-flexFillL' w = flexFillH' $ flexFill' >> wrapWidget w
-
-flexHCenter'::MonadWidgetLC l mw t m=>m a->m a
-flexHCenter' w = flexFillH' $ do
-  flexFill'
-  a <- wrapWidget' w
-  flexFill'
-  return a
-
-flexVCenter'::MonadWidgetLC l mw t m=>m a->m a
-flexVCenter' w = flexFillV' $ do
-  flexFill'
-  a <- wrapWidget' w
-  flexFill'
-  return a
-
-flexFillD'::MonadWidgetLC l mw t m=>m a->m a
-flexFillD' w = flexFillV' $ do
-  a <- wrapWidget' w
-  flexFill'
-  return a
-
-flexFillU'::MonadWidgetLC l mw t m=>m a->m a
-flexFillU' w = flexFillV' $ flexFill' >> wrapWidget' w
+flexSizedItem::(RD.MonadWidget t m,MonadIO (R.PushM t))=>Int->m a->m a
+flexSizedItem n = let n' = n `mod` numberFlexGrowOptions in RD.divClass ("gl-flex-item-" ++ show n') 
 
 wrapWidget::RD.MonadWidget t m=>m a->m a
 wrapWidget = RD.divClass "" 
 
---flexLayoutFillH::(RD.MonadWidget t m, MonadLayout l m)=>l m a->l m a
---flexLayoutFillH = layoutDivSimple InLNode "gl-flex-row"
 
 flexFillR::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexFillR w = do
@@ -215,122 +161,6 @@ flexFillU w = do
     wrapWidget w
 
 
--- Below is all for LayoutM
-flexLayoutRowF::R.Reflex t=>LayoutF t
-flexLayoutRowF _ lTree =
-  let flexRowClasses = CssClasses [CssClass "gl-flex-row"]
-  in addNewClassesToTreeTop flexRowClasses lTree
-
-flexLayoutRowD::R.Reflex t=>[String]->LayoutDescription t
-flexLayoutRowD tags = LayoutDescription flexLayoutRowF M.empty (["all","row","flexContainer"]++tags)
-
-flexLayoutRow::RD.MonadWidget t m=>LayoutM t m a->LayoutM t m a
-flexLayoutRow = addNewLayoutNode $ flexLayoutRowD []
-
-flexLayoutRow'::RD.MonadWidget t m=>[String]->LayoutM t m a->LayoutM t m a 
-flexLayoutRow' tags = addNewLayoutNode $ flexLayoutRowD tags
-
-flexColF::R.Reflex t=>Int->LayoutF t
-flexColF w _ lTree =
-  let n = Prelude.max 1 $ Prelude.min w numberFlexGrowOptions
-      flexColClasses = CssClasses [CssClass ("gl-flex-item-" ++ show n)]
-  in addNewClassesToTreeTop flexColClasses lTree
-
-flexColD::R.Reflex t=>[String]->Int->LayoutDescription t
-flexColD tags w = LayoutDescription (flexColF w) M.empty (["all","col","flexItem"]++tags)
-
-flexCol::RD.MonadWidget t m=>Int->LayoutM t m a->LayoutM t m a
-flexCol w = addNewLayoutNode (flexColD [] w)
-
-flexCol'::RD.MonadWidget t m=>[String]->Int->LayoutM t m a->LayoutM t m a
-flexCol' tags w = addNewLayoutNode (flexColD tags w)
-
-flexLayoutColF::R.Reflex t=>LayoutF t
-flexLayoutColF _ lTree =
-  let flexColClasses = CssClasses [CssClass "gl-flex-col"]
-  in addNewClassesToTreeTop flexColClasses lTree
-
-flexLayoutColD::R.Reflex t=>[String]->LayoutDescription t
-flexLayoutColD tags = LayoutDescription flexLayoutColF M.empty (["all","col","flexContainer"] ++ tags)
-
-flexLayoutCol::RD.MonadWidget t m=>LayoutM t m a->LayoutM t m a
-flexLayoutCol = addNewLayoutNode (flexLayoutColD [])
-
-flexLayoutCol'::RD.MonadWidget t m=>[String]->LayoutM t m a->LayoutM t m a
-flexLayoutCol' tags = addNewLayoutNode (flexLayoutColD tags)
 
 
-flexRowF::R.Reflex t=>Int->LayoutF t
-flexRowF h _ lTree =
-  let n = Prelude.max 1 $ Prelude.min h numberFlexGrowOptions
-      flexRowClasses = CssClasses [CssClass ("gl-flex-item-" ++ show n)]
-  in addNewClassesToTreeTop flexRowClasses lTree
-
-flexRowD::R.Reflex t=>[String]->Int->LayoutDescription t
-flexRowD tags h = LayoutDescription (flexRowF h) M.empty (["all","row","flexItem"]++tags)
-
-flexRow::RD.MonadWidget t m=>Int->LayoutM t m a->LayoutM t m a
-flexRow h = addNewLayoutNode (flexRowD [] h)
-
-flexRow'::RD.MonadWidget t m=>[String]->Int->LayoutM t m a->LayoutM t m a
-flexRow' tags h = addNewLayoutNode (flexRowD tags h)
-
-
-{-
-flexDirectionAttr::FlexDirection->String
-flexDirectionAttr FlexRow = "row"
-flexDirectionAttr FlexRowReverse = "row-reverse"
-flexDirectionAttr FlexColumn = "column"
-flexDirectionAttr FlexColumnReverse = "column-reverse"
-
-flexWrapAttr::FlexWrap->String
-flexWrapAttr FlexNoWrap = "no-wrap"
-flexWrapAttr FlexDoWrap = "wrap"
-flexWrapAttr FlexWrapReverse = "wrap-reverse"
-
-flexLocationAttr::FlexLocation->String
-flexLocationAttr FlexStart = "flex-start"
-flexLocationAttr FlexEnd = "flex-end"
-flexLocationAttr FlexCenter = "flex-center"
-
-flexFillAttr::FlexFill->String
-flexFillAttr FlexSpaceBetween = "space-between"
-flexFillAttr FlexSpaceAround = "space-around"
-
-flexJustifyAttr::FlexJustify->String
-flexJustifyAttr FlexJustifyLocation l = flexLocationAttr l
-flexJustifyAttr FlexJustifyFill f = flexFillAttr f
-
-flexAlignItemsAttr::FlexAlignItems->String
-flexAlignItemsAttr FlexAlignItemsLocation l = flexLocationAttr l
-flexAlignItemsAttr FlexBaseline = "baseline"
-flexAlignItemsAttr FlexItemStretch = "stretch"
-
-flexAlignContentAttr::FlexAlignContent->String
-flexAlignContentAttr FlexContentLocation l = flexLocationAttr l
-flexAlignContentAttr FlexContentFill f = flexFillAttr f
-flexAlignContentAttr FlexContentStretch = "stretch"
-
-flexLengthAttr::FlexLength->String
-flexLengthAttr Px n = show n ++ "px"
-flexLengthAttr Rem x = show x ++ "rem"
-flexLengthAttr Pct n = show n ++ "%"
-
-flexBasisAttr::FlexBasis->String
-flexBasisAttr FlexBasisLength l = flexLengthAttr l
-flexBasisAttr FlexAuto = "auto"
-
-
-flexContainerAttributes::FlexContainerConfig->M.Map String String
-flexContainerAttributes fcc = ("style" =: "flex")
-                              <> ("flex-flow" =: (flexDirectionAttr $ _fccDirection fcc ++ " || " ++
-                                                  flexWrapAttr $ _fccWrap fcc))
-                              <> ("flex-justify-content" =: (flexJustifyAttr $ _fccJustify fcc))
-                              <> ("flex-align-items" =: (flexAlignItemsAttr $ _fccAlignItems fcc))
-                              <> ("flex-align-content" =: (flexAlignContentAttr $ _fccAlignContent fcc))
-
-flexItemAttributes::FlexItemConfig->M.Map String String
-flexItemAttributes fic = maybe (M.empty) (\n->("order:
-                                                            
--}
 

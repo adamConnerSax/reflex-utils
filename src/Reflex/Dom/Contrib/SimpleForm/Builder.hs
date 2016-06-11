@@ -53,6 +53,18 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , sfAttrs
        ) where
 
+import Reflex.Dom.Contrib.Layout.Types (CssClass,CssClasses(..),IsCssClass(..))
+--import Reflex.Dom.Contrib.Layout.LayoutM()
+
+import qualified DataBuilder as B
+import DataBuilder as BExport (Builder(..),GBuilder(..),FieldName,MDWrapped(..),buildAFromConList)
+import DataBuilder.GenericSOP as GSOP (Generic,HasDatatypeInfo,deriveGeneric)
+import DataBuilder.TH (deriveBuilder)
+
+import qualified Reflex as R
+import Reflex as ReflexExport (PushM)
+import qualified Reflex.Dom as RD
+
 import Control.Monad.Reader (ReaderT, runReaderT, ask) --, lift,local)
 import Control.Monad.Morph
 import Data.Maybe (isJust,fromMaybe)
@@ -60,17 +72,7 @@ import Data.Monoid ((<>))
 import qualified Data.Map as M
 import Language.Haskell.TH
 
-import qualified Reflex as R
-import Reflex as ReflexExport (PushM)
-import qualified Reflex.Dom as RD
 
-import Reflex.Dom.Contrib.Layout.Types (CssClass,CssClasses(..),IsCssClass(..))
-import Reflex.Dom.Contrib.Layout.Core()
-
-import qualified DataBuilder as B
-import DataBuilder as BExport (Builder(..),GBuilder(..),FieldName,MDWrapped(..),buildAFromConList)
-import DataBuilder.GenericSOP as GSOP (Generic,HasDatatypeInfo,deriveGeneric)
-import DataBuilder.TH (deriveBuilder)
 
 type DynMaybe t a = R.Dynamic t (Maybe a)
 type SFRW e t m a = ReaderT e m (DynMaybe t a)

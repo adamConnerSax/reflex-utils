@@ -8,6 +8,16 @@
 {-# LANGUAGE RecursiveDo #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
+-- From this lib
+import Reflex.Dom.Contrib.Layout.Types (LayoutM,CssClasses,IsCssClass(..))
+import Reflex.Dom.Contrib.Layout.LayoutM() --for LayoutM instances
+
+-- All the basic (primitive types, tuples, etc.) are in here
+import Reflex.Dom.Contrib.SimpleForm.Instances.Basic()
+
+import Reflex.Dom.Contrib.SimpleForm.Builder
+
+
 import Control.Monad (join)
 import Control.Arrow ((&&&))
 import Control.Monad.Reader (ReaderT, lift)
@@ -33,15 +43,6 @@ import qualified Data.HashSet as HS
 -- my libs
 import qualified DataBuilder as B
 
--- From this lib
-import Reflex.Dom.Contrib.Layout.Types (LayoutM,CssClasses,IsCssClass(..))
-import Reflex.Dom.Contrib.Layout.Core() --for LayoutM instances
-
-
--- All the basic (primitive types, tuples, etc.) are in here
-import Reflex.Dom.Contrib.SimpleForm.Instances.Basic()
-
-import Reflex.Dom.Contrib.SimpleForm.Builder
 
 -- Container instances
 -- Editing/Appendability requires that the container be isomorphic to something traversable, but traversable in the (key,value) pairs for maps.

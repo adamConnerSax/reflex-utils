@@ -1,37 +1,30 @@
 module Reflex.Dom.Contrib.Layout.All
        (
          module Reflex.Dom.Contrib.Layout.Types
-       , module Reflex.Dom.Contrib.Layout.Core
+       , module Reflex.Dom.Contrib.Layout.LayoutM
         -- These don't use LayoutM
        , TabInfo(..)
        , staticTabbedLayout
        , dynamicTabbedLayout
        , flexCssBS
-       , flexLayoutRowSimple
-       , flexLayoutColSimple
-       , flexLayoutItemSimple
+       , flexRow
+       , flexCol
+       , flexItem
        , (##)
        , (#$)
-       , liFlexRow
-       , liFlexCol
-       , liFlexItem
+       , optFlexRow
+       , optFlexCol
+       , optFlexItem
+       , optFlexFillH
+       , optFlexFillV
        , flexFillL
        , flexFillR
        , flexHCenter
        , flexFillU
        , flexFillD
        , flexVCenter
-       , flexFillL'
-       , flexFillR'
-       , flexHCenter'
-       , flexFillU'
-       , flexFillD'
-       , flexVCenter'         
        , cssToBS
        , tabCssBS
-       , emptyCss
-       , emptyClassMap
-       , emptyDynamicCssMap
          -- from here down we are using LayoutM machinery
        , newRow
        , newRow'
@@ -44,22 +37,32 @@ module Reflex.Dom.Contrib.Layout.All
        , addKeyedCssUpdateEventBelow'
        , addKeyedCssUpdateEventsBelow'
        , getKeyedCssUpdateEvent
-       , flexLayoutRow
-       , flexCol
-       , flexLayoutCol
-       , flexRow
-       , flexLayoutRow'
-       , flexCol'
-       , flexLayoutCol'
-       , flexRow'
-       , runLayout
-       , runLayoutMain
-       , runStyledLayout
+       , lmFlexLayoutRow
+       , lmFlexCol
+       , lmFlexLayoutCol
+       , lmFlexRow
+       , lmFlexLayoutRow'
+       , lmFlexCol'
+       , lmFlexLayoutCol'
+       , lmFlexRow'
        ) where
 
 import Reflex.Dom.Contrib.Layout.Types
 
-import Reflex.Dom.Contrib.Layout.Core (emptyCss,emptyClassMap,emptyDynamicCssMap,runLayout,runStyledLayout,runLayoutMain)
+import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,flexRow,flexCol,flexItem,
+                                             flexFillR,flexFillL,flexHCenter,
+                                             flexFillD,flexFillU,flexVCenter)
+
+       
+
+import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$),optFlexRow,optFlexCol,optFlexItem,optFlexFillV,optFlexFillH)
+
+
+import Reflex.Dom.Contrib.Layout.LayoutM (emptyCss,emptyClassMap,emptyDynamicCssMap,runLayout,runStyledLayout,runLayoutMain)
+
+import Reflex.Dom.Contrib.Layout.LayoutMFlex (lmFlexLayoutRow,lmFlexCol,lmFlexLayoutCol,lmFlexRow,
+                                              lmFlexLayoutRow',lmFlexCol',lmFlexLayoutCol',lmFlexRow')
+
 
 import Reflex.Dom.Contrib.Layout.GridLayout (newRow,newRow',newCol)
 
@@ -68,16 +71,6 @@ import Reflex.Dom.Contrib.Layout.Events (addClassesToLast,addKeyedClassesBelow,
                                          addKeyedCssUpdateEventBelow',addKeyedCssUpdateEventsBelow',getKeyedCssUpdateEvent)
 
 
-import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,
-                                             flexFillR,flexFillL,flexHCenter,
-                                             flexFillD,flexFillU,flexVCenter,
-                                             flexFillR',flexFillL',flexHCenter',
-                                             flexFillD',flexFillU',flexVCenter',
-                                             flexLayoutRow,flexCol,flexLayoutCol,flexRow,
-                                             flexLayoutRow',flexCol',flexLayoutCol',flexRow',
-                                             flexLayoutRowSimple, flexLayoutColSimple, flexLayoutItemSimple)
-
-import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$),liFlexRow,liFlexCol,liFlexItem)
 
 import Reflex.Dom.Contrib.Layout.TabLayout (tabCssBS,TabInfo(..),staticTabbedLayout,dynamicTabbedLayout)
 

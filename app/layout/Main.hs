@@ -4,14 +4,16 @@
 {-# LANGUAGE RecursiveDo #-}
 module Main where
 
+import Reflex.Dom.Contrib.Layout.All
+import Reflex.Dom.Contrib.Layout.LayoutM()
+import Reflex.Dom.Contrib.Layout.GridConfigs
+import Reflex.Dom.Contrib.Layout.FlexLayout (flexSizedItem,flexRow,flexCol,flexItem,flexCssBS)
+
 import Reflex
 import Reflex.Dom
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
-import Reflex.Dom.Contrib.Layout.All
-import Reflex.Dom.Contrib.Layout.Core()
-import Reflex.Dom.Contrib.Layout.GridConfigs
 
-import Reflex.Dom.Contrib.Layout.LayoutP (doOptimizedLayout,doUnoptimizedLayout)
+--import Reflex.Dom.Contrib.Layout.LayoutP (doOptimizedLayout,doUnoptimizedLayout)
 
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans (lift)
@@ -84,10 +86,10 @@ innerBoxClassDDEvent setEv = RDC._widget0_change <$> RDC.htmlDropdownStatic inne
 innerBoxInitialCss = CssClasses [CssClass "demo-box-black"]
 
 row::MonadWidget t m=>LayoutM t m a->LayoutM t m a
-row = flexLayoutRow
+row = lmFlexLayoutRow
 
 col::MonadWidget t m=>Int->LayoutM t m a->LayoutM t m a
-col = flexCol
+col = lmFlexCol
 
 subWidgetSimple::(MonadWidget t m,MonadIO (PushM t))=>LayoutM t m ()
 subWidgetSimple = do
@@ -136,38 +138,38 @@ testControl setEv  = mdo
     return (evSelf,evChildren)
   return evChildren
 
-simpleFlexWidget::(MonadWidget t m, MonadIO (PushM t))=>LayoutM t m ()
+simpleFlexWidget::(MonadWidget t m, MonadIO (PushM t))=>m ()
 simpleFlexWidget = do
-  let w = flexRow 1 $ do
-        flexCol 1 $ divClass "demo-box-black" $ text  "A"
-        flexCol 2 $ divClass "demo-box-green" $ text  "B"
+  let w = flexRow $ do
+        flexSizedItem 2 $ divClass "demo-box-black" $ text  "A"
+        flexSizedItem 1 $ divClass "demo-box-green" $ text  "B"
   w
   flexFillR w
   flexHCenter w
   flexFillL w
 
-sfTab::MonadWidget t m=>TabInfo t (LayoutM t m) ()
+sfTab::MonadWidget t m=>TabInfo t m ()
 sfTab = TabInfo "sf" "Simple Flex" simpleFlexWidget
 
 
-simpleLayoutPWidget::(MonadWidget t m,MonadIO (PushM t))=>LayoutM t m ()
-simpleLayoutPWidget = lift . doUnoptimizedLayout $ do
+simpleLayoutPWidget::(MonadWidget t m, MonadIO (PushM t))=>m ()
+simpleLayoutPWidget = do
   let dc::MonadWidget t m=>String->String->m ()
       dc cs s =  (divClass (cs ++ "_1") $ text s) >> (divClass (cs ++ "_2") $ text s)
       c::MonadWidget t m=>String->m ()
-      c s = liFlexCol #$ dc "col" s
+      c s = optFlexCol #$ dc "col" s
       r::MonadWidget t m=>String->m ()
-      r s = liFlexRow #$ dc "row" s
-  liFlexRow #$ do
+      r s = optFlexRow #$ dc "row" s
+  optFlexRow #$ do
     c "Col 1"
     c "Col 2"
     c "Col 3"
-    liFlexItem ## liFlexCol #$ do
+    optFlexItem ## optFlexCol #$ do
       r "Row 1"
       r "Row 2"
       r "Row 3"
    
-sflpTab::MonadWidget t m=>TabInfo t (LayoutM t m) ()
+sflpTab::MonadWidget t m=>TabInfo t m ()
 sflpTab = TabInfo "sflp" "LayoutP" simpleLayoutPWidget
 
 
@@ -185,8 +187,8 @@ boxesWidget = do
       return ()
     return ()
 
-boxesTab::MonadWidget t m=>TabInfo t (LayoutM t m) ()
-boxesTab = TabInfo "boxes" "Dynamic/Events" boxesWidget
+boxesTab::MonadWidget t m=>TabInfo t m ()
+boxesTab = TabInfo "boxes" "Dynamic/Events" $ runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) boxesWidget
 {-
 laidOut::(MonadWidget t m, MonadIO (PushM t))=>LayoutM t m () -> IO ()
 laidOut w = mainWidgetWithCss allCss $
@@ -207,8 +209,7 @@ allCss = tabCssBS
 
 main::IO ()
 main = do
-  B.putStr tabCssBS
-  mainWidgetWithCss allCss $
-    runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) $ do
+  B.putStr allCss
+  mainWidgetWithCss allCss $ do
       tabbedWidget
       return ()

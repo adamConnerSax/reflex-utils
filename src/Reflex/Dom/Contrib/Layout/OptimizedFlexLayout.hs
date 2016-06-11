@@ -2,9 +2,11 @@ module Reflex.Dom.Contrib.Layout.OptimizedFlexLayout
   (
     (##)
   , (#$)
-  , liFlexRow
-  , liFlexCol
-  , liFlexItem
+  , optFlexRow
+  , optFlexCol
+  , optFlexItem
+  , optFlexFillH
+  , optFlexFillV
   ) where
 
 import Reflex.Dom.Contrib.Layout.Types (LISeq,LNode,OpenLNode(..),LayoutInstruction(..),
@@ -18,6 +20,7 @@ import Reflex.Dom (MonadWidget)
 import Control.Monad.State (State,gets,modify,execState)
 import Data.Sequence ((><),(|>),Seq,empty,singleton)
 import Data.Foldable (mapM_,foldl')
+
 {-
 class AddLayout a where
   addLayout::LISeq->a->a
@@ -28,6 +31,26 @@ instance AddLayout LISeq where
 instance RD.MonadWidget t m=>AddLayout (m a) where
   addLayout = performLayouts
 -}
+
+optFlexSimple::LNodeConstraint->String->LISeq
+optFlexSimple lc css = singleton $ LayoutInstruction lc (OpenLNode LDiv (CssClasses [CssClass css]))
+
+optFlexRow::LISeq
+optFlexRow = optFlexSimple ClosesLNode "gl-flex-row"
+
+optFlexCol::LISeq
+optFlexCol = optFlexSimple ClosesLNode "gl-flex-col"
+
+optFlexItem::LISeq
+optFlexItem = optFlexSimple InLNode "gl-flex-item"
+
+optFlexFillH::LISeq
+optFlexFillH = optFlexSimple ClosesLNode "flexFillH"
+
+optFlexFillV::LISeq
+optFlexFillV = optFlexSimple ClosesLNode "flexFillV"
+
+
 
 infixl 2 ##
 (##)::LISeq->LISeq->LISeq
@@ -90,15 +113,4 @@ newNodeType (LayoutInstruction lc oln) mOln = modify $ f . closeCurrent where
 
 
 
-liSimple::LNodeConstraint->String->LISeq
-liSimple lc css = singleton $ LayoutInstruction lc (OpenLNode LDiv (CssClasses [CssClass css]))
-
-liFlexRow::LISeq
-liFlexRow = liSimple ClosesLNode "gl-flex-row"
-
-liFlexCol::LISeq
-liFlexCol = liSimple ClosesLNode "gl-flex-col"
-
-liFlexItem::LISeq
-liFlexItem = liSimple InLNode "gl-flex-item"
 

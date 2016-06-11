@@ -6,9 +6,12 @@ module Reflex.Dom.Contrib.Layout.GridLayout
        , newCol
        ) where
 
+import Reflex.Dom.Contrib.Layout.Types
+import Reflex.Dom.Contrib.Layout.LayoutM
+
 import qualified Reflex as R
 import qualified Reflex.Dom as RD
-import Reflex.Dom.Contrib.Layout.Core
+
 import qualified Data.Map as M
 import Control.Lens (set,(.~),(^.),(<>~),(<>=),(%=),(.=),use)
 import Data.Monoid (mappend)
@@ -17,7 +20,7 @@ import Data.List (foldl')
 import Control.Monad (foldM)
 import Control.Monad.Fix (MonadFix)
 
-import Reflex.Dom.Contrib.Layout.Types
+
 
 
 -- this uses internal structure of CssClasses which is likely a mistake. Though a very small one.

@@ -5,7 +5,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Reflex.Dom.Contrib.Layout.Core
+module Reflex.Dom.Contrib.Layout.LayoutM
        (
          emptyClassMap
        , emptyDynamicCssMap
@@ -244,8 +244,6 @@ instance (RD.MonadWidget t m,MonadIO (RD.PushM t))=>RD.MonadWidget t (LayoutM t 
   type WidgetHost (LayoutM t m) = RD.WidgetHost m
   type GuiAction  (LayoutM t m) = RD.GuiAction m
   askParent = liftL RD.askParent
---  subWidget n w = noLayoutInside id (RD.subWidget n) w
---  subWidgetWithVoidActions n w = noLayoutInside (\((a,s),ev)->((a,ev),s)) (RD.subWidgetWithVoidActions n)  w
   subWidget n w = layoutInside (RD.subWidget n) w
   subWidgetWithVoidActions n w = layoutInside (RD.subWidgetWithVoidActions n)  w
   liftWidgetHost = liftL . RD.liftWidgetHost
