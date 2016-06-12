@@ -6,6 +6,9 @@
 module Reflex.Dom.Contrib.Layout.FlexLayout
        (
          flexCssBS
+       , numberFlexGrowOptions
+       , (##)
+       , (#$)
        , flexFillR
        , flexFillL
        , flexHCenter
@@ -16,13 +19,9 @@ module Reflex.Dom.Contrib.Layout.FlexLayout
        , flexCol
        , flexItem
        , flexSizedItem
-       , numberFlexGrowOptions
        ) where
 
---import Reflex.Dom.Contrib.Layout.Core
-import Reflex.Dom.Contrib.StackedMonadWidget
-import Reflex.Dom.Contrib.Layout.LayoutM
-
+--import Reflex.Dom.Contrib.StackedMonadWidget
 
 import qualified Reflex as R
 import qualified Reflex.Dom as RD
@@ -32,7 +31,6 @@ import Control.Monad.IO.Class (MonadIO)
 import qualified Data.Map as M
 import qualified Data.Sequence as S
 import Data.Foldable (mapM_,foldl')
---import Reflex.Dom.Contrib.Layout.GridLayout
 
 import Clay hiding (id)
 import Data.Text.Lazy.Encoding (encodeUtf8)
@@ -89,8 +87,6 @@ flexGridStyles = do
     flexContainerStyle
   let flexItemStyle n = (fromString (".gl-flex-item-" ++ show n)) <? do { "flex" -: fromString (show n ++ " 0 auto"); "-webkit-flex" -: fromString (show n ++ " 0 auto") }
   mapM_ flexItemStyle [1..numberFlexGrowOptions]
---    let flexRowStyle n = (fromString (".gl-flex-row-" ++ show n)) <? do ("flex" -: fromString (show n ++ " 0 auto"))
---    mapM_ flexRowStyle [1..numberFlexGrowOptions]
   let flexJustifyStyle s = (fromString (".gl-justify-" ++ s)) ? do { ("display" -: "flex"); ("display" -: "-webkit-flex"); ("justify-content" -: fromString s); ("-webkit-justify-content" -: fromString s) }
       flexJustifyStyles = ["flex-start","flex-end","center","space-between","space-around"]
   mapM_ flexJustifyStyle flexJustifyStyles
@@ -100,7 +96,7 @@ flexCss = do
   flexGridStyles
 
 flexCssBS::B.ByteString
-flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty [] $ flexCss
+flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty []  flexCss
 
 flexRow::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexRow = RD.divClass "gl-flex-row" 
@@ -112,27 +108,27 @@ flexItem::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexItem = RD.divClass "gl-flex-item" 
 
 flexSizedItem::(RD.MonadWidget t m,MonadIO (R.PushM t))=>Int->m a->m a
-flexSizedItem n = let n' = n `mod` numberFlexGrowOptions in RD.divClass ("gl-flex-item-" ++ show n') 
+flexSizedItem n = let n' = Prelude.min n numberFlexGrowOptions in RD.divClass ("gl-flex-item-" ++ show n') 
 
 wrapWidget::RD.MonadWidget t m=>m a->m a
 wrapWidget = RD.divClass "" 
 
 
 flexFillR::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
-flexFillR w = do
+flexFillR w = 
   RD.divClass "flexFillH" $ do
     a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
 flexFillL::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
-flexFillL w = do
+flexFillL w = 
   RD.divClass "flexFillH" $ do  
     RD.divClass "fill" RD.blank
     wrapWidget w
 
 flexHCenter::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
-flexHCenter w = do
+flexHCenter w = 
   RD.divClass "flexFillH" $ do
     RD.divClass "fill" RD.blank
     a <- wrapWidget w
@@ -140,7 +136,7 @@ flexHCenter w = do
     return a
 
 flexVCenter::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
-flexVCenter w = do
+flexVCenter w = 
   RD.divClass "flexFillV" $ do
     RD.divClass "fill" RD.blank
     a <- wrapWidget w
@@ -148,19 +144,25 @@ flexVCenter w = do
     return a
 
 flexFillD::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
-flexFillD w = do
+flexFillD w = 
   RD.divClass "flexFillV" $ do
     a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
 flexFillU::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
-flexFillU w = do
+flexFillU w = 
   RD.divClass "flexFillV" $ do  
     RD.divClass "fill" RD.blank
     wrapWidget w
 
 
 
+infixl 2 ##
+(##)::(RD.MonadWidget t m,MonadIO (R.PushM t))=>(m a->m a)->m a->m a
+(##) = ($)
 
+infix 1 #$
+(#$)::RD.MonadWidget t m=>(m a->m a)->m a->m a
+(#$) = ($)
 

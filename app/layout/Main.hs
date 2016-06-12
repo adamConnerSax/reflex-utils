@@ -8,12 +8,12 @@ import Reflex.Dom.Contrib.Layout.All
 import Reflex.Dom.Contrib.Layout.LayoutM()
 import Reflex.Dom.Contrib.Layout.GridConfigs
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexSizedItem,flexRow,flexCol,flexItem,flexCssBS)
+import qualified Reflex.Dom.Contrib.Layout.OptimizedFlexLayout as OF
+import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$))
 
 import Reflex
 import Reflex.Dom
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
-
---import Reflex.Dom.Contrib.Layout.LayoutP (doOptimizedLayout,doUnoptimizedLayout)
 
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans (lift)
@@ -152,8 +152,19 @@ sfTab::MonadWidget t m=>TabInfo t m ()
 sfTab = TabInfo "sf" "Simple Flex" simpleFlexWidget
 
 
-simpleLayoutPWidget::(MonadWidget t m, MonadIO (PushM t))=>m ()
-simpleLayoutPWidget = do
+optFlexWidget::(MonadWidget t m, MonadIO (PushM t))=>m ()
+optFlexWidget = do
+  let w = OF.flexRow #$ do
+        OF.flexSizedItem 2 #$ (divClass "demo-box-black" $ text  "A")
+        OF.flexSizedItem 1 #$ (divClass "demo-box-green" $ text  "B")
+  OF.flexItem #$ w
+  OF.flexItem #$ OF.flexFillR w
+  OF.flexItem #$ OF.flexHCenter w
+  OF.flexItem #$ OF.flexFillL w
+
+{-
+optFlexWidget::(MonadWidget t m, MonadIO (PushM t))=>m ()
+optFlexWidget = do
   let dc::MonadWidget t m=>String->String->m ()
       dc cs s =  (divClass (cs ++ "_1") $ text s) >> (divClass (cs ++ "_2") $ text s)
       c::MonadWidget t m=>String->m ()
@@ -168,9 +179,10 @@ simpleLayoutPWidget = do
       r "Row 1"
       r "Row 2"
       r "Row 3"
-   
-sflpTab::MonadWidget t m=>TabInfo t m ()
-sflpTab = TabInfo "sflp" "LayoutP" simpleLayoutPWidget
+-}
+
+optFlexTab::MonadWidget t m=>TabInfo t m ()
+optFlexTab = TabInfo "optFlex" "optFlex" optFlexWidget
 
 
 boxesWidget::(MonadWidget t m, MonadIO (PushM t))=>LayoutM t m ()
@@ -198,7 +210,7 @@ laidOut w = mainWidgetWithCss allCss $
 tabbedWidget = do
   el "p" $ text ""
   el "br" $ blank
-  dynamicTabbedLayout sfTab (constDyn [sfTab,sflpTab,boxesTab]) 
+  dynamicTabbedLayout sfTab (constDyn [sfTab,optFlexTab,boxesTab]) 
 
 allCss = tabCssBS
          <> flexCssBS

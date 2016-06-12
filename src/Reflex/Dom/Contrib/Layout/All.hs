@@ -10,13 +10,6 @@ module Reflex.Dom.Contrib.Layout.All
        , flexRow
        , flexCol
        , flexItem
-       , (##)
-       , (#$)
-       , optFlexRow
-       , optFlexCol
-       , optFlexItem
-       , optFlexFillH
-       , optFlexFillV
        , flexFillL
        , flexFillR
        , flexHCenter
@@ -54,9 +47,6 @@ import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,flexRow,flexCol,flexItem,
                                              flexFillD,flexFillU,flexVCenter)
 
        
-
-import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$),optFlexRow,optFlexCol,optFlexItem,optFlexFillV,optFlexFillH)
-
 
 import Reflex.Dom.Contrib.Layout.LayoutM (emptyCss,emptyClassMap,emptyDynamicCssMap,runLayout,runStyledLayout,runLayoutMain)
 
