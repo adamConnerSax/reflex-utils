@@ -21,7 +21,7 @@ import Data.Monoid ((<>))
 import Data.FileEmbed
 
 import Prelude hiding (rem,div,span)
-import Clay hiding (button,col)
+import Clay hiding (button,col,row)
 import Data.Text.Lazy.Encoding (encodeUtf8)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
