@@ -45,7 +45,7 @@ packages:
 #    git: https://github.com/reflex-frp/reflex-dom-contrib
 #    commit: "41c67daf2ad74281f2488cb80ceab7d12292142b"
     git: https://github.com/adamConnerSax/reflex-dom-contrib # my fork to work on updating
-    commit: "0d0ebbcceb49149ca5609bd0e247ff7ad2d7ec34"       
+    commit: "985d7ed3cca513eb59502c8cd1795ace7dbbbf99"       
 - '.'
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
