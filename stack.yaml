@@ -28,23 +28,24 @@ packages:
     git: https://github.com/adamConnerSax/dataBuilder
     commit: "18f65388a3cad7e3687cc59e112402767a1942bd"
 - location:
-    git: https://github.com/ryantrinkle/reflex
-    commit: "cc62c11a6cde31412582758c236919d4bb766ada"
-#    commit : "441bfe9ed19cd9d77d8956c38e99f291ceebd899"
+#    git: https://github.com/ryantrinkle/reflex
+#    commit: "cc62c11a6cde31412582758c236919d4bb766ada"
+    git: https://github.com/reflex-frp/reflex
+    commit : "1511d28b08159918137171b79d9f976d9dbe9c65"
 - location:
-    git: https://github.com/ryantrinkle/reflex-dom
-    commit: "639d9ca13c2def075e83344c9afca6eafaf24219"
-#    commit: "a2b76b1892549f1b6834b3d81bd9bec963aa2a6f"
+#    git: https://github.com/ryantrinkle/reflex-dom
+#    commit: "639d9ca13c2def075e83344c9afca6eafaf24219"
+    git: https://github.com/reflex-frp/reflex-dom
+    commit: "77e0c270f6270561d70d0b6ad925fb1ea82612a8"
 - location:
     git: https://github.com/ghcjs/ghcjs-dom
     commit: "1644ab2a058618ebbffefa12ee95cd7484169275"
+#- /Users/adam/Development/github/reflex/reflex-dom-contrib-0.4.2-develop    
 - location:
-    git: https://github.com/reflex-frp/reflex-dom-contrib
-    commit: "41c67daf2ad74281f2488cb80ceab7d12292142b"
-#    commit: "d6c744928c81bdb0cd3141f05f7529dc0dae5327"
-#- location:
-#    git: https://github.com/Saulzar/reflex-html
-#    commit: f9db71e9a0fc0ef52d3f2214234aa031f6fced27
+#    git: https://github.com/reflex-frp/reflex-dom-contrib
+#    commit: "41c67daf2ad74281f2488cb80ceab7d12292142b"
+    git: https://github.com/adamConnerSax/reflex-dom-contrib # my fork to work on updating
+    commit: "0d0ebbcceb49149ca5609bd0e247ff7ad2d7ec34"       
 - '.'
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
