@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -6,6 +7,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Reflex.Dom.Contrib.Layout.Types where
 
 import Control.Lens (makeLenses,makeClassy)
@@ -14,6 +16,7 @@ import qualified Reflex as R
 import Reflex.Dom ((=:))
 import qualified Reflex.Dom as RD 
 import qualified Data.Map as M
+import qualified Data.Text as T
 import qualified GHCJS.DOM.Element as E
 import Control.Monad.State (StateT)
 import Control.Monad.Reader (ReaderT)
@@ -22,18 +25,18 @@ import qualified Data.Sequence as S
 --import Data.Default (Default(..))
 
 class IsCssClass a where
-  toCssString::a->String
+  toCssString::a->T.Text
   
-toStaticAttributes::IsCssClass a=>a->M.Map String String
+toStaticAttributes::IsCssClass a=>a->M.Map T.Text T.Text
 toStaticAttributes x = ("class" =: toCssString x)
 
-data CssClass = CssClass String deriving (Show,Ord,Eq)
+data CssClass = CssClass T.Text deriving (Show,Ord,Eq)
 instance IsCssClass CssClass where
   toCssString (CssClass c) = c
 
 data CssClasses = CssClasses [CssClass] deriving (Show,Ord,Eq)
 instance IsCssClass CssClasses where
-  toCssString (CssClasses cs) = unwords $ toCssString <$> cs
+  toCssString (CssClasses cs) = T.unwords $ toCssString <$> cs
   
 instance Monoid CssClasses where
   mempty = CssClasses []
@@ -46,7 +49,7 @@ emptyCss = CssClasses []
 data LNodeConstraint = OpensLNode | InLNode | ClosesLNode deriving (Show)
 
 data LNodeType = LDiv deriving (Eq,Show)
-nodeTypeTag::LNodeType -> String
+nodeTypeTag::LNodeType -> T.Text
 nodeTypeTag LDiv = "div"
 
 data LNode = LNode LNodeType CssClasses deriving (Show)

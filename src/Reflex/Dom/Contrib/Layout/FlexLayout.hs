@@ -34,9 +34,12 @@ import Data.Foldable (mapM_,foldl')
 
 import Clay hiding (id)
 import Data.Text.Lazy.Encoding (encodeUtf8)
+import qualified Data.Text as T
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.String (fromString)
+import Data.Monoid ((<>))
+
 
 flexFillStyles = do
   ".flexFillH" ? do
@@ -108,7 +111,7 @@ flexItem::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
 flexItem = RD.divClass "gl-flex-item" 
 
 flexSizedItem::(RD.MonadWidget t m,MonadIO (R.PushM t))=>Int->m a->m a
-flexSizedItem n = let n' = Prelude.min n numberFlexGrowOptions in RD.divClass ("gl-flex-item-" ++ show n') 
+flexSizedItem n = let n' = Prelude.min n numberFlexGrowOptions in RD.divClass $ T.pack ("gl-flex-item-" ++ show n') 
 
 wrapWidget::RD.MonadWidget t m=>m a->m a
 wrapWidget = RD.divClass "" 
