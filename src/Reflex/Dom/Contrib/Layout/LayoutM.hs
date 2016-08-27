@@ -26,6 +26,7 @@ module Reflex.Dom.Contrib.Layout.LayoutM
 import qualified Reflex as R
 import qualified Reflex.Class as RC
 import qualified Reflex.Dom as RD
+import qualified Reflex.Dom.Old as RD
 import qualified GHCJS.DOM.Element as E
 import GHCJS.DOM.Types (IsElement)
 
@@ -209,6 +210,7 @@ instance RC.MonadHold t m => RC.MonadHold t (LayoutM t m) where
   hold a0 = liftL . RC.hold a0 
 
 
+{-
  -- Is this necessary?
 instance (RD.MonadWidget t m,RD.MonadIORestore m, MonadIO (RD.PushM t)) => RD.MonadIORestore (LayoutM t m) where
   askRestore = do
@@ -222,7 +224,7 @@ instance (RD.MonadWidget t m,RD.MonadIORestore m, MonadIO (RD.PushM t)) => RD.Mo
 instance RD.HasPostGui t h m => RD.HasPostGui t h (LayoutM t m) where
   askPostGui = liftL RD.askPostGui
   askRunWithActions = liftL RD.askRunWithActions
-
+-}
 
 -- which to use??  Both work on demo.  So far.  Need to add widgetHold or dyn...
 layoutInside::(MonadIO (RD.PushM t),RD.MonadWidget t m)=>(m a -> m b)->LayoutM t m a->LayoutM t m b

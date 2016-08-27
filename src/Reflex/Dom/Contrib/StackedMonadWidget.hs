@@ -55,18 +55,22 @@ instance (MonadTrans t, Monad (t m), MonadRef m)=>MonadRef (StackedMW t m) where
 instance (MonadTrans t, Monad (t m), RD.HasWebView m) => RD.HasWebView (StackedMW t m) where
   askWebView = StackedMW $ lift RD.askWebView
   
+{-
 instance (MonadTrans t, Monad (t m), RD.HasDocument m) => RD.HasDocument (StackedMW t m) where
   askDocument = StackedMW $ lift RD.askDocument
-  
+-}
+
 instance (MonadTrans t, Monad (t m),
           RHC.MonadReflexCreateTrigger rt m) => RHC.MonadReflexCreateTrigger rt (StackedMW t m) where
   newEventWithTrigger  = StackedMW . lift . RHC.newEventWithTrigger  
   newFanEventWithTrigger f = StackedMW $ lift  $  RHC.newFanEventWithTrigger f
-  
+
+{-  
 instance (MonadTrans t, RD.HasPostGui rt h m, MonadRef (t m),
           Ref (StackedMW t m) ~ Ref h) => RD.HasPostGui rt h (StackedMW t m) where
   askPostGui = StackedMW $ lift RD.askPostGui
   askRunWithActions = StackedMW $ lift RD.askRunWithActions
+-}
 
 instance (RC.MonadSample t m, MonadTrans l, Monad (l m))   => RC.MonadSample t (StackedMW l m) where
   sample = StackedMW . lift . R.sample

@@ -1,4 +1,3 @@
-
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -10,6 +9,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Reflex.Dom.Contrib.SimpleForm.Builder
        (
          DynMaybe
@@ -69,6 +69,7 @@ import Control.Monad.Reader (ReaderT, runReaderT, ask) --, lift,local)
 import Control.Monad.Morph
 import Data.Maybe (isJust,fromMaybe)
 import Data.Monoid ((<>))
+import qualified Data.Text as T
 import qualified Data.Map as M
 import Language.Haskell.TH
 
