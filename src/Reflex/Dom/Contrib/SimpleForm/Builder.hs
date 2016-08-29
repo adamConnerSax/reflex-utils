@@ -191,21 +191,20 @@ layoutFieldNameHelper mFN sfra = do
   let lf = fromMaybe id $ mf <*> mFN
   lf sfra
 
-textAtLeft::SimpleFormC e t m=>String->SFLayoutF e m a
+textAtLeft::SimpleFormC e t m=>T.Text->SFLayoutF e m a
 textAtLeft label ra = formRow $ do
   formItem $ RD.el "span" $ RD.text label
   formItem ra
 
-textOnTop::SimpleFormC e t m=>String->SFLayoutF e m a
+textOnTop::SimpleFormC e t m=>T.Text->SFLayoutF e m a
 textOnTop = textOnTop' id 
 
-textOnTop'::SimpleFormC e t m=>SFLayoutF e m () ->String->SFLayoutF e m a
+textOnTop'::SimpleFormC e t m=>SFLayoutF e m ()->T.Text->SFLayoutF e m a
 textOnTop' labelLayout label ra = formCol $ do
   labelLayout . formItem $ RD.el "span" $ RD.text label
   formItem ra
 
-
-legend::SimpleFormC e t m=>String->SFLayoutF e m a
+legend::SimpleFormC e t m=>T.Text->SFLayoutF e m a
 legend legend ra = RD.el "fieldset" $ do
     lift $ RD.el "legend" $ RD.text legend
     ra
@@ -246,18 +245,18 @@ disabledAttr = do
 attrs0::R.Reflex t=>DynAttrs t
 attrs0 = R.constDyn mempty
 
-titleAttr::String->M.Map String String
+titleAttr::T.Text->M.Map T.Text T.Text
 titleAttr x = ("title" RD.=: x)
 
-cssClassAttr::CssClasses->M.Map String String
+cssClassAttr::CssClasses->M.Map T.Text T.Text
 cssClassAttr x = ("class" RD.=: toCssString x)
 
 sfAttrs::(RD.MonadHold t m, R.Reflex t, SimpleFormConfiguration e t m)
-         =>DynMaybe t a->Maybe FieldName->Maybe String->ReaderT e m (R.Dynamic t (M.Map String String))
+         =>DynMaybe t a->Maybe FieldName->Maybe T.Text->ReaderT e m (R.Dynamic t (M.Map T.Text T.Text))
 sfAttrs mDyn mFN mTypeS = sfAttrs' mDyn mFN mTypeS (CssClasses [])
 
 sfAttrs'::(RD.MonadHold t m, R.Reflex t, SimpleFormConfiguration e t m)
-         =>DynMaybe t a->Maybe FieldName->Maybe String->CssClasses->ReaderT e m (R.Dynamic t (M.Map String String))
+         =>DynMaybe t a->Maybe FieldName->Maybe T.Text->CssClasses->ReaderT e m (R.Dynamic t (M.Map T.Text T.Text))
 sfAttrs' mDyn mFN mTypeS fixedCss = do
   validClasses <- validItemStyle
   invalidClasses <- invalidItemStyle
@@ -274,11 +273,11 @@ sfAttrs' mDyn mFN mTypeS fixedCss = do
                                     else invalidAttrs 
 
 
-componentTitle::Maybe FieldName->Maybe String->String
+componentTitle::Maybe FieldName->Maybe T.Text->T.Text
 componentTitle mFN mType =
-  let fnS = maybe "" id  mFN
+  let fnS = maybe "" T.pack  mFN
       tnS = maybe "" id  mType
-  in if (isJust mFN && isJust mType) then fnS ++ "::" ++ tnS else fnS ++ tnS
+  in if (isJust mFN && isJust mType) then (fnS <> "::" <> tnS) else (fnS <> tnS)
 
 
 instance SimpleFormC e t m => B.Buildable (SimpleFormR e t m) where

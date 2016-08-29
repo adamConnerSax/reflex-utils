@@ -32,6 +32,7 @@ import Prelude hiding (div)
 import Clay
 import Data.String (fromString)
 import Data.Monoid ((<>))
+import qualified Data.Text as T
 import qualified Data.Set as S
 
 unSelTabColor = grayish 238
@@ -85,8 +86,8 @@ tabCss = do
 tabCssBS::B.ByteString
 tabCssBS = cssToBS tabCss
 
-data TabInfo t m a = TabInfo { tabID::String,
-                               tabName::String,
+data TabInfo t m a = TabInfo { tabID::T.Text,
+                               tabName::T.Text,
                                tabWidget::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a }
 
 

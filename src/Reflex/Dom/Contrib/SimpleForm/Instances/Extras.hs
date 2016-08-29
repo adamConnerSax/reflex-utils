@@ -4,6 +4,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Extras
        (
          MWidget(..)

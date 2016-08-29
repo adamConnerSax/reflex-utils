@@ -220,11 +220,11 @@ instance (RD.MonadWidget t m,RD.MonadIORestore m, MonadIO (RD.PushM t)) => RD.Mo
     parentRestore <- liftL RD.askRestore
     return $ RD.Restore $ \sma -> RD.restore parentRestore $ runLayout staticCssMap dynamicCssMap lc sma
 
-
+-}
 instance RD.HasPostGui t h m => RD.HasPostGui t h (LayoutM t m) where
   askPostGui = liftL RD.askPostGui
   askRunWithActions = liftL RD.askRunWithActions
--}
+
 
 -- which to use??  Both work on demo.  So far.  Need to add widgetHold or dyn...
 layoutInside::(MonadIO (RD.PushM t),RD.MonadWidget t m)=>(m a -> m b)->LayoutM t m a->LayoutM t m b

@@ -8,6 +8,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        (
          sfWidget
@@ -52,7 +53,7 @@ import Reflex.Dom.Contrib.SimpleForm.Builder
 -- instances
 
 --some helpers
-readOnlyW::RD.MonadWidget t m=>(a->String)->WidgetConfig t a->m (R.Dynamic t a) 
+readOnlyW::RD.MonadWidget t m=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a) 
 readOnlyW f wc = do
   da <- R.foldDyn const (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
   ds <- R.mapDyn f da
@@ -61,7 +62,7 @@ readOnlyW f wc = do
 
 sfWidget::SimpleFormC e t m=>
           (a->b)->
-          (a->String)->
+          (a->T.Text)->
           Maybe FieldName->
           WidgetConfig t a->
           (WidgetConfig t a-> m (R.Dynamic t a))->
