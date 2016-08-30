@@ -225,7 +225,7 @@ instance (SimpleFormC e t m,
       maW <- unSF $ B.buildA Nothing ma
       mbW <- unSF $ B.buildA Nothing mb
       mcW <- unSF $ B.buildA Nothing mc
-      lift $ (,,) <$> maW <*> mbW <*> mcW
+      lift $ (fmap (,,)) <$> maW <*> mbW <*> mcW
 --      lift $ [mkDyn|(,,) <$> $maW <*> $mbW <*> $mcW|]
 
 instance (SimpleFormC e t m,

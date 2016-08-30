@@ -75,7 +75,20 @@ import Language.Haskell.TH
 
 
 
-type DynMaybe t a = R.Dynamic t (Maybe a)
+newtype DynMaybe t a = DynMaybe { unDynMaybe::R.Dynamic t (Maybe a) }
+instance R.Reflex t=>Functor (DynMaybe t) where
+  fmap f dma = DynMaybe $ fmap (fmap f) (unDynMaybe dma)  
+
+instance R.Reflex t =>Applicative (DynMaybe t) where
+  pure x = DynMaybe $ R.constDyn (Just x)
+  dmf <*> dma = DynMaybe $ R.zipDynWith (<*>) (unDynMaybe dmf) (unDynMaybe dma)
+
+instance R.Reflex t=>Monad (DynMaybe t) where
+  return = pure
+  dma >>= f =  DynMaybe$ do
+    ma <- unDynMaybe dma
+    unDynMaybe $ maybe Nothing f ma
+  
 type SFRW e t m a = ReaderT e m (DynMaybe t a)
 
 -- This is necessary because this functor and applicative are different from that of SFRW
