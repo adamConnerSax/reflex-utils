@@ -141,7 +141,7 @@ observeFlow cfg formClass observerClass f a = runSimpleFormR cfg . SimpleFormR  
     
 
 type SFLayoutF e m a = ReaderT e m a -> ReaderT e m a
-type DynAttrs t = R.Dynamic t (M.Map String String)
+type DynAttrs t = R.Dynamic t (M.Map T.Text T.Text)
 
 liftLF::Monad m=>(forall b.m b->m b)->SFLayoutF e m a
 liftLF = hoist
@@ -176,19 +176,19 @@ class SimpleFormConfiguration e t m | m->t  where
   layoutT::SFLayoutF e m a
   layoutB::SFLayoutF e m a
   layoutVC::SFLayoutF e m a
-  layoutCollapsible::String->CollapsibleInitialState->SFLayoutF e m a
+  layoutCollapsible::T.Text->CollapsibleInitialState->SFLayoutF e m a
   validItemStyle::ReaderT e m CssClasses
   invalidItemStyle::ReaderT e m CssClasses
   observerStyle::ReaderT e m CssClasses
   observer::ReaderT e m Bool
   setToObserve::SFLayoutF e m a
-  setLayoutFieldName::Maybe (String -> String)->SFLayoutF e m a
-  getLayoutFieldName::ReaderT e m (Maybe (String -> SFLayoutF e m a)) -- Nothing is ignored, otherwise do the layout
+  setLayoutFieldName::Maybe (T.Text -> T.Text)->SFLayoutF e m a
+  getLayoutFieldName::ReaderT e m (Maybe (T.Text -> SFLayoutF e m a)) -- Nothing is ignored, otherwise do the layout
 
 layoutFieldNameHelper::SimpleFormC e t m=>Maybe FieldName->SFLayoutF e m a
 layoutFieldNameHelper mFN sfra = do
   mf <- getLayoutFieldName
-  let lf = fromMaybe id $ mf <*> mFN
+  let lf = fromMaybe id $ mf <*> (T.pack <$> mFN)
   lf sfra
 
 textAtLeft::SimpleFormC e t m=>T.Text->SFLayoutF e m a
