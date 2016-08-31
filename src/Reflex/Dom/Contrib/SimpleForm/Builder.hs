@@ -65,6 +65,7 @@ import qualified Reflex as R
 import Reflex as ReflexExport (PushM)
 import qualified Reflex.Dom as RD
 
+import Control.Monad (join)
 import Control.Monad.Reader (ReaderT, runReaderT, ask) --, lift,local)
 import Control.Monad.Morph
 import Data.Maybe (isJust,fromMaybe)
@@ -87,7 +88,7 @@ instance R.Reflex t=>Monad (DynMaybe t) where
   return = pure
   dma >>= f =  DynMaybe$ do
     ma <- unDynMaybe dma
-    unDynMaybe $ maybe Nothing f ma
+    unDynMaybe $ maybe (DynMaybe $ R.constDyn Nothing) f ma
   
 type SFRW e t m a = ReaderT e m (DynMaybe t a)
 
@@ -95,25 +96,28 @@ type SFRW e t m a = ReaderT e m (DynMaybe t a)
 newtype SimpleFormR e t m a = SimpleFormR { unSF::SFRW e t m a }
 
 instance (R.Reflex t, R.MonadHold t m)=>Functor (SimpleFormR e t m) where
-  fmap f sfra = SimpleFormR $ (unSF sfra) >>= lift . R.mapDyn (fmap f) 
+  fmap f sfra = SimpleFormR $ fmap (fmap f) (unSF sfra)
 
 instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR e t m) where
-  pure x = SimpleFormR $ return (R.constDyn (Just x))
+  pure = SimpleFormR . return . pure 
   sfrF <*> sfrA = SimpleFormR $ do
     dmF <- unSF sfrF
     dmA <- unSF sfrA
-    lift $ R.combineDyn (<*>) dmF dmA
+    return $ dmF <*> dmA
 
 runSimpleFormR::Monad m=>e->SimpleFormR e t m a->m (DynMaybe t a)
 runSimpleFormR cfg sfra = runReaderT (unSF sfra) cfg
 
 type SimpleFormC e t m = (RD.MonadWidget t m,SimpleFormConfiguration e t m)
 
+joinDynOfDynMaybe::R.Reflex t=>RD.Dynamic t (DynMaybe t a) -> DynMaybe t a
+joinDynOfDynMaybe = DynMaybe . join . (fmap unDynMaybe)
+
 switchingSFR::SimpleFormC e t m=>(a->SimpleFormR e t m b)->a->R.Event t a->SimpleFormR e t m b
 switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
   cfg <- ask
   let f = runSimpleFormR cfg . widgetGetter
-  lift $ R.joinDyn <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)  
+  lift $ joinDynOfDynMaybe <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)  
 
 asSimpleForm::RD.MonadWidget t m=>CssClass->m a->m a
 asSimpleForm formClass = RD.elClass "form" (toCssString formClass)
@@ -127,14 +131,15 @@ makeSimpleForm cfg formClass ma =
   asSimpleForm formClass $ runSimpleFormR cfg $ B.buildA Nothing ma
 
 observeDynamic::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->R.Dynamic t a->m (DynMaybe t a)
-observeDynamic cfg observerClass aDyn = R.mapDyn Just aDyn >>= observeDynMaybe cfg observerClass
+observeDynamic cfg observerClass aDyn = observeDynMaybe cfg observerClass $ DynMaybe $ fmap Just aDyn
 
 observeDynMaybe::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->DynMaybe t a->m (DynMaybe t a)
 observeDynMaybe cfg observerClass aDynM =
   asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
-    builtDyn <- R.mapDyn (maybe (return $ R.constDyn Nothing) (unSF . buildA Nothing . Just)) aDynM -- Dynamic t (ReaderT e m (DynMaybe t a))
+    let makeForm = maybe (return $ DynMaybe $ R.constDyn Nothing) (unSF . buildA Nothing . Just) 
+        builtDyn = fmap makeForm (unDynMaybe aDynM)  -- Dynamic t (ReaderT e m (DynMaybe t a))
     newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
-    lift $ R.joinDyn <$> R.holdDyn aDynM newDynEv --R.foldDyn (\_ x-> x) aDynM newDynEv -- DynMaybe t a
+    lift $ joinDynOfDynMaybe <$> R.holdDyn aDynM newDynEv --R.foldDyn (\_ x-> x) aDynM newDynEv -- DynMaybe t a
 
 
 observeWidget::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->m a->m (DynMaybe t a)
@@ -149,8 +154,8 @@ observeFlow cfg formClass observerClass f a = runSimpleFormR cfg . SimpleFormR  
   let initialWidget = f a
       obF = observeWidget cfg observerClass
   dma <- liftLF (asSimpleForm formClass) (unSF $ buildA Nothing (Just a)) -- DynMaybe t a
-  dwb <- lift $ R.foldDynMaybe (\ma _ -> f <$> ma) initialWidget (R.updated dma) -- Dynamic t (m b)
-  lift $ R.joinDyn <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
+  dwb <- lift $ R.foldDynMaybe (\ma _ -> f <$> ma) initialWidget (R.updated $ unDynMaybe dma) -- Dynamic t (m b)
+  lift $ joinDynOfDynMaybe <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
     
 
 type SFLayoutF e m a = ReaderT e m a -> ReaderT e m a
@@ -281,7 +286,7 @@ sfAttrs' mDyn mFN mTypeS fixedCss = do
       observerAttr = titleAttr title <> cssClassAttr (observerClasses <> fixedCss)
   lift $ if isObserver
          then return $ R.constDyn observerAttr
-         else R.forDyn mDyn $ \x -> if isJust x
+         else R.forDyn (unDynMaybe mDyn) $ \x -> if isJust x
                                     then validAttrs
                                     else invalidAttrs 
 
