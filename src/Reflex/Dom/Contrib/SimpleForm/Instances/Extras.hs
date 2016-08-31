@@ -48,15 +48,15 @@ instance (SimpleFormC e t m,EquivRep a b, B.Builder (SimpleFormR e t m) b)=>Buil
 instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFormR e t m) (R.Dynamic t a) where
   buildA mFN mda = SimpleFormR $ 
     case mda of
-      Nothing -> return $ R.constDyn Nothing 
+      Nothing -> return dynMaybeNothing
       Just aDyn -> do
         let builder::Maybe a->SimpleFormR e t m a
             builder = buildA mFN
-        startDyn <- R.mapDyn Just aDyn -- DynMaybe t a
-        builtDyn <- R.mapDyn (unSF . builder) startDyn -- Dynamic t (SimpleFormR e t m (DynMaybe t a))
-        newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
-        dMaybe <- R.joinDyn <$> R.foldDyn (\_ x-> x) startDyn newDynEv -- DynMaybe t a
-        lift $ R.mapDyn (maybe Nothing (Just . R.constDyn)) dMaybe
+            startDynM = DynMaybe $ Just <$> aDyn
+            builtDynM = (unSF . builder . Just) <$> aDyn -- Dynamic t (ReaderT e m (DynMaybe t a))
+        newDynEv <- RD.dyn builtDynM -- Event t (DynMaybe a)
+        dMaybe <- joinDynOfDynMaybe <$> R.foldDyn (\_ x-> x) startDynM newDynEv -- DynMaybe t a
+        return $ fmap R.constDyn dMaybe 
 
 
 newtype MWidget m a = MWidget { unMW::m a }
@@ -64,12 +64,12 @@ newtype MWidget m a = MWidget { unMW::m a }
 instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFormR e t m) (MWidget m a) where
   buildA mFN mwa = SimpleFormR $ 
     case mwa of
-      Nothing -> return $ R.constDyn Nothing 
+      Nothing -> return dynMaybeNothing
       Just wa -> do
         a <- lift $ unMW wa
         let builder::Maybe a->SimpleFormR e t m a
             builder = buildA mFN
         dma <- unSF $ builder (Just a)
-        lift $ R.mapDyn (maybe Nothing (Just . MWidget . return)) dma 
+        return $ fmap (MWidget . return) dma --R.mapDyn (maybe Nothing (Just . MWidget . return)) dma 
 
 

@@ -12,7 +12,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Reflex.Dom.Contrib.SimpleForm.Builder
        (
-         DynMaybe
+         DynMaybe(..)
+       , dynMaybeNothing
+       , joinDynOfDynMaybe
        , makeSimpleForm
        , observeDynamic
        , observeDynMaybe
@@ -77,6 +79,13 @@ import Language.Haskell.TH
 
 
 newtype DynMaybe t a = DynMaybe { unDynMaybe::R.Dynamic t (Maybe a) }
+
+dynMaybeNothing::R.Reflex t => DynMaybe t a
+dynMaybeNothing = DynMaybe $ R.constDyn Nothing
+
+joinDynOfDynMaybe::R.Reflex t=>RD.Dynamic t (DynMaybe t a) -> DynMaybe t a
+joinDynOfDynMaybe = DynMaybe . join . (fmap unDynMaybe)
+
 instance R.Reflex t=>Functor (DynMaybe t) where
   fmap f dma = DynMaybe $ fmap (fmap f) (unDynMaybe dma)  
 
@@ -110,8 +119,6 @@ runSimpleFormR cfg sfra = runReaderT (unSF sfra) cfg
 
 type SimpleFormC e t m = (RD.MonadWidget t m,SimpleFormConfiguration e t m)
 
-joinDynOfDynMaybe::R.Reflex t=>RD.Dynamic t (DynMaybe t a) -> DynMaybe t a
-joinDynOfDynMaybe = DynMaybe . join . (fmap unDynMaybe)
 
 switchingSFR::SimpleFormC e t m=>(a->SimpleFormR e t m b)->a->R.Event t a->SimpleFormR e t m b
 switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do

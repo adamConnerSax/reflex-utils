@@ -5,10 +5,10 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        (
          sfWidget
@@ -39,7 +39,7 @@ import qualified GHC.Generics as GHCG
 -- reflex imports
 import qualified Reflex as R 
 import qualified Reflex.Dom as RD
-import Reflex.Dynamic.TH (mkDyn)
+
 import Reflex.Dom.Contrib.Widgets.Common --(HtmlWidget,combineWidgets)
 
 -- From this lib
@@ -80,7 +80,7 @@ buildReadable::(SimpleFormC e t m,Readable a, Show a)=>Maybe FieldName->Maybe a-
 buildReadable mFN ma = SimpleFormR $ mdo
   attrsDyn <- sfAttrs dma mFN Nothing
   let wc = WidgetConfig RD.never ma attrsDyn
-  dma <- itemL $ sfWidget id (showText . fromJust) mFN wc (\c->_hwidget_value <$> restrictWidget blurOrEnter readableWidget c)
+  dma <- itemL $ DynMaybe <$> sfWidget id (showText . fromJust) mFN wc (\c->_hwidget_value <$> restrictWidget blurOrEnter readableWidget c)
   return dma
 
 buildReadMaybe::(SimpleFormC e t m,Read a, Show a)=>Maybe FieldName->Maybe a->SimpleFormR e t m a
@@ -88,8 +88,8 @@ buildReadMaybe mFN ma = SimpleFormR $ mdo
   attrsDyn <- sfAttrs dma mFN Nothing
   let initial = maybe "" showText ma
       wc = WidgetConfig RD.never initial attrsDyn
-  dma <- itemL $ sfWidget (readMaybe . T.unpack) showText mFN wc $ \c -> do
-    _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c 
+  dma <- itemL $ DynMaybe <$> (sfWidget (readMaybe . T.unpack) showText mFN wc $ \c -> do
+    _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c)
   return dma
 
 -- | String and Text
@@ -98,8 +98,8 @@ instance SimpleFormC e t m =>B.Builder (SimpleFormR e t m) T.Text where
     attrsDyn <- sfAttrs dma mFN (Just $ "Text")
     let initial = maybe "" id mInitial
         wc = WidgetConfig RD.never initial attrsDyn
-    dma <- itemL $ sfWidget Just showText mFN wc $ \c -> do
-      _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput "Text") c
+    dma <- itemL $ DynMaybe <$> (sfWidget Just showText mFN wc $ \c -> do
+      _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput "Text") c)
     return dma
 
 
@@ -120,14 +120,14 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Bool where
   buildA mFN mInitial = SimpleFormR $ mdo
     let initial = maybe False id mInitial
         wc = WidgetConfig RD.never initial attrsDyn
-    attrsDyn <- sfAttrs (R.constDyn $ Just False) mFN (Just $ "Bool")
-    itemL $ sfWidget Just showText mFN wc $ \c -> _hwidget_value <$> htmlCheckbox c
+    attrsDyn <- sfAttrs dynMaybeNothing mFN (Just $ "Bool")
+    itemL $ DynMaybe <$> (sfWidget Just showText mFN wc $ \c -> _hwidget_value <$> htmlCheckbox c)
 
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Double where
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "Double")
     let wc = WidgetConfig RD.never mInitial attrsDyn
-    dma <- itemL $ sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter doubleWidget c
+    dma <- itemL $ DynMaybe <$> (sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter doubleWidget c)
     return dma
 
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Float where
@@ -137,7 +137,7 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Int where
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "Int")
     let wc = WidgetConfig RD.never mInitial attrsDyn
-    dma <- itemL $ sfWidget id  (showText . fromJust) mFN wc $ \c->_hwidget_value <$> restrictWidget blurOrEnter intWidget c
+    dma <- itemL $ DynMaybe <$> (sfWidget id  (showText . fromJust) mFN wc $ \c->_hwidget_value <$> restrictWidget blurOrEnter intWidget c)
     return dma
 
 
@@ -145,7 +145,7 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Integer where
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "Int")
     let wc = WidgetConfig RD.never mInitial attrsDyn
-    dma <- itemL $ sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter integerWidget c
+    dma <- itemL $ DynMaybe <$> (sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter integerWidget c)
     return dma
 
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Int8 where
@@ -180,14 +180,14 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) UTCTime where
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "UTCTime")
     let wc = WidgetConfig RD.never mInitial attrsDyn
-    dma<-itemL $ sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c
+    dma<-itemL $ DynMaybe <$> (sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
     return dma
 
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Day where
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "Day")
     let wc = WidgetConfig RD.never mInitial attrsDyn
-    dma <- itemL $ sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c
+    dma <- itemL $ DynMaybe <$> (sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
     return dma
 
 -- uses generics to build instances
@@ -204,7 +204,7 @@ instance {-# OVERLAPPABLE #-} (SimpleFormC e t m,Enum a,Show a,Bounded a, Eq a)
     let values = [minBound..] :: [a]
         initial = maybe (head values) id mInitial
         wc = WidgetConfig RD.never initial attrsDyn
-    dma <- itemL $ sfWidget Just showText mFN wc $ \c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c
+    dma <- itemL $ DynMaybe <$> (sfWidget Just showText mFN wc $ \c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
     return dma
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
@@ -225,8 +225,7 @@ instance (SimpleFormC e t m,
       maW <- unSF $ B.buildA Nothing ma
       mbW <- unSF $ B.buildA Nothing mb
       mcW <- unSF $ B.buildA Nothing mc
-      lift $ (fmap (,,)) <$> maW <*> mbW <*> mcW
---      lift $ [mkDyn|(,,) <$> $maW <*> $mbW <*> $mcW|]
+      return $ (,,) <$> maW <*> mbW <*> mcW
 
 instance (SimpleFormC e t m,
           B.Builder  (SimpleFormR e t m)  a,
@@ -241,7 +240,7 @@ instance (SimpleFormC e t m,
       mbW <- unSF $ B.buildA Nothing mb
       mcW <- unSF $ B.buildA Nothing mc
       mdW <- unSF $ B.buildA Nothing md
-      lift $ [mkDyn|(,,,) <$> $maW <*> $mbW <*> $mcW <*> $mdW|]
+      return  $ (,,,) <$> maW <*> mbW <*> mcW <*> mdW
 
 instance (SimpleFormC e t m,
           B.Builder  (SimpleFormR e t m)  a,
@@ -258,4 +257,4 @@ instance (SimpleFormC e t m,
       mcW <- unSF $ B.buildA Nothing mc
       mdW <- unSF $ B.buildA Nothing md
       meW <- unSF $ B.buildA Nothing me
-      lift $ [mkDyn|(,,,,) <$> $maW <*> $mbW <*> $mcW <*> $mdW <*> $meW|]
+      return $ (,,,,) <$> maW <*> mbW <*> mcW <*> mdW <*> meW

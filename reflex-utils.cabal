@@ -60,7 +60,7 @@ library
                      , time
                      , hashable
                      , unordered-containers
---                     , reflex-orphans
+
   if impl(ghcjs)
     build-depends:     ghcjs-base
 

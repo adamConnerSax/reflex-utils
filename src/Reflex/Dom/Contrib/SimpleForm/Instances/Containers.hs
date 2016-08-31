@@ -10,7 +10,7 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
 -- From this lib
 import Reflex.Dom.Contrib.Layout.Types (LayoutM,CssClasses,IsCssClass(..))
-import Reflex.Dom.Contrib.Layout.LayoutM() --for LayoutM instances
+--import Reflex.Dom.Contrib.Layout.LayoutM() --for LayoutM instances
 
 -- All the basic (primitive types, tuples, etc.) are in here
 import Reflex.Dom.Contrib.SimpleForm.Instances.Basic()
