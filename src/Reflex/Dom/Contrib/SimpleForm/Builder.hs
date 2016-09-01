@@ -189,7 +189,7 @@ data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed d
 -- | instantiate the class for that type.
 -- TODO: Should this all just be a data type (record-of-functions)?
 class SimpleFormConfiguration e t m | m->t  where
-  failureF::String->SimpleFormR e t m a
+  failureF::T.Text->SimpleFormR e t m a
   sumF::[(B.ConName,SimpleFormR e t m a)]->Maybe B.ConName->SimpleFormR e t m a
   formItem::SFLayoutF e m a
   dynamicDiv::DynAttrs t->SFLayoutF e m a
@@ -307,7 +307,7 @@ componentTitle mFN mType =
 
 instance SimpleFormC e t m => B.Buildable (SimpleFormR e t m) where
   -- the rest of the instances are handled by defaults since SimpleFormR is Applicative
-  bFail = failureF
+  bFail = failureF . T.pack
   bSum mwWidgets = SimpleFormR $ do
     let constrList = map (\mdw -> (fst . B.metadata $ mdw, B.value mdw)) mwWidgets
         defCon = case filter B.hasDefault mwWidgets of

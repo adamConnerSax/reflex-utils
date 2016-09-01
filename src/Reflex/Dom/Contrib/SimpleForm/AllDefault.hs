@@ -52,6 +52,7 @@ import Control.Monad.Exception (MonadException,MonadAsyncException)
 import Data.Maybe (fromJust)
 import qualified Data.List as L
 import qualified Data.Map as M
+import qualified Data.Text as T
 import Data.Monoid ((<>))
 
 data DefSFCfg  = DefSFCfg
@@ -59,17 +60,17 @@ data DefSFCfg  = DefSFCfg
                    cfgValidStyle::CssClasses
                  , cfgInvalidStyle::CssClasses                                    
                  , cfgObserverStyle::CssClasses
-                 , cfgLabelF::Maybe (String -> String)
+                 , cfgLabelF::Maybe (T.Text -> T.Text)
                  , cfgObserver::Bool
                  }
 
 setCfgToObserver::DefSFCfg->DefSFCfg
 setCfgToObserver x = x { cfgObserver = True }
 
-defFailureF::SimpleFormC e t m=>String->SimpleFormR e t m a
+defFailureF::SimpleFormC e t m=>T.Text->SimpleFormR e t m a
 defFailureF msg = SimpleFormR $ do
   RD.text msg
-  return $ R.constDyn Nothing
+  return dynMaybeNothing
 
 data SFRPair e t m a = SFRPair { sfrpCN::B.ConName, sfrpV::(SimpleFormR e t m a) }
 
@@ -90,7 +91,7 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
       attrsDyn = R.constDyn (cssClassAttr (classes) <> titleAttr "Constructor")
       wc = WidgetConfig RD.never defPair attrsDyn
   formRow $ do
-    sfrpCW <- itemL $ sfWidget id sfrpCN Nothing wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames id (flip getSFRP conWidgets) wc
+    sfrpCW <- itemL $ (sfWidget id (T.pack . sfrpCN) Nothing wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames T.pack (flip getSFRP conWidgets) wc)
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
 {-
@@ -125,7 +126,7 @@ instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCf
     return $ mf >>= (\f -> Just $ textAtLeft . f)
 
 
-collapsibleWidget::(MonadIO (PushM t),RD.MonadWidget t m)=>String->CollapsibleInitialState->m a->m a
+collapsibleWidget::(MonadIO (PushM t),RD.MonadWidget t m)=>T.Text->CollapsibleInitialState->m a->m a
 collapsibleWidget summary cis w = 
   RD.elAttr "details" (if cis == CollapsibleStartsOpen then "open" RD.=: "" else mempty) $ do
     RD.el "summary" $ RD.text summary

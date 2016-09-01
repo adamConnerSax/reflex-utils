@@ -18,6 +18,7 @@ import Data.FileEmbed
 import Text.Show.Pretty (ppShow)
 import qualified GHC.Generics as GHC
 --import Clay hiding (button,col,Color)
+import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.Sequence as Seq
 import qualified Data.HashSet as HS
@@ -29,7 +30,9 @@ import Reflex.Dynamic.TH
 import Reflex.Dom
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 
-import Reflex.Dom.Contrib.Layout.All (CssClasses(..),CssClass(..),emptyCss,flexCssBS,flexFillR,cssToBS)
+import Reflex.Dom.Contrib.Layout.Types (CssClasses(..),CssClass(..),emptyCss)
+import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,flexFillR)
+import Reflex.Dom.Contrib.Layout.ClayUtils (cssToBS)
 --import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
 import Reflex.Dom.Contrib.SimpleForm
 --import DataBuilder
@@ -122,7 +125,8 @@ test::(SimpleFormC e t m, MonadIO (PushM t))=>e->m ()
 test cfg = do
   cDynM<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
   el "p" $ text "C from form:"
-  mapDyn ppShow cDynM >>= dynText
+  dynText ((T.pack . ppShow) <$> unDynMaybe cDynM)
+--  mapDyn ppShow cDynM >>= dynText
   el "p" $ text "Observed C:"
   el "p" blank
   _ <- flexFillR $ observeDynMaybe cfg (CssClass "sf-observer") cDynM
