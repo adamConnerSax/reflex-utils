@@ -1,12 +1,13 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE GADTs       #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE RecursiveDo           #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE GADTs                 #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
 -- From this lib
@@ -199,7 +200,7 @@ instance (R.Reflex t, R.MonadHold t m)=>Applicative (SSFR s e t m) where
   ssfrF <*> ssfrA = SSFR $ do
     dmF <- unSSFR ssfrF
     dmA <- unSSFR ssfrA
-    lift . lift $ R.combineDyn (<*>) dmF dmA
+    return $ dmF <*> dmA
 
 liftLF'::Monad m=>(forall b.m b->m b)->StateT s m a -> StateT s m a
 liftLF' = hoist 
@@ -212,14 +213,14 @@ widgetToggle startCond condEv trueW falseW = do
   RD.widgetHold (condW startCond) (condW <$> condEv)
 
 widgetToggleDyn::RD.MonadWidget t m=>Bool->R.Event t Bool -> m (R.Dynamic t a) -> m (R.Dynamic t a) -> m (R.Dynamic t a)
-widgetToggleDyn startCond condEv trueW falseW = R.joinDyn <$> widgetToggle startCond condEv trueW falseW
+widgetToggleDyn startCond condEv trueW falseW = join <$> widgetToggle startCond condEv trueW falseW
 
 -- unstyled, for use within other instances which will deal with the styling.
 buildTraversableSFA'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m b->BuildF e t m fa
 buildTraversableSFA' crI buildOne _ mfa =
   case mfa of
     Just fa -> unSF $ fromRep crI <$> traverse (liftF formRow . SimpleFormR . buildOne Nothing . Just) (toRep crI fa)
-    Nothing -> return $ R.constDyn Nothing
+    Nothing -> return $ dynMaybeNothing
 
 -- styled, in case we ever want an editable container without add/remove
 buildTraversableSFA::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m fa 
@@ -233,16 +234,16 @@ buildSFContainer aI buildTr mFN mfa = mdo
     attrsDyn <- sfAttrs dmfa mFN Nothing
     let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
     dmfa <- formCol' attrsDyn $ layoutCollapsible "" CollapsibleStartsOpen $ mdo
-      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ R.joinDyn <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [newSFREv,resizedEv]))
-      sizemDyn <- R.mapDyn (\mfa' -> sizeFa aI <$> mfa') dmfa'
-      let resizedEv = R.attachDynWithMaybe (\mfa' ms -> maybe Nothing (const $ buildTr mFN . Just . toT aI <$> mfa') ms) dmfa' (R.updated $ R.nubDyn sizemDyn)
+      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [newSFREv,resizedEv]))
+      let sizeDM = fmap (sizeFa aI) dmfa'
+          resizedEv = R.attachPromptlyDynWithMaybe (\mfa' ms -> maybe Nothing (const $ buildTr mFN . Just . toT aI <$> mfa') ms) (unDynMaybe dmfa') (R.updated $ R.uniqDyn (unDynMaybe sizeDM))
       addEv <- formRow $ do
         let emptyB = unSF $ B.buildA Nothing Nothing -- we don't pass the fieldname here since it's the name of the parent 
-        dmb <- itemL $ RD.joinDyn <$> RD.widgetHold emptyB (emptyB <$ R.updated dmfa')
+        dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ R.updated (unDynMaybe dmfa'))
         clickEv <-  layoutVC . itemR . lift $ RD.button "+"
-        return $ R.attachDynWithMaybe const dmb clickEv -- only fires if button is clicked when mb is a Just.
+        return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb) clickEv -- only fires if button is clicked when mb is a Just.
       let insert mfa' b = insertB aI <$> Just b <*> mfa' 
-          newFaEv = R.attachDynWithMaybe insert dmfa' addEv -- Event t (tr a), only fires if traversable is not Nothing
+          newFaEv = R.attachPromptlyDynWithMaybe insert (unDynMaybe dmfa') addEv -- Event t (tr a), only fires if traversable is not Nothing
           newSFREv = fmap (buildTr mFN . Just . toT aI) newFaEv -- Event t (SFRW e t m (g b))
       return dmfa'
     return dmfa
@@ -252,16 +253,16 @@ buildSFContainer' aI buildTr mFN mfa = mdo
     attrsDyn <- sfAttrs dmfa mFN Nothing
     let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
     dmfa <- formCol' attrsDyn $ mdo
-      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ R.joinDyn <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [newSFREv,resizedEv]))
-      sizemDyn <- R.mapDyn (\mfa' -> sizeFa aI <$> mfa') dmfa'
-      let resizedEv = R.attachDynWithMaybe (\mfa' ms -> maybe Nothing (const $ buildTr mFN . Just . toT aI <$> mfa') ms) dmfa' (R.updated $ R.nubDyn sizemDyn)
+      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [newSFREv,resizedEv]))
+      let sizeDM = fmap (sizeFa aI) dmfa'
+          resizedEv = R.attachPromptlyDynWithMaybe (\mfa' ms -> maybe Nothing (const $ buildTr mFN . Just . toT aI <$> mfa') ms) (unDynMaybe dmfa') (R.updated $ R.uniqDyn (unDynMaybe sizeDM))
       addEv <- formRow $ do
         let emptyB = unSF $ B.buildA Nothing Nothing -- we don't pass the fieldname here since it's the name of the parent 
-        dmb <- itemL $ RD.joinDyn <$> RD.widgetHold emptyB (emptyB <$ R.updated dmfa')
+        dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ R.updated (unDynMaybe dmfa'))
         clickEv <-  layoutVC . itemR . lift $ RD.button "+"
-        return $ R.attachDynWithMaybe const dmb clickEv -- only fires if button is clicked when mb is a Just.
+        return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb) clickEv -- only fires if button is clicked when mb is a Just.
       let insert mfa' b = insertB aI <$> Just b <*> mfa' 
-          newFaEv = R.attachDynWithMaybe insert dmfa' addEv -- Event t (tr a), only fires if traversable is not Nothing
+          newFaEv = R.attachPromptlyDynWithMaybe insert (unDynMaybe dmfa') addEv -- Event t (tr a), only fires if traversable is not Nothing
           newSFREv = fmap (buildTr mFN . Just . toT aI) newFaEv -- Event t (SFRW e t m (g b))
       return dmfa'
     return dmfa    
@@ -272,7 +273,7 @@ buildOneDeletable dI mFN ma = liftLF' formRow $ do
     (evs,curS) <- get
     dma <- lift . itemL . unSF $ B.buildA mFN ma
     ev  <- lift . layoutVC . itemR . lift $ RD.button "-" 
-    let ev' = R.attachDynWithMaybe (\ma' _ -> getKey dI <$> ma' <*> Just curS) dma ev
+    let ev' = R.attachPromptlyDynWithMaybe (\ma' _ -> getKey dI <$> ma' <*> Just curS) (unDynMaybe dma) ev
     put (ev':evs,updateS dI curS)
     return dma
 
@@ -280,15 +281,16 @@ buildOneDeletable dI mFN ma = liftLF' formRow $ do
 buildDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b, Traversable g)=>SFDeletableI g b k s->BuildF e t m (g b)
 buildDeletable dI _ mgb = 
   case mgb of
-    Nothing -> return $ R.constDyn Nothing
+    Nothing -> return dynMaybeNothing
     Just gb -> mdo
       let f gb' = do
             (dmgb',(evs,_)) <- runStateT (unSSFR $ traverse (SSFR . liftLF' formRow  . buildOneDeletable dI Nothing . Just) gb') ([],initialS dI)
             return  (dmgb',R.leftmost evs)
-      (ddmgb,dEv) <- join $ R.splitDyn <$> RD.widgetHold (f gb) (f <$> newgbEv)
-      let dmgb = R.joinDyn ddmgb
-          newgbEv = R.attachDynWithMaybe (\mgb' key-> delete dI key <$> mgb') dmgb (R.switchPromptlyDyn dEv)
-      return dmgb
+--      (ddmgb,dEv) <- join $ R.splitDyn <$> RD.widgetHold (f gb) (f <$> newgbEv)
+      (ddmgb,dEv) <- R.splitDynPure <$> RD.widgetHold (f gb) (f <$> newgbEv)
+      let dmgb = join (unDynMaybe <$> ddmgb)
+          newgbEv = R.attachPromptlyDynWithMaybe (\mgb' key-> delete dI key <$> mgb') dmgb (R.switchPromptlyDyn dEv)
+      return $ DynMaybe dmgb
 
 {- This fails with ambiguous types, because TR and E are not injective.  Why doesn't ScopedTypeVariables help?
 class SFAppendable fa where
