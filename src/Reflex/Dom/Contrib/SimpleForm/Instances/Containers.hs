@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE GADTs       #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
 -- From this lib
@@ -190,10 +191,11 @@ type BuildF e t m a = Maybe FieldName->Maybe a->SFRW e t m a
 newtype SSFR s e t m a = SSFR { unSSFR::StateT s (ReaderT e m) (DynMaybe t a) }
 
 instance (R.Reflex t, R.MonadHold t m)=>Functor (SSFR s e t m) where
-  fmap f ssfra = SSFR $ unSSFR ssfra >>= lift . lift . R.mapDyn (fmap f) 
+--  fmap f ssfra = SSFR $ unSSFR ssfra >>= lift . lift . R.mapDyn (fmap f)
+  fmap f ssfra = SSFR $ (fmap f) <$> unSSFR ssfra 
 
 instance (R.Reflex t, R.MonadHold t m)=>Applicative (SSFR s e t m) where
-  pure x = SSFR $ return (R.constDyn (Just x))
+  pure x = SSFR $ return $ pure x
   ssfrF <*> ssfrA = SSFR $ do
     dmF <- unSSFR ssfrF
     dmA <- unSSFR ssfrA
