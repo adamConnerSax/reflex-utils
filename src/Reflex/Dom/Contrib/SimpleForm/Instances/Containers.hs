@@ -90,8 +90,10 @@ buildAdjustableContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Tra
 buildAdjustableContainer sfAdj mFN mfa = SimpleFormR  $ do
   isObserver <- observer
   if isObserver
-     then buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfa
-     else buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
+    then buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfa
+    else buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
+--    else buildSFContainer (sfAI sfAdj) (buildTraversableSFA idRep) mFN mfa
+
 
 
 buildReadOnlyContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
@@ -234,16 +236,18 @@ buildSFContainer aI buildTr mFN mfa = mdo
     attrsDyn <- sfAttrs dmfa mFN Nothing
     let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
     dmfa <- formCol' attrsDyn $ layoutCollapsible "" CollapsibleStartsOpen $ mdo
-      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [newSFREv,resizedEv]))
-      let sizeDM = fmap (sizeFa aI) dmfa'
-          resizedEv = R.attachPromptlyDynWithMaybe (\mfa' ms -> maybe Nothing (const $ buildTr mFN . Just . toT aI <$> mfa') ms) (unDynMaybe dmfa') (R.updated $ R.uniqDyn (unDynMaybe sizeDM))
+      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [resizedEv,newSFREv]))
+      let udmfa' = unDynMaybe dmfa'
+          sizeDM = fmap (sizeFa aI) dmfa'
+          newSizeEv = R.updated . R.uniqDyn $ unDynMaybe sizeDM
+          resizedEv = R.attachPromptlyDynWithMaybe (\mfa' ms -> maybe Nothing (const $ buildTr mFN . Just . toT aI <$> mfa') ms) udmfa' newSizeEv
       addEv <- formRow $ do
         let emptyB = unSF $ B.buildA Nothing Nothing -- we don't pass the fieldname here since it's the name of the parent 
-        dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ R.updated (unDynMaybe dmfa'))
+        dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ R.updated udmfa')
         clickEv <-  layoutVC . itemR . lift $ RD.button "+"
         return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb) clickEv -- only fires if button is clicked when mb is a Just.
       let insert mfa' b = insertB aI <$> Just b <*> mfa' 
-          newFaEv = R.attachPromptlyDynWithMaybe insert (unDynMaybe dmfa') addEv -- Event t (tr a), only fires if traversable is not Nothing
+          newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if traversable is not Nothing
           newSFREv = fmap (buildTr mFN . Just . toT aI) newFaEv -- Event t (SFRW e t m (g b))
       return dmfa'
     return dmfa
