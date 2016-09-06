@@ -231,24 +231,28 @@ buildTraversableSFA crI md mfa = do
 
 -- TODO: need a new version to do widgetHold over whole thing if collapsible depends on size
 buildSFContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
-buildSFContainer aI buildTr mFN mfa = mdo
+buildSFContainer aI buildTr mFN mfa = do
+  lift $ RD.button "*"
+  mdo
     attrsDyn <- sfAttrs dmfa mFN Nothing
     let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
     dmfa <- formCol' attrsDyn $ layoutCollapsible "" CollapsibleStartsOpen $ mdo
       dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) newSFREv)
-      let udmfa' = unDynMaybe dmfa'
+--      let udmfa' = unDynMaybe dmfa'
 --          sizeDM = fmap (sizeFa aI) dmfa'
 --          newSizeEv = R.updated . R.uniqDyn $ unDynMaybe sizeDM
-          resizedFaEv = R.never --R.attachPromptlyDynWithMaybe (\mFa ms -> maybe Nothing (const mFa) ms) udmfa' newSizeEv
-      addEv <- formRow $ do
-        let emptyB = unSF $ B.buildA Nothing Nothing -- form for the single elt to add.
+--          resizedFaEv = R.never --R.attachPromptlyDynWithMaybe (\mFa ms -> maybe Nothing (const mFa) ms) udmfa' newSizeEv
+
+{-      addEv <- {- formRow $ -} do
+        --let --emptyB = unSF $ B.buildA Nothing Nothing
         -- we have to clear it once it's used. For now we replace it with a new one.
-        dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-        clickEv <-  layoutVC . itemR . lift $ RD.button "+"
-        return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb) clickEv -- only fires if button is clicked when mb is a Just.
-      let insert mfa' b = insertB aI <$> Just b <*> mfa' 
-          newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
-          newSFREv = fmap (buildTr mFN . Just . toT aI) (R.leftmost [newFaEv,resizedFaEv]) -- Event t (SFRW e t m (g b))
+        --dmb <- itemL $ emptyB --joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
+        clickEv <-  {- layoutVC . itemR .-} lift $ RD.button "*" 
+        return $ {- R.attachPromptlyDynWithMaybe const (unDynMaybe dmb) -} clickEv -- only fires if button is clicked when mb is a Just.
+-}
+      let insert mfa' b = insertB aI <$> Just b <*> mfa'  
+          --newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
+          newSFREv = R.never --fmap (buildTr mFN . Just . toT aI) (R.leftmost [newFaEv,resizedFaEv]) -- Event t (SFRW e t m (g b))
       return dmfa'
     return dmfa
 
