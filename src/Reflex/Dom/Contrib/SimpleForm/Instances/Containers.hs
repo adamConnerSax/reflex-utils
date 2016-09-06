@@ -30,7 +30,6 @@ import Data.Monoid ((<>))
 -- reflex imports
 import qualified Reflex as R 
 import qualified Reflex.Dom as RD
-import Reflex.Dynamic.TH (mkDyn)
 
 -- imports only to make instances
 import qualified Data.List as L
@@ -91,8 +90,8 @@ buildAdjustableContainer sfAdj mFN mfa = SimpleFormR  $ do
   isObserver <- observer
   if isObserver
     then buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfa
-    else buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
---    else buildSFContainer (sfAI sfAdj) (buildTraversableSFA idRep) mFN mfa
+--    else buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
+    else buildSFContainer (sfAI sfAdj) (buildTraversableSFA idRep) mFN mfa
 
 
 
@@ -236,19 +235,20 @@ buildSFContainer aI buildTr mFN mfa = mdo
     attrsDyn <- sfAttrs dmfa mFN Nothing
     let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
     dmfa <- formCol' attrsDyn $ layoutCollapsible "" CollapsibleStartsOpen $ mdo
-      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [resizedEv,newSFREv]))
+      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) newSFREv)
       let udmfa' = unDynMaybe dmfa'
-          sizeDM = fmap (sizeFa aI) dmfa'
-          newSizeEv = R.updated . R.uniqDyn $ unDynMaybe sizeDM
-          resizedEv = R.attachPromptlyDynWithMaybe (\mfa' ms -> maybe Nothing (const $ buildTr mFN . Just . toT aI <$> mfa') ms) udmfa' newSizeEv
+--          sizeDM = fmap (sizeFa aI) dmfa'
+--          newSizeEv = R.updated . R.uniqDyn $ unDynMaybe sizeDM
+          resizedFaEv = R.never --R.attachPromptlyDynWithMaybe (\mFa ms -> maybe Nothing (const mFa) ms) udmfa' newSizeEv
       addEv <- formRow $ do
-        let emptyB = unSF $ B.buildA Nothing Nothing -- we don't pass the fieldname here since it's the name of the parent 
-        dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ R.updated udmfa')
+        let emptyB = unSF $ B.buildA Nothing Nothing -- form for the single elt to add.
+        -- we have to clear it once it's used. For now we replace it with a new one.
+        dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
         clickEv <-  layoutVC . itemR . lift $ RD.button "+"
         return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb) clickEv -- only fires if button is clicked when mb is a Just.
       let insert mfa' b = insertB aI <$> Just b <*> mfa' 
-          newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if traversable is not Nothing
-          newSFREv = fmap (buildTr mFN . Just . toT aI) newFaEv -- Event t (SFRW e t m (g b))
+          newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
+          newSFREv = fmap (buildTr mFN . Just . toT aI) (R.leftmost [newFaEv,resizedFaEv]) -- Event t (SFRW e t m (g b))
       return dmfa'
     return dmfa
 

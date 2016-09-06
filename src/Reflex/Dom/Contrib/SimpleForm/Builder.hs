@@ -1,15 +1,15 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeFamilies           #-}
 module Reflex.Dom.Contrib.SimpleForm.Builder
        (
          DynMaybe(..)
@@ -55,26 +55,33 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , sfAttrs
        ) where
 
-import Reflex.Dom.Contrib.Layout.Types (CssClass,CssClasses(..),IsCssClass(..))
+import           Reflex.Dom.Contrib.Layout.Types (CssClass, CssClasses (..),
+                                                  IsCssClass (..))
 --import Reflex.Dom.Contrib.Layout.LayoutM()
 
-import qualified DataBuilder as B
-import DataBuilder as BExport (Builder(..),GBuilder(..),FieldName,MDWrapped(..),buildAFromConList)
-import DataBuilder.GenericSOP as GSOP (Generic,HasDatatypeInfo,deriveGeneric)
-import DataBuilder.TH (deriveBuilder)
+import           DataBuilder                     as BExport (Builder (..),
+                                                             FieldName,
+                                                             GBuilder (..),
+                                                             MDWrapped (..),
+                                                             buildAFromConList)
+import qualified DataBuilder                     as B
+import           DataBuilder.GenericSOP          as GSOP (Generic,
+                                                          HasDatatypeInfo,
+                                                          deriveGeneric)
+import           DataBuilder.TH                  (deriveBuilder)
 
-import qualified Reflex as R
-import Reflex as ReflexExport (PushM)
-import qualified Reflex.Dom as RD
+import           Reflex                          as ReflexExport (PushM)
+import qualified Reflex                          as R
+import qualified Reflex.Dom                      as RD
 
-import Control.Monad (join)
-import Control.Monad.Reader (ReaderT, runReaderT, ask) --, lift,local)
-import Control.Monad.Morph
-import Data.Maybe (isJust,fromMaybe)
-import Data.Monoid ((<>))
-import qualified Data.Text as T
-import qualified Data.Map as M
-import Language.Haskell.TH
+import           Control.Monad                   (join)
+import           Control.Monad.Morph
+import           Control.Monad.Reader            (ReaderT, ask, runReaderT)
+import qualified Data.Map                        as M
+import           Data.Maybe                      (fromMaybe, isJust)
+import           Data.Monoid                     ((<>))
+import qualified Data.Text                       as T
+import           Language.Haskell.TH
 
 
 
@@ -87,7 +94,7 @@ joinDynOfDynMaybe::R.Reflex t=>RD.Dynamic t (DynMaybe t a) -> DynMaybe t a
 joinDynOfDynMaybe = DynMaybe . join . (fmap unDynMaybe)
 
 instance R.Reflex t=>Functor (DynMaybe t) where
-  fmap f dma = DynMaybe $ fmap (fmap f) (unDynMaybe dma)  
+  fmap f dma = DynMaybe $ fmap (fmap f) (unDynMaybe dma)
 
 instance R.Reflex t =>Applicative (DynMaybe t) where
   pure x = DynMaybe $ R.constDyn (Just x)
@@ -95,10 +102,10 @@ instance R.Reflex t =>Applicative (DynMaybe t) where
 
 instance R.Reflex t=>Monad (DynMaybe t) where
   return = pure
-  dma >>= f =  DynMaybe$ do
+  dma >>= f =  DynMaybe $ do
     ma <- unDynMaybe dma
-    unDynMaybe $ maybe (DynMaybe $ R.constDyn Nothing) f ma
-  
+    unDynMaybe $ maybe dynMaybeNothing f ma
+
 type SFRW e t m a = ReaderT e m (DynMaybe t a)
 
 -- This is necessary because this functor and applicative are different from that of SFRW
@@ -108,7 +115,7 @@ instance (R.Reflex t, R.MonadHold t m)=>Functor (SimpleFormR e t m) where
   fmap f sfra = SimpleFormR $ fmap (fmap f) (unSF sfra)
 
 instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR e t m) where
-  pure = SimpleFormR . return . pure 
+  pure = SimpleFormR . return . pure
   sfrF <*> sfrA = SimpleFormR $ do
     dmF <- unSF sfrF
     dmA <- unSF sfrA
@@ -124,7 +131,7 @@ switchingSFR::SimpleFormC e t m=>(a->SimpleFormR e t m b)->a->R.Event t a->Simpl
 switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
   cfg <- ask
   let f = runSimpleFormR cfg . widgetGetter
-  lift $ joinDynOfDynMaybe <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)  
+  lift $ joinDynOfDynMaybe <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)
 
 asSimpleForm::RD.MonadWidget t m=>CssClass->m a->m a
 asSimpleForm formClass = RD.elClass "form" (toCssString formClass)
@@ -134,7 +141,7 @@ asSimpleObserver observerClass = RD.divClass (toCssString observerClass)
 
 
 makeSimpleForm::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->Maybe a->m (DynMaybe t a)
-makeSimpleForm cfg formClass ma = 
+makeSimpleForm cfg formClass ma =
   asSimpleForm formClass $ runSimpleFormR cfg $ B.buildA Nothing ma
 
 observeDynamic::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->R.Dynamic t a->m (DynMaybe t a)
@@ -143,7 +150,7 @@ observeDynamic cfg observerClass aDyn = observeDynMaybe cfg observerClass $ DynM
 observeDynMaybe::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->DynMaybe t a->m (DynMaybe t a)
 observeDynMaybe cfg observerClass aDynM =
   asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
-    let makeForm = maybe (return $ DynMaybe $ R.constDyn Nothing) (unSF . buildA Nothing . Just) 
+    let makeForm = maybe (return $ DynMaybe $ R.constDyn Nothing) (unSF . buildA Nothing . Just)
         builtDyn = fmap makeForm (unDynMaybe aDynM)  -- Dynamic t (ReaderT e m (DynMaybe t a))
     newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
     lift $ joinDynOfDynMaybe <$> R.holdDyn aDynM newDynEv --R.foldDyn (\_ x-> x) aDynM newDynEv -- DynMaybe t a
@@ -163,7 +170,7 @@ observeFlow cfg formClass observerClass f a = runSimpleFormR cfg . SimpleFormR  
   dma <- liftLF (asSimpleForm formClass) (unSF $ buildA Nothing (Just a)) -- DynMaybe t a
   dwb <- lift $ R.foldDynMaybe (\ma _ -> f <$> ma) initialWidget (R.updated $ unDynMaybe dma) -- Dynamic t (m b)
   lift $ joinDynOfDynMaybe <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
-    
+
 
 type SFLayoutF e m a = ReaderT e m a -> ReaderT e m a
 type DynAttrs t = R.Dynamic t (M.Map T.Text T.Text)
@@ -181,7 +188,7 @@ liftRAction::Monad m=>ReaderT e m b->SimpleFormR e t m a->SimpleFormR e t m a
 liftRAction ac sf = SimpleFormR $ ac >> unSF sf
 
 liftAction::Monad m=>m b->SimpleFormR e t m a->SimpleFormR e t m a
-liftAction ac = liftRAction (lift ac) 
+liftAction ac = liftRAction (lift ac)
 
 data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)
 
@@ -222,7 +229,7 @@ textAtLeft label ra = formRow $ do
   formItem ra
 
 textOnTop::SimpleFormC e t m=>T.Text->SFLayoutF e m a
-textOnTop = textOnTop' id 
+textOnTop = textOnTop' id
 
 textOnTop'::SimpleFormC e t m=>SFLayoutF e m ()->T.Text->SFLayoutF e m a
 textOnTop' labelLayout label ra = formCol $ do
@@ -237,7 +244,7 @@ legend legend ra = RD.el "fieldset" $ do
 {-
 labelTop::SimpleFormC e t m=>String->SFLayoutF e m a
 labelTop label ra = do
-  labelClasses <- labelStyle 
+  labelClasses <- labelStyle
   layoutVert $ do
     formItem . lift $ RD.elClass "div" (toCssString labelClasses) $ RD.text label
     ra
@@ -247,7 +254,7 @@ itemL::SimpleFormConfiguration e t m=>SFLayoutF e m a
 itemL = layoutL . formItem
 
 itemR::SimpleFormConfiguration e t m=>SFLayoutF e m a
-itemR = layoutR . formItem 
+itemR = layoutR . formItem
 
 formRow::SimpleFormConfiguration e t m=>SFLayoutF e m a
 formRow  = formItem . layoutHoriz
@@ -295,7 +302,7 @@ sfAttrs' mDyn mFN mTypeS fixedCss = do
          then return $ R.constDyn observerAttr
          else R.forDyn (unDynMaybe mDyn) $ \x -> if isJust x
                                     then validAttrs
-                                    else invalidAttrs 
+                                    else invalidAttrs
 
 
 componentTitle::Maybe FieldName->Maybe T.Text->T.Text
@@ -313,7 +320,7 @@ instance SimpleFormC e t m => B.Buildable (SimpleFormR e t m) where
         defCon = case filter B.hasDefault mwWidgets of
           [] -> Nothing
           (x:_) -> Just . fst $ B.metadata x
-    unSF $ sumF constrList defCon 
+    unSF $ sumF constrList defCon
 
 
 deriveSFRowBuilder::Name -> Q [Dec]
