@@ -123,7 +123,6 @@ flowTestWidget n = do
 
 test::(SimpleFormC e t m, MonadIO (PushM t))=>e->m ()
 test cfg = do
-  button "Test Button"
   cDynM<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynMaybe cDynM)

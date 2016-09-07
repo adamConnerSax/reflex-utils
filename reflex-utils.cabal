@@ -46,6 +46,7 @@ library
                      , exception-transformers
                      , mtl
                      , lens
+                     , data-default
                      , ref-tf
                      , containers
                      , semigroups

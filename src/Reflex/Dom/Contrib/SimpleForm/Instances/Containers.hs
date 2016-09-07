@@ -19,6 +19,10 @@ import Reflex.Dom.Contrib.SimpleForm.Instances.Basic()
 
 import Reflex.Dom.Contrib.SimpleForm.Builder
 
+-- reflex imports
+import qualified Reflex as R 
+import qualified Reflex.Dom as RD
+
 
 import Control.Monad (join)
 import Control.Arrow ((&&&))
@@ -26,10 +30,11 @@ import Control.Monad.Reader (ReaderT, lift)
 import Control.Monad.State (StateT, runStateT, modify, get, put)
 import Control.Monad.Morph (hoist)
 import Data.Monoid ((<>))
+import Control.Lens ((%~))
+import Data.Proxy (Proxy(..))
+import Data.Default (def)
+import qualified Data.Text as T
 
--- reflex imports
-import qualified Reflex as R 
-import qualified Reflex.Dom as RD
 
 -- imports only to make instances
 import qualified Data.List as L
@@ -90,9 +95,19 @@ buildAdjustableContainer sfAdj mFN mfa = SimpleFormR  $ do
   isObserver <- observer
   if isObserver
     then buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfa
---    else buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
-    else buildSFContainer (sfAI sfAdj) (buildTraversableSFA idRep) mFN mfa
+    else buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
+--    else buildSFContainer (sfAI sfAdj) (buildTraversableSFA idRep) mFN mfa
 
+-- default behavior of button in a form is to submit the form
+-- This creates a button but without that default
+buttonNoSubmit :: forall t m .RD.DomBuilder t m => T.Text -> m (RD.Event t ())
+buttonNoSubmit t = do
+  let pd::RD.EventSpec (RD.DomBuilderSpace m) RD.EventResult -> RD.EventSpec (RD.DomBuilderSpace m) RD.EventResult
+      pd x =  RD.addEventSpecFlags (Proxy::Proxy (RD.DomBuilderSpace m)) RD.Click (const RD.preventDefault) x
+      pdCfg::RD.ElementConfig RD.EventResult t m -> RD.ElementConfig RD.EventResult t m
+      pdCfg x = RD.elementConfig_eventSpec %~ pd $ x
+  (e, _) <- RD.element "button" (pdCfg def) $ RD.text t
+  return $ RD.domEvent RD.Click e
 
 
 buildReadOnlyContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
@@ -231,56 +246,60 @@ buildTraversableSFA crI md mfa = do
 
 -- TODO: need a new version to do widgetHold over whole thing if collapsible depends on size
 buildSFContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
-buildSFContainer aI buildTr mFN mfa = do
-  lift $ RD.button "*"
-  mdo
-    attrsDyn <- sfAttrs dmfa mFN Nothing
-    let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
-    dmfa <- formCol' attrsDyn $ layoutCollapsible "" CollapsibleStartsOpen $ mdo
-      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) newSFREv)
---      let udmfa' = unDynMaybe dmfa'
---          sizeDM = fmap (sizeFa aI) dmfa'
---          newSizeEv = R.updated . R.uniqDyn $ unDynMaybe sizeDM
---          resizedFaEv = R.never --R.attachPromptlyDynWithMaybe (\mFa ms -> maybe Nothing (const mFa) ms) udmfa' newSizeEv
+buildSFContainer aI buildTr mFN mfa = mdo
+  attrsDyn <- sfAttrs dmfa mFN Nothing
+  let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
+  dmfa <- formCol' attrsDyn $ layoutCollapsible "" CollapsibleStartsOpen $ mdo
+    dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) newSFREv)
+    let udmfa' = unDynMaybe dmfa'
+        sizeDM = fmap (sizeFa aI) dmfa'
+        newSizeEv = R.updated . R.uniqDyn $ unDynMaybe sizeDM
+        resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> maybe Nothing (const mFa) ms) udmfa' newSizeEv
+          
+    addEv <- formRow $  do
+      let emptyB = unSF $ B.buildA Nothing Nothing
+      -- we have to clear it once it's used. For now we replace it with a new one.
+      dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
+      clickEv <-  layoutVC . itemR . lift $ buttonNoSubmit "+" 
+      return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb)  clickEv -- only fires if button is clicked when mb is a Just.
+        
+    let insert mfa' b = insertB aI <$> Just b <*> mfa'  
+        newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
+        newSFREv = fmap (buildTr mFN . Just . toT aI) (R.leftmost [newFaEv,resizedFaEv]) -- Event t (SFRW e t m (g b))
+    return dmfa'
+  return dmfa
 
-{-      addEv <- {- formRow $ -} do
-        --let --emptyB = unSF $ B.buildA Nothing Nothing
-        -- we have to clear it once it's used. For now we replace it with a new one.
-        --dmb <- itemL $ emptyB --joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-        clickEv <-  {- layoutVC . itemR .-} lift $ RD.button "*" 
-        return $ {- R.attachPromptlyDynWithMaybe const (unDynMaybe dmb) -} clickEv -- only fires if button is clicked when mb is a Just.
--}
-      let insert mfa' b = insertB aI <$> Just b <*> mfa'  
-          --newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
-          newSFREv = R.never --fmap (buildTr mFN . Just . toT aI) (R.leftmost [newFaEv,resizedFaEv]) -- Event t (SFRW e t m (g b))
-      return dmfa'
-    return dmfa
 
 buildSFContainer'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
 buildSFContainer' aI buildTr mFN mfa = mdo
-    attrsDyn <- sfAttrs dmfa mFN Nothing
-    let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
-    dmfa <- formCol' attrsDyn $ mdo
-      dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) (R.leftmost [newSFREv,resizedEv]))
-      let sizeDM = fmap (sizeFa aI) dmfa'
-          resizedEv = R.attachPromptlyDynWithMaybe (\mfa' ms -> maybe Nothing (const $ buildTr mFN . Just . toT aI <$> mfa') ms) (unDynMaybe dmfa') (R.updated $ R.uniqDyn (unDynMaybe sizeDM))
-      addEv <- formRow $ do
-        let emptyB = unSF $ B.buildA Nothing Nothing -- we don't pass the fieldname here since it's the name of the parent 
-        dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ R.updated (unDynMaybe dmfa'))
-        clickEv <-  layoutVC . itemR . lift $ RD.button "+"
-        return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb) clickEv -- only fires if button is clicked when mb is a Just.
-      let insert mfa' b = insertB aI <$> Just b <*> mfa' 
-          newFaEv = R.attachPromptlyDynWithMaybe insert (unDynMaybe dmfa') addEv -- Event t (tr a), only fires if traversable is not Nothing
-          newSFREv = fmap (buildTr mFN . Just . toT aI) newFaEv -- Event t (SFRW e t m (g b))
-      return dmfa'
-    return dmfa    
+  attrsDyn <- sfAttrs dmfa mFN Nothing
+  let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
+  dmfa <- formCol' attrsDyn $ mdo
+    dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) newSFREv)
+    let udmfa' = unDynMaybe dmfa'
+        sizeDM = fmap (sizeFa aI) dmfa'
+        newSizeEv = R.updated . R.uniqDyn $ unDynMaybe sizeDM
+        resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> maybe Nothing (const mFa) ms) udmfa' newSizeEv
+          
+    addEv <- formRow $  do
+      let emptyB = unSF $ B.buildA Nothing Nothing
+      -- we have to clear it once it's used. For now we replace it with a new one.
+      dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
+      clickEv <-  layoutVC . itemR . lift $ buttonNoSubmit "+" 
+      return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb)  clickEv -- only fires if button is clicked when mb is a Just.
+        
+    let insert mfa' b = insertB aI <$> Just b <*> mfa'  
+        newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
+        newSFREv = fmap (buildTr mFN . Just . toT aI) (R.leftmost [newFaEv,resizedFaEv]) -- Event t (SFRW e t m (g b))
+    return dmfa'
+  return dmfa
 
 buildOneDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b)
                    =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (ReaderT e m) (DynMaybe t b)
 buildOneDeletable dI mFN ma = liftLF' formRow $ do     
     (evs,curS) <- get
     dma <- lift . itemL . unSF $ B.buildA mFN ma
-    ev  <- lift . layoutVC . itemR . lift $ RD.button "-" 
+    ev  <- lift . layoutVC . itemR . lift $ buttonNoSubmit "-" 
     let ev' = R.attachPromptlyDynWithMaybe (\ma' _ -> getKey dI <$> ma' <*> Just curS) (unDynMaybe dma) ev
     put (ev':evs,updateS dI curS)
     return dma
