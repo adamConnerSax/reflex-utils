@@ -150,7 +150,7 @@ observeDynamic cfg observerClass aDyn = observeDynMaybe cfg observerClass $ DynM
 observeDynMaybe::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->DynMaybe t a->m (DynMaybe t a)
 observeDynMaybe cfg observerClass aDynM =
   asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
-    let makeForm = maybe (return $ DynMaybe $ R.constDyn Nothing) (unSF . buildA Nothing . Just)
+    let makeForm = maybe (return dynMaybeNothing) (unSF . buildA Nothing . Just)
         builtDyn = fmap makeForm (unDynMaybe aDynM)  -- Dynamic t (ReaderT e m (DynMaybe t a))
     newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
     lift $ joinDynOfDynMaybe <$> R.holdDyn aDynM newDynEv --R.foldDyn (\_ x-> x) aDynM newDynEv -- DynMaybe t a
