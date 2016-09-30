@@ -204,10 +204,10 @@ class SimpleFormConfiguration e t m | m->t  where
   layoutHoriz::SFLayoutF e m a
   layoutL::SFLayoutF e m a
   layoutR::SFLayoutF e m a
-  layoutHC::SFLayoutF e m a
+  layoutHC::SFLayoutF e m a -- centered horizontally
   layoutT::SFLayoutF e m a
   layoutB::SFLayoutF e m a
-  layoutVC::SFLayoutF e m a
+  layoutVC::SFLayoutF e m a -- centered vertically
   layoutCollapsible::T.Text->CollapsibleInitialState->SFLayoutF e m a
   validItemStyle::ReaderT e m CssClasses
   invalidItemStyle::ReaderT e m CssClasses
