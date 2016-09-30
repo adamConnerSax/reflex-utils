@@ -130,6 +130,7 @@ extra-deps:
     - th-orphans-0.13.2
     - th-reify-many-0.1.6
     - transformers-compat-0.5.1.4
+    - validation-0.5.3
     - vector-algorithms-0.7.0.1
     - vector-binary-instances-0.2.3.2
     - vector-th-unbox-0.2.1.6

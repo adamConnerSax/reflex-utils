@@ -61,6 +61,7 @@ library
                      , time
                      , hashable
                      , unordered-containers
+                     , validation
 
   if impl(ghcjs)
     build-depends:     ghcjs-base
