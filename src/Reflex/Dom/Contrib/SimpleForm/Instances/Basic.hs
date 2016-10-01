@@ -64,7 +64,7 @@ showText = T.pack . show
 readOnlyW::RD.MonadWidget t m=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
 readOnlyW f wc = do
   da <- R.foldDyn const (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
-  ds <- R.mapDyn f da
+  let ds = f <$> da
   RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
   return da
 
@@ -78,7 +78,7 @@ sfWidget::SimpleFormC e t m=>
 sfWidget fDyn fString mFN wc widget = do
   isObserver <- observer
   let lfnF = layoutFieldNameHelper mFN
-  lfnF . lift $ (if isObserver then readOnlyW fString wc else widget wc) >>= R.mapDyn fDyn
+  lfnF . lift $ (fmap fDyn <$> (if isObserver then readOnlyW fString wc else widget wc)) -- >>= R.mapDyn fDyn
 
 fromAccVal::AccValidation e a->a
 fromAccVal (AccSuccess a) = a
