@@ -40,8 +40,14 @@ import           Reflex.Dom.Contrib.SimpleForm
 --import DataBuilder
 
 -- Some types to demonstrate what we can make into a form
+data ReadableType = RTI Int | RTS String (Show,Read)
+instance SimpleFormC e t m=>Builder (SimpleFormR e t m) ReadableType where
+  buildA = buildReadMaybe
+
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
 data Shape = Square | Circle | Triangle deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
+
+
 data DateOrDateTime = D Day | DT UTCTime deriving (Show)
 data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) deriving (Show,GHC.Generic)
 data B = B { int::Int, listOfA::[A] } deriving (Show,GHC.Generic)

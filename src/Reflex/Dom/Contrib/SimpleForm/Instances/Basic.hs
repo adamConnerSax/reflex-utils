@@ -12,6 +12,8 @@
 module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        (
          sfWidget
+       , buildReadMaybe
+       , buildReadable
        ) where
 
 import           Control.Applicative                   (liftA2)

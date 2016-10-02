@@ -12,10 +12,12 @@
 {-# LANGUAGE TypeFamilies           #-}
 module Reflex.Dom.Contrib.SimpleForm.Builder
        (
+         {-
          DynMaybe(..)
        , dynMaybeNothing
        , joinDynOfDynMaybe
-       , SimpleFormError(..)
+-}
+         SimpleFormError(..)
        , SimpleFormErrors
        , DynValidation(..)
        , accValidation
@@ -94,6 +96,7 @@ import           Data.Validation                 (AccValidation (..))
 import           Language.Haskell.TH
 
 
+{-
 newtype DynMaybe t a = DynMaybe { unDynMaybe::R.Dynamic t (Maybe a) }
 
 dynMaybeNothing::R.Reflex t => DynMaybe t a
@@ -116,7 +119,7 @@ instance R.Reflex t=>Monad (DynMaybe t) where
     ma <- unDynMaybe dma
     unDynMaybe $ maybe dynMaybeNothing f ma
 
-
+-}
 data SimpleFormError  = SFNothing | SFNoParse T.Text | SFInvalid T.Text deriving (Show,Eq)
 
 type SimpleFormErrors = [SimpleFormError]
