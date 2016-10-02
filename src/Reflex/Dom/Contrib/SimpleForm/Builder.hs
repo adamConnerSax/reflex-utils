@@ -117,7 +117,7 @@ instance R.Reflex t=>Monad (DynMaybe t) where
     unDynMaybe $ maybe dynMaybeNothing f ma
 
 
-data SimpleFormError  = SFNothing | SFNoParse T.Text | SFInvalid T.Text
+data SimpleFormError  = SFNothing | SFNoParse T.Text | SFInvalid T.Text deriving (Show,Eq)
 
 type SimpleFormErrors = [SimpleFormError]
 

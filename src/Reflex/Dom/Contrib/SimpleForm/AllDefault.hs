@@ -70,7 +70,7 @@ setCfgToObserver x = x { cfgObserver = True }
 defFailureF::SimpleFormC e t m=>T.Text->SimpleFormR e t m a
 defFailureF msg = SimpleFormR $ do
   RD.text msg
-  return dynMaybeNothing
+  return dynValidationNothing
 
 data SFRPair e t m a = SFRPair { sfrpCN::B.ConName, sfrpV::(SimpleFormR e t m a) }
 
