@@ -18,6 +18,7 @@ import qualified GHC.Generics                         as GHC
 import           Prelude                              hiding (div, rem, span)
 import           Text.Show.Pretty                     (ppShow)
 --import Clay hiding (button,col,Color)
+import           Data.Either
 import qualified Data.HashSet                         as HS
 import qualified Data.Map                             as M
 import qualified Data.Sequence                        as Seq
@@ -40,16 +41,19 @@ import           Reflex.Dom.Contrib.SimpleForm
 --import DataBuilder
 
 -- Some types to demonstrate what we can make into a form
-data ReadableType = RTI Int | RTS String (Show,Read)
+data ReadableType = RTI Int | RTS String deriving (Show,Read)
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) ReadableType where
   buildA = buildReadMaybe
+
+--data ValidatedInt = ValidatedInt { riValidate::Int->Either T.Text Int, riValue::Either T.Text Int }
+
 
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
 data Shape = Square | Circle | Triangle deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
 
 
 data DateOrDateTime = D Day | DT UTCTime deriving (Show)
-data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) deriving (Show,GHC.Generic)
+data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType deriving (Show,GHC.Generic)
 data B = B { int::Int, listOfA::[A] } deriving (Show,GHC.Generic)
 newtype MyMap = MyMap { map_String_B::M.Map String B } deriving (Show,GHC.Generic)
 data BRec = BRec { oneB::B, seqOfA::Seq.Seq A, hashSetOfString::HS.HashSet String } deriving (Show)
