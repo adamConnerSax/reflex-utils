@@ -36,16 +36,23 @@ import           Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS, flexFillR)
 import           Reflex.Dom.Contrib.Layout.Types      (CssClass (..),
                                                        CssClasses (..),
                                                        emptyCss)
---import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
+                 
 import           Reflex.Dom.Contrib.SimpleForm
---import DataBuilder
+
 
 -- Some types to demonstrate what we can make into a form
+
+-- Anything with a Read instance can be built using buildReadMaybe
 data ReadableType = RTI Int | RTS String deriving (Show,Read)
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) ReadableType where
   buildA = buildReadMaybe
 
---data ValidatedInt = ValidatedInt { riValidate::Int->Either T.Text Int, riValue::Either T.Text Int }
+-- You can write your own wrappers for types that require more extensive validation
+data ValidatedInt = ValidatedInt { riValidate::Int->Either T.Text Int, riValue::Either T.Text Int }
+instance SimpleFormC e t m=>Builder (SimpleFormR e t m) ValidatedInt where
+  buildA mFN (ValidatedInt vf v) =
+    let initial = either (const Nothing) Just v
+    in  (\x -> ValidatedInt x (vf x)) <*> buildA mFN initial
 
 
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
