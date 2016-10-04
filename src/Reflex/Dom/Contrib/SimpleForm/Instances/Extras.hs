@@ -9,16 +9,21 @@
 module Reflex.Dom.Contrib.SimpleForm.Instances.Extras
        (
          MWidget(..)
+       , buildValidated
+       , buildValidatedIso
        ) where
 
 import           Control.Applicative                   (liftA2)
 import           Control.Monad.Morph                   (hoist)
 import           Control.Monad.Reader                  (ReaderT, ask, lift,
                                                         runReaderT)
+import           Control.Lens                          (view)
+import           Control.Lens.Iso                      (Iso',from,iso)
 import qualified Data.Map                              as M
 import           Data.Maybe                            (isJust)
 import           Data.Monoid                           ((<>))
 import           Data.Validation                       (AccValidation (..))
+import qualified Data.Text                             as T  
 -- for using the generic builder
 import qualified GHC.Generics                          as GHCG
 
@@ -75,3 +80,31 @@ instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFo
         return $ fmap (MWidget . return) dva --R.mapDyn (maybe Nothing (Just . MWidget . return)) dma
 
 
+
+buildValidatedIso::forall e t m a b.(SimpleFormC e t m,
+                                  Builder (SimpleFormR e t m) b)=>
+                (a->Either T.Text a)->
+                Iso' a b->
+                Maybe FieldName->
+                Maybe a->
+                SimpleFormR e t m a
+buildValidatedIso vf isoAB mFN ma =
+  let mInitial::Maybe b
+      mInitial = ma >>= either (const Nothing) (Just . view isoAB) . vf
+      validatedX::a->AccValidation SimpleFormErrors a
+      validatedX = either (\x->AccFailure [SFInvalid x]) AccSuccess . vf 
+      validatedAVX::AccValidation SimpleFormErrors a->AccValidation SimpleFormErrors a
+      validatedAVX = accValidation AccFailure validatedX 
+      validatedDVX::R.Reflex t=>DynValidation t a->DynValidation t a
+      validatedDVX (DynValidation dvx) = DynValidation $ fmap validatedAVX dvx   
+  in SimpleFormR $ validatedDVX <$> unSF (view (from isoAB) <$> buildA mFN mInitial)
+
+buildValidated::forall e t m a b.(SimpleFormC e t m,
+                                  Builder (SimpleFormR e t m) b)=>
+                (a->Either T.Text a)->
+                (a->b)->
+                (b->a)->
+                Maybe FieldName->
+                Maybe a->
+                SimpleFormR e t m a
+buildValidated vf a2b b2a = buildValidatedIso vf (iso a2b b2a)

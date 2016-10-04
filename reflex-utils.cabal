@@ -78,6 +78,7 @@ executable reflex-utils-simpleForm-exe
                      , reflex-dom-contrib
                      , reflex-utils
                      , transformers
+                     , lens
                      , mtl
                      , ref-tf
                      , file-embed

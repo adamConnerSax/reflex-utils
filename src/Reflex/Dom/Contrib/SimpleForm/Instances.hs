@@ -3,6 +3,8 @@ module Reflex.Dom.Contrib.SimpleForm.Instances
          sfWidget
        , buildReadMaybe
        , buildReadable
+       , buildValidated
+       , buildValidatedIso
        ) where
 
 import           Reflex.Dom.Contrib.SimpleForm.Instances.Basic      (buildReadMaybe,
