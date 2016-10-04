@@ -18,6 +18,7 @@ import           Data.FileEmbed
 import           Data.Monoid                          ((<>))
 import qualified GHC.Generics                         as GHC
 import           Prelude                              hiding (div, rem, span)
+import           Data.List                            (foldl')
 import           Text.Show.Pretty                     (ppShow)
 --import Clay hiding (button,col,Color)
 import           Data.Either
@@ -147,8 +148,8 @@ c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.emp
 flowTestWidget::MonadWidget t m=>Int->m (Dynamic t String)
 flowTestWidget n = do
   text "Are all these checked?"
-  boolDyns <- sequence $ take n $ Prelude.repeat (RDC._hwidget_value <$> RDC.htmlCheckbox (RDC.WidgetConfig never False (constDyn mempty)))
-  allTrueDyn <- foldM (\x bDyn -> combineDyn (&&) x bDyn) (constDyn True) boolDyns
+  boolDyns <- sequence $ take n $ Prelude.repeat (RDC._hwidget_value <$> RDC.htmlCheckbox (RDC.WidgetConfig never True (constDyn mempty)))
+  let allTrueDyn = foldl' (\x bDyn -> zipDynWith (&&) x bDyn) (constDyn True) boolDyns
   forDyn allTrueDyn $ \b -> if b then "All Checked!" else "Some Unchecked."
 
 test::(SimpleFormC e t m, MonadIO (PushM t))=>e->m ()
