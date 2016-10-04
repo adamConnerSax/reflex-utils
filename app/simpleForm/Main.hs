@@ -11,7 +11,7 @@ module Main where
 import           Control.Monad                        (foldM)
 import           Control.Monad.IO.Class               as IOC (MonadIO)
 import           Control.Monad.Ref                    (Ref)
-import           Control.Monad.Trans                  (MonadTrans)
+import           Control.Monad.Trans                  (MonadTrans,lift)
 import           Data.FileEmbed
 import           Data.Monoid                          ((<>))
 import qualified GHC.Generics                         as GHC
@@ -25,7 +25,7 @@ import qualified Data.Sequence                        as Seq
 import qualified Data.Text                            as T
 import           Data.Time.Calendar                   (Day (..), fromGregorian)
 import           Data.Time.Clock                      (UTCTime (..))
-
+import           Data.Validation                      (AccValidation (..))
 import           Reflex
 import           Reflex.Dom
 import qualified Reflex.Dom.Contrib.Widgets.Common    as RDC
@@ -47,20 +47,31 @@ data ReadableType = RTI Int | RTS String deriving (Show,Read)
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) ReadableType where
   buildA = buildReadMaybe
 
--- You can write your own wrappers for types that require more extensive validation
-data ValidatedInt = ValidatedInt { riValidate::Int->Either T.Text Int, riValue::Either T.Text Int }
-instance SimpleFormC e t m=>Builder (SimpleFormR e t m) ValidatedInt where
-  buildA mFN (ValidatedInt vf v) =
-    let initial = either (const Nothing) Just v
-    in  (\x -> ValidatedInt x (vf x)) <*> buildA mFN initial
+newtype Age = Age { unAge::Int }
+instance Show Age where
+  show (Age x) = show x
+  
+validAge::Age->Either T.Text Age
+validAge a@(Age x) = if (x >= 0) then Right a else Left "Age must be > 0" 
 
+instance SimpleFormC e t m=> Builder (SimpleFormR e t m) Age where
+  buildA mFN mAge =
+    let mInitial::(a->Either T.Text a)->(a->b)->Maybe a->Maybe b
+        mInitial vf aTob x = x >>= either (const Nothing) (Just . aTob) . vf
+        validatedX::(a->Either T.Text a)->a->AccValidation SimpleFormErrors a
+        validatedX vf = either (\x->AccFailure [SFInvalid x]) AccSuccess . vf 
+        validatedAVX::(a->Either T.Text a)->AccValidation SimpleFormErrors a->AccValidation SimpleFormErrors a
+        validatedAVX vf = accValidation AccFailure (validatedX vf) 
+        validatedDVX::Reflex t=>(a->Either T.Text a)->DynValidation t a->DynValidation t a
+        validatedDVX vf (DynValidation dvx) = DynValidation $ fmap (validatedAVX vf) dvx   
+    in SimpleFormR $ validatedDVX validAge <$> unSF (Age <$> (buildA mFN $ mInitial validAge unAge mAge))
 
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
 data Shape = Square | Circle | Triangle deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
 
 
 data DateOrDateTime = D Day | DT UTCTime deriving (Show)
-data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType deriving (Show,GHC.Generic)
+data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType | AA Age deriving (Show,GHC.Generic)
 data B = B { int::Int, listOfA::[A] } deriving (Show,GHC.Generic)
 newtype MyMap = MyMap { map_String_B::M.Map String B } deriving (Show,GHC.Generic)
 data BRec = BRec { oneB::B, seqOfA::Seq.Seq A, hashSetOfString::HS.HashSet String } deriving (Show)

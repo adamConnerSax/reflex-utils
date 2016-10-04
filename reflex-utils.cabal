@@ -89,6 +89,7 @@ executable reflex-utils-simpleForm-exe
                      , time
                      , hashable
                      , unordered-containers
+                     , validation
   default-language:    Haskell2010
 
 
