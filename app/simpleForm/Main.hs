@@ -25,7 +25,7 @@ import qualified Data.Sequence                        as Seq
 import qualified Data.Text                            as T
 import           Data.Time.Calendar                   (Day (..), fromGregorian)
 import           Data.Time.Clock                      (UTCTime (..))
-
+import           Data.Validation                      (AccValidation (..))
 import           Reflex
 import           Reflex.Dom
 import qualified Reflex.Dom.Contrib.Widgets.Common    as RDC
@@ -45,8 +45,15 @@ data ReadableType = RTI Int | RTS String deriving (Show,Read)
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) ReadableType where
   buildA = buildReadMaybe
 
---data ValidatedInt = ValidatedInt { riValidate::Int->Either T.Text Int, riValue::Either T.Text Int }
+newtype Age = Age { unAge::Int }
+validAge::Int->Maybe Age
+validAge x = if x >= 0 then Just (Age x) else Nothing
 
+instance SimpleFormC e t m=> Builder (SimpleFormR e t m) Age where
+  buildA mFN mAge =
+    let mInitial = mAge >>= validAge . unAge
+        validate x = maybe (AccFailure [SFInvalid "Age must be > 0"]) AccSuccess (validAge x)
+    in fmap (\y -> y >>= validate) (buildA mFN mInitial)
 
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
 data Shape = Square | Circle | Triangle deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
