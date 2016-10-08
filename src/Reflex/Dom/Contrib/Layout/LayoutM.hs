@@ -27,6 +27,7 @@ import qualified Reflex as R
 import qualified Reflex.Class as RC
 import qualified Reflex.Dom as RD
 import qualified Reflex.Dom.Old as RD
+import qualified Reflex.Dom.Builder.Class as RDB
 import qualified GHCJS.DOM.Element as E
 import GHCJS.DOM.Types (IsElement)
 
@@ -130,8 +131,8 @@ newLayoutS desc = LayoutS (newTree desc) <$> use lsClassMap <*> use lsDynamicCss
 addNewLayoutNode::(RD.MonadWidget t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
 addNewLayoutNode desc newChildren = do
   emptyLS <- newLayoutS desc
-  (RD.El e _,(x,childLS)) <- lift $ RD.el' "div" $ runStateT newChildren emptyLS
-  let taggedChild = setElement e (childLS ^. lsTree)
+  (e, (x,childLS)) <- lift $ RD.el' "div" $ runStateT newChildren emptyLS
+  let taggedChild = setElement (RDB._element_raw e) (childLS ^. lsTree)
   addStaticClasses desc taggedChild >>= addDynamicCss desc >>= addNode'
   return x
 
@@ -220,11 +221,11 @@ instance (RD.MonadWidget t m,RD.MonadIORestore m, MonadIO (RD.PushM t)) => RD.Mo
     parentRestore <- liftL RD.askRestore
     return $ RD.Restore $ \sma -> RD.restore parentRestore $ runLayout staticCssMap dynamicCssMap lc sma
 
--}
+
 instance RD.HasPostGui t h m => RD.HasPostGui t h (LayoutM t m) where
   askPostGui = liftL RD.askPostGui
   askRunWithActions = liftL RD.askRunWithActions
-
+-}
 
 -- which to use??  Both work on demo.  So far.  Need to add widgetHold or dyn...
 layoutInside::(MonadIO (RD.PushM t),RD.MonadWidget t m)=>(m a -> m b)->LayoutM t m a->LayoutM t m b
@@ -241,6 +242,8 @@ noLayoutInside f action w = do
   (x,s') <- f <$> (liftL $ action $ runReaderT (runStateT w s) lc)
   put s'
   return x
+
+
 
 instance (RD.MonadWidget t m,MonadIO (RD.PushM t))=>RD.MonadWidget t (LayoutM t m) where
   type WidgetHost (LayoutM t m) = RD.WidgetHost m

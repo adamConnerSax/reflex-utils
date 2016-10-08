@@ -89,14 +89,10 @@ buildValidatedIso::forall e t m a b.(SimpleFormC e t m,
                 Maybe a->
                 SimpleFormR e t m a
 buildValidatedIso vf isoAB mFN ma =
-  let mInitial::Maybe b
-      mInitial = ma >>= either (const Nothing) (Just . view isoAB) . vf
-      validatedX::a->AccValidation SimpleFormErrors a
+  let mInitial = ma >>= either (const Nothing) (Just . view isoAB) . vf
       validatedX = either (\x->AccFailure [SFInvalid x]) AccSuccess . vf 
-      validatedAVX::AccValidation SimpleFormErrors a->AccValidation SimpleFormErrors a
       validatedAVX = accValidation AccFailure validatedX 
-      validatedDVX::R.Reflex t=>DynValidation t a->DynValidation t a
-      validatedDVX (DynValidation dvx) = DynValidation $ fmap validatedAVX dvx   
+      validatedDVX = DynValidation . fmap validatedAVX . unDynValidation 
   in SimpleFormR $ validatedDVX <$> unSF (view (from isoAB) <$> buildA mFN mInitial)
 
 buildValidated::forall e t m a b.(SimpleFormC e t m,
