@@ -23,7 +23,7 @@ library
 --                  Reflex.Dom.Contrib.Layout.OptimizedFlexLayout
                   Reflex.Dom.Contrib.Layout.TabLayout
 --                  Reflex.Dom.Contrib.Layout.GridConfigs
---                  Reflex.Dom.Contrib.Layout.LayoutM
+                  Reflex.Dom.Contrib.Layout.LayoutM
 --                  Reflex.Dom.Contrib.Layout.LayoutMFlex
 --                  Reflex.Dom.Contrib.Layout.GridLayout
 --                  Reflex.Dom.Contrib.Layout.Events
