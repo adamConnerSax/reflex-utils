@@ -132,11 +132,21 @@ setElement elt lTree = (lnInfo.liElt .~ Just elt) $ lTree
 newLayoutS::(R.Reflex t,Monad m)=>LayoutDescription t->LayoutM t m (LayoutS t)
 newLayoutS desc = LayoutS (newTree desc) <$> use lsClassMap <*> use lsDynamicCssMap
 
+{-
 addNewLayoutNode::(RD.MonadWidget t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
 addNewLayoutNode desc newChildren = do
   emptyLS <- newLayoutS desc
   (elt,(x,childLS)) <- lift $ RD.el' "div" $ runStateT newChildren emptyLS
   let taggedChild = setElement (RDC._raw_element elt) (childLS ^. lsTree)
+  addStaticClasses desc taggedChild >>= addDynamicCss desc >>= addNode'
+  return x
+-}
+
+addNewLayoutNode::(RD.MonadWidget t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
+addNewLayoutNode desc child = do
+  emptyLS <- newLayoutS desc
+--  (elt,(x,childLS)) <- lift $ RD.el' "div" $ runStateT child emptyLS
+--  let taggedChild = setElement (RDC._raw_element elt) (childLS ^. lsTree)
   addStaticClasses desc taggedChild >>= addDynamicCss desc >>= addNode'
   return x
 
