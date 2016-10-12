@@ -8,9 +8,16 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Reflex.Dom.Contrib.Layout.Types where
 
 import Control.Lens (makeLenses,makeClassy)
+import Control.Monad.Exception
+import Control.Monad.Fix
+import Control.Monad.IO.Class
+import Control.Monad.State
+
 import qualified Control.Category as C
 import qualified Reflex as R
 import Reflex.Dom ((=:))
@@ -116,7 +123,9 @@ data LayoutS t = LayoutS {  _lsTree::LayoutTree t
                          }
 
 
-type LayoutM t m = StateT (LayoutS t) (ReaderT (LayoutConfig t) m)
+newtype LayoutM t m a = LayoutM { unLayoutM::StateT (LayoutS t) (ReaderT (LayoutConfig t) m) a } deriving (Functor,Applicative,Monad,MonadFix,MonadIO,MonadException,MonadAsyncException,MonadState (LayoutS t))
+
+
 
 
 makeClassy ''CssGridConfig

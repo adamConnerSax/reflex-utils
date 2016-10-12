@@ -121,5 +121,5 @@ dynamicTabbedLayout cur allDyn = do
   curTabDyn <- tabBar "" cur allSampled (R.updated allDyn) R.never (R.constDyn S.empty)
   let setTabWidget t@(TabInfo _ _ w) = tabPane curTabDyn t w -- m a 
       setTabWidgets tabs = mapM setTabWidget tabs -- m [a]
-  widgetDyn <- R.mapDyn setTabWidgets allDyn -- m (Dynamic t (m [a])) 
+      widgetDyn = setTabWidgets <$> allDyn -- m (Dynamic t (m [a])) 
   RD.widgetHold (setTabWidgets allSampled) (R.updated widgetDyn)

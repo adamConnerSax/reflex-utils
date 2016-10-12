@@ -5,6 +5,8 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE OverloadedStrings      #-}
+
 module Reflex.Dom.Contrib.Layout.LayoutM
        (
          emptyClassMap
@@ -29,7 +31,7 @@ import qualified Reflex                          as R
 import qualified Reflex.Class                    as RC
 import qualified Reflex.Dom                      as RD
 import qualified Reflex.Dom.Class                as RDC
-import qualified Reflex.Dom.Old                  as RD
+--import qualified Reflex.Dom.Old                  as RD
 
 
 import           Control.Lens                    (makeClassy, makeLenses, set,
@@ -50,7 +52,7 @@ import           Data.Maybe                      (catMaybes, fromJust)
 import           Data.Monoid                     ((<>))
 import           Data.String                     (unwords, words)
 import           Data.Traversable                (sequenceA)
-
+import qualified Data.Text                       as T
 
 import           Reflex.Dom.Contrib.Layout.Types
 
@@ -59,7 +61,7 @@ noProperties = M.empty
 
 data LayoutNodeCss = LayoutNodeCss { _lncStatic::CssClasses, _lncDynamic::CssClasses }
 instance IsCssClass LayoutNodeCss where
-  toCssString (LayoutNodeCss s d) = toCssString s ++ " " ++ toCssString d
+  toCssString (LayoutNodeCss s d) = toCssString s <> " " <> toCssString d
 
 -- for left fold.  needs to be flipped for foldDyn.
 addCssUpdate::CssClasses->CssUpdate->CssClasses
@@ -98,11 +100,11 @@ addNode::R.Reflex t=>LayoutTree t->LayoutTree t->LayoutTree t
 addNode ln newChild = lnChildren <>~ [newChild] $ ln
 
 addNode'::(R.Reflex t,Monad m)=>LayoutTree t->LayoutM t m ()
-addNode' tree = do
+addNode' tree = LayoutM $ do
   lsTree %= flip addNode tree
 
 addStaticClasses::Monad m=>LayoutDescription t->LayoutTree t->LayoutM t m (LayoutTree t)
-addStaticClasses desc lTree = do
+addStaticClasses desc lTree = LayoutM $ do
   classMap <- use lsClassMap
   let getCss key = maybe emptyCss id $ M.lookup key classMap
       css = mconcat $ getCss <$> (desc ^. ldLayoutClassKeys)
@@ -142,20 +144,24 @@ addNewLayoutNode desc newChildren = do
   return x
 -}
 
+-- ??
 addNewLayoutNode::(RD.MonadWidget t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
 addNewLayoutNode desc child = do
+  curLS <- get
   emptyLS <- newLayoutS desc
---  (elt,(x,childLS)) <- lift $ RD.el' "div" $ runStateT child emptyLS
---  let taggedChild = setElement (RDC._raw_element elt) (childLS ^. lsTree)
-  addStaticClasses desc taggedChild >>= addDynamicCss desc >>= addNode'
+  put emptyLS
+  x <- child
+  childLS <- get
+  addStaticClasses desc (childLS ^. lsTree) >>= addDynamicCss desc >>= addNode'
+  put curLS
   return x
 
 cssToAttr::IsCssClass c=>c->RD.AttributeMap
 cssToAttr cssClass = ("class" RD.=: (toCssString cssClass))
 
 -- add attributes to element.  If no events are hooked up, do it statically
-addClassesStatic::(RD.MonadWidget t m, IsElement e)=>CssClasses->e->m ()
-addClassesStatic css elt = RD.addAttributes (cssToAttr css) elt
+--addClassesStatic::(RD.MonadWidget t m, IsElement e)=>CssClasses->e->m ()
+--addClassesStatic css elt = RD.addAttributes (cssToAttr css) elt
 
 updateCss::LayoutNodeCss->CssUpdate->LayoutNodeCss
 updateCss (LayoutNodeCss s _) (UpdateDynamic d) = LayoutNodeCss s d
@@ -164,6 +170,10 @@ updateCss (LayoutNodeCss s d) (AddToDynamic d') = LayoutNodeCss s (d <> d')
 updateCssNE::NE.NonEmpty CssUpdate->LayoutNodeCss->LayoutNodeCss
 updateCssNE cssUpdates nodeCss = foldl' updateCss nodeCss (NE.toList cssUpdates)
 
+classesToAttributesDyn::CssClasses->R.Dynamic t CssClasses->R.Dynamic t (M.Map T.Text T.Text)
+classesToAttributesDyn staticCss dynamicCssDyn = (cssToAttr . LayoutNodeCss staticCss) <$> dynamicCssDyn
+
+{-
 addClassesDynamic::(RD.MonadWidget t m, IsElement e)=>CssClasses->e->R.Dynamic t CssClasses->m ()
 addClassesDynamic staticCss elt dynamicCssDyn = do
   cssDyn <- RD.mapDyn (\x->(LayoutNodeCss staticCss x)) dynamicCssDyn
@@ -172,7 +182,7 @@ addClassesDynamic staticCss elt dynamicCssDyn = do
 
 addClasses::(RD.MonadWidget t m, IsElement e)=>CssClasses->Maybe (R.Dynamic t CssClasses)->e->m ()
 addClasses css mCssDyn elt = maybe (addClassesStatic css elt) (addClassesDynamic css elt) mCssDyn
-
+-}
 
 -- utilities for map merging
 -- biased to 2nd argument for initial conditons
@@ -190,12 +200,13 @@ unionM f m1 m2 = sequenceA $ M.mergeWithKey (\_ a b -> Just $ f a b) (fmap retur
 runLayoutTree::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutConfig t->CssClasses->LayoutTree t->m ()
 runLayoutTree lc classesForAll lt = do
   let lt' = (lt  ^. lnInfo.liDescription.ldLayoutF) lc lt
-      elt = fromJust (lt' ^. lnInfo.liElt)
+--      elt = fromJust (lt' ^. lnInfo.liElt)
       classesForElt = (lt' ^. lnInfo.liNewClasses) <> classesForAll
       children = (lt' ^. lnChildren)
-      mDynamicCss = (lt' ^. lnInfo.liDynamicCss)
-  addClasses classesForElt mDynamicCss elt
-  mapM_ (runLayoutTree lc classesForAll) children
+      dynamicCss = maybe (R.constDyn mempty) id (lt' ^. lnInfo.liDynamicCss)
+      child = mapM_ (runLayoutTree lc classesForAll) children
+  RD.elDynAttr "div" (classesToAttributesDyn classesForElt dynamicCss) child    
+  
 
 runStyledLayout::(RD.MonadWidget t m, MonadIO (RD.PushM t))=>CssClasses->LayoutClassMap->LayoutClassDynamicMap t->LayoutConfig t->LayoutM t m a->m a
 runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
@@ -214,15 +225,16 @@ runLayoutMain::(RD.MonadWidget t m, MonadIO (RD.PushM t))=>LayoutConfig t->Layou
 runLayoutMain = runLayout emptyClassMap emptyDynamicCssMap
 
 -- Class Instances
-liftL::Monad m=>m a->LayoutM t m a
-liftL = lift . lift
+liftLM::Monad m=>m a->LayoutM t m a
+liftLM = LayoutM . lift . lift
 
+instance RD.MonadSample t m=>RD.MonadSample t (LayoutM t m) where
+  sample = liftLM . RD.sample
 
-instance RC.MonadSample t m => RC.MonadSample t (LayoutM t m) where
-  sample = liftL . RC.sample
-
-instance RC.MonadHold t m => RC.MonadHold t (LayoutM t m) where
-  hold a0 = liftL . RC.hold a0
+instance RD.MonadHold t m=>RD.MonadHold t (LayoutM t m) where
+  hold a0 = liftLM . RD.hold a0
+  holdDyn a0 = liftLM . RD.holdDyn a0
+  holdIncremental a0 = liftLM . RD.holdIncremental a0
 
 
 {-
@@ -246,16 +258,19 @@ layoutInside f w = do
   lc <- ask
   dynamicCssMap <- use lsDynamicCssMap
   staticCssMap <- use lsClassMap
-  liftL $ f $ runLayout staticCssMap dynamicCssMap lc w
+  liftLM $ f $ runLayout staticCssMap dynamicCssMap lc w
 
 noLayoutInside::(RD.MonadWidget t m ,s~LayoutS t)=>(d->(b,s))->(m (a,s) -> m d)->LayoutM t m a->LayoutM t m b
 noLayoutInside f action w = do
   s <- get
   lc <- ask
-  (x,s') <- f <$> (liftL $ action $ runReaderT (runStateT w s) lc)
+  (x,s') <- f <$> (liftLM $ action $ runReaderT (runStateT (unLayoutM w) s) lc)
   put s'
   return x
 
+
+
+{-
 instance (RD.MonadWidget t m,MonadIO (RD.PushM t))=>RD.MonadWidget t (LayoutM t m) where
   type WidgetHost (LayoutM t m) = RD.WidgetHost m
   type GuiAction  (LayoutM t m) = RD.GuiAction m
@@ -273,7 +288,7 @@ instance (RD.MonadWidget t m,MonadIO (RD.PushM t))=>RD.MonadWidget t (LayoutM t 
     staticCssMap <- use lsClassMap
     runWidget <- liftL RD.getRunWidget
     return $ \rootElement w -> runWidget rootElement $ runLayout staticCssMap dynamicCssMap lc w
-
+-}
 
 -- For debugging
 
