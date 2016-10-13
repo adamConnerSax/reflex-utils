@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Reflex.Dom.Contrib.Layout.LayoutMFlex
   (
     lmFlexRow
@@ -18,6 +21,8 @@ import qualified Reflex as R
 import qualified Reflex.Dom as RD
 
 import qualified Data.Map as M
+import qualified Data.Text as T
+import Data.Monoid ((<>))
 
 flexLayoutRowF::R.Reflex t=>LayoutF t
 flexLayoutRowF _ lTree =
@@ -36,7 +41,7 @@ lmFlexLayoutRow' tags = addNewLayoutNode $ flexLayoutRowD tags
 flexColF::R.Reflex t=>Int->LayoutF t
 flexColF w _ lTree =
   let n = Prelude.max 1 $ Prelude.min w numberFlexGrowOptions
-      flexColClasses = CssClasses [CssClass ("gl-flex-item-" ++ show n)]
+      flexColClasses = CssClasses [CssClass ("gl-flex-item-" <> (T.pack $ show n))]
   in addNewClassesToTreeTop flexColClasses lTree
 
 flexColD::R.Reflex t=>[String]->Int->LayoutDescription t
@@ -66,7 +71,7 @@ lmFlexLayoutCol' tags = addNewLayoutNode (flexLayoutColD tags)
 flexRowF::R.Reflex t=>Int->LayoutF t
 flexRowF h _ lTree =
   let n = Prelude.max 1 $ Prelude.min h numberFlexGrowOptions
-      flexRowClasses = CssClasses [CssClass ("gl-flex-item-" ++ show n)]
+      flexRowClasses = CssClasses [CssClass ("gl-flex-item-" <> (T.pack $ show n))]
   in addNewClassesToTreeTop flexRowClasses lTree
 
 flexRowD::R.Reflex t=>[String]->Int->LayoutDescription t

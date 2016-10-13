@@ -1,5 +1,6 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs            #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Reflex.Dom.Contrib.Layout.OptimizedFlexLayout
   (
     (##)
@@ -32,7 +33,8 @@ import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.State (State,gets,modify,execState)
 import Data.Sequence ((><),(|>),Seq,empty,singleton)
 import Data.Foldable (mapM_,foldl')
-
+import qualified Data.Text as T
+import Data.Monoid ((<>))
 {-
 class AddLayout a where
   addLayout::LISeq->a->a
@@ -44,7 +46,7 @@ instance RD.MonadWidget t m=>AddLayout (m a) where
   addLayout = performLayouts
 -}
 
-flexSimple::LNodeConstraint->String->LISeq
+flexSimple::LNodeConstraint->T.Text->LISeq
 flexSimple lc css = singleton $ LayoutInstruction lc (OpenLNode LDiv (CssClasses [CssClass css]))
 
 flexRow::LISeq
@@ -57,7 +59,7 @@ flexItem::LISeq
 flexItem = flexSimple InLNode "gl-flex-item"
 
 flexSizedItem::Int->LISeq
-flexSizedItem n = let n' = Prelude.min n numberFlexGrowOptions in flexSimple InLNode ("gl-flex-item-" ++ show n')
+flexSizedItem n = let n' = Prelude.min n numberFlexGrowOptions in flexSimple InLNode ("gl-flex-item-" <> (T.pack $ show n'))
 
 flexFillH::LISeq
 flexFillH = flexSimple ClosesLNode "flexFillH"

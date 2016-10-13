@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE RecursiveDo       #-}
+{-# LANGUAGE GADTs             #-}  
 module Main where
 
 import Reflex.Dom.Contrib.Layout.All
@@ -26,8 +27,8 @@ import Data.Text.Lazy.Encoding (encodeUtf8)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map as M
-import qualified Data.List as T
-
+import qualified Data.List as L
+import qualified Data.Text as T
 
 {-
 -- This is what the GridConfig looks like for a particular Css Grid Framework
@@ -61,8 +62,10 @@ cssBoxes = do
 clayCssBS::B.ByteString
 clayCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty [] $ cssBoxes
 
+boxClassCss::M.Map T.Text T.Text
 boxClassCss = ("class" =: "demo-box")
 
+demoDiv::MonadWidget t m=>T.Text -> m ()
 demoDiv x = elAttr "div" boxClassCss $ text x
 
 innerBoxUpdaters = (\x->UpdateDynamic $ CssClasses [CssClass x] ) <$> ["demo-box-none",
@@ -74,8 +77,8 @@ innerBoxUpdaters = (\x->UpdateDynamic $ CssClasses [CssClass x] ) <$> ["demo-box
                                                                        "demo-box-red-large",
                                                                        "demo-box-green-large"]
 
-updaterLabel::CssUpdate->String
-updaterLabel (UpdateDynamic x) = T.drop (T.length ("demo-box-"::String) ) $ toCssString x
+updaterLabel::CssUpdate->T.Text
+updaterLabel (UpdateDynamic x) = T.pack $ L.drop (L.length ("demo-box-"::String) ) $ T.unpack (toCssString x)
 updaterLabel (AddToDynamic x) = undefined
 
 innerBoxDfltUpdater = innerBoxUpdaters !! 1

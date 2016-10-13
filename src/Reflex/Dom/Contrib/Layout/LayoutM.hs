@@ -6,6 +6,8 @@
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE UndecidableInstances   #-}
 {-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE StandaloneDeriving     #-}
 
 module Reflex.Dom.Contrib.Layout.LayoutM
        (
@@ -29,8 +31,10 @@ import qualified GHCJS.DOM.Element               as E
 import           GHCJS.DOM.Types                 (IsElement)
 import qualified Reflex                          as R
 import qualified Reflex.Class                    as RC
+import qualified Reflex.Host.Class               as RC
 import qualified Reflex.Dom                      as RD
-import qualified Reflex.Dom.Class                as RDC
+import qualified Reflex.Dom.Class                as RD
+import qualified Reflex.Dom.Builder.Class        as RD
 --import qualified Reflex.Dom.Old                  as RD
 
 
@@ -45,6 +49,8 @@ import           Control.Monad.Reader            (MonadReader, ReaderT, ask,
 import           Control.Monad.State             (MonadState, StateT, get, lift,
                                                   put, runStateT)
 import           Control.Monad.Trans             (MonadTrans)
+import           Control.Monad.Trans.Control     (MonadTransControl(..),defaultLiftWith,defaultRestoreT)
+import           Control.Monad.Ref               (MonadRef,Ref)
 import           Data.List                       (foldl')
 import qualified Data.List.NonEmpty              as NE
 import qualified Data.Map                        as M
@@ -170,7 +176,7 @@ updateCss (LayoutNodeCss s d) (AddToDynamic d') = LayoutNodeCss s (d <> d')
 updateCssNE::NE.NonEmpty CssUpdate->LayoutNodeCss->LayoutNodeCss
 updateCssNE cssUpdates nodeCss = foldl' updateCss nodeCss (NE.toList cssUpdates)
 
-classesToAttributesDyn::CssClasses->R.Dynamic t CssClasses->R.Dynamic t (M.Map T.Text T.Text)
+classesToAttributesDyn::R.Reflex t=>CssClasses->R.Dynamic t CssClasses->R.Dynamic t (M.Map T.Text T.Text)
 classesToAttributesDyn staticCss dynamicCssDyn = (cssToAttr . LayoutNodeCss staticCss) <$> dynamicCssDyn
 
 {-
@@ -214,7 +220,7 @@ runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
   let combinedStaticCssMap = M.union staticCssMap (conf ^. lcStaticCssMap) --static classes are overwritten by later classes. ??
       emptyD = LayoutDescription (const id) noProperties []
       emptyS = LayoutS (newTree emptyD) combinedStaticCssMap combinedDynamicCssMap
-  (x,layoutS) <- runReaderT (runStateT layout emptyS) conf
+  (x,layoutS) <- runReaderT (runStateT (unLayoutM layout) emptyS) conf
   mapM_ (runLayoutTree conf classesForAll) (layoutS ^. lsTree.lnChildren) -- there is no elt on top
   return x
 
@@ -268,7 +274,30 @@ noLayoutInside f action w = do
   put s'
   return x
 
+deriving instance R.MonadSample t m => R.MonadSample t (LayoutM t m)
+deriving instance R.MonadHold t m   => R.MonadHold t (LayoutM t m)
 
+instance MonadTrans (LayoutM t) where
+  lift = liftLM
+  
+instance R.PerformEvent t m => R.PerformEvent t (LayoutM t m) where
+  type Performable (LayoutM t m) = R.Performable m
+  performEvent_ = lift . R.performEvent_
+  performEvent  = lift . R.performEvent
+
+--type LayoutMStack t m = StateT (LayoutS t) (ReaderT (LayoutConfig t) m)
+
+instance MonadTransControl (LayoutM t) where
+  type StT (LayoutM t) a = (a,LayoutS t) 
+  liftWith f = LayoutM $ 
+  restoreT = defaultRestoreT LayoutM
+
+type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, R.Performable m ~ m, RC.MonadReflexCreateTrigger t m, RD.Deletable t m, MonadRef m, Ref m ~ Ref IO)
+
+{-
+instance SupportsLayoutM t m => DomBuilder t (LayoutM t m) where
+  type DomBuilderSpace (LayoutM t m) = GhcjsDomSpace
+-}
 
 {-
 instance (RD.MonadWidget t m,MonadIO (RD.PushM t))=>RD.MonadWidget t (LayoutM t m) where
@@ -298,5 +327,5 @@ printLayoutConfig lc = do
   putStrLn $ "static Css=" ++ (show $ M.toList (_lcStaticCssMap lc))
   putStrLn $ "dynamicCss Keys=" ++ (show $ M.keys (_lcDynamicCssMap lc))
 
-printLayoutTree::LayoutTree t->String
-printLayoutTree (LayoutNode i c) = "Node: classes=" ++ toCssString (i ^. liNewClasses) ++ "\n\t" ++ (mconcat $ printLayoutTree <$> c)
+printLayoutTree::LayoutTree t->T.Text
+printLayoutTree (LayoutNode i c) = "Node: classes=" <> toCssString (i ^. liNewClasses) <> "\n\t" <> (mconcat $ printLayoutTree <$> c)

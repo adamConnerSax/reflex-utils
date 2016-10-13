@@ -16,17 +16,17 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:
---                  Reflex.Dom.Contrib.Layout.All
+                  Reflex.Dom.Contrib.Layout.All
                   Reflex.Dom.Contrib.Layout.Types
                   Reflex.Dom.Contrib.Layout.ClayUtils
                   Reflex.Dom.Contrib.Layout.FlexLayout
---                  Reflex.Dom.Contrib.Layout.OptimizedFlexLayout
+                  Reflex.Dom.Contrib.Layout.OptimizedFlexLayout
                   Reflex.Dom.Contrib.Layout.TabLayout
---                  Reflex.Dom.Contrib.Layout.GridConfigs
+                  Reflex.Dom.Contrib.Layout.GridConfigs
                   Reflex.Dom.Contrib.Layout.LayoutM
---                  Reflex.Dom.Contrib.Layout.LayoutMFlex
---                  Reflex.Dom.Contrib.Layout.GridLayout
---                  Reflex.Dom.Contrib.Layout.Events
+                  Reflex.Dom.Contrib.Layout.LayoutMFlex
+                  Reflex.Dom.Contrib.Layout.GridLayout
+                  Reflex.Dom.Contrib.Layout.Events
 --                  Reflex.Dom.Contrib.StackedMonadWidget             
                   Reflex.Dom.Contrib.SimpleForm
                   Reflex.Dom.Contrib.SimpleForm.Builder
@@ -45,6 +45,7 @@ library
                      , transformers
                      , exception-transformers
                      , mtl
+                     , monad-control
                      , lens
                      , data-default
                      , ref-tf
@@ -91,23 +92,23 @@ executable reflex-utils-simpleForm-exe
   default-language:    Haskell2010
 
 
---executable reflex-utils-layout-exe
---  hs-source-dirs:      app/layout
---  main-is:             Main.hs
---  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
---  build-depends:       base
---                     , reflex
---                     , reflex-dom
---                     , reflex-dom-contrib
---                     , reflex-utils
---                     , transformers
---                     , mtl
---                     , file-embed
---                     , clay
---                     , text
---                     , bytestring
---                     , containers
---  default-language:    Haskell2010
+executable reflex-utils-layout-exe
+  hs-source-dirs:      app/layout
+  main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , reflex
+                     , reflex-dom
+                     , reflex-dom-contrib
+                     , reflex-utils
+                     , transformers
+                     , mtl
+                     , file-embed
+                     , clay
+                     , text
+                     , bytestring
+                     , containers
+  default-language:    Haskell2010
 
   
 --test-suite reflex-gridLayout-test

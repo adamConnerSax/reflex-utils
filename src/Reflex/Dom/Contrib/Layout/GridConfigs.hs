@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Reflex.Dom.Contrib.Layout.GridConfigs
        (
            pure5GridConfig

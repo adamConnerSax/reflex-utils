@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs            #-}
 module Reflex.Dom.Contrib.Layout.GridLayout
        (
          newRow

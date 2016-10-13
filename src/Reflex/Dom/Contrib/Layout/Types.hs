@@ -16,7 +16,8 @@ import Control.Lens (makeLenses,makeClassy)
 import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
-import Control.Monad.State
+import Control.Monad.State  (MonadState)
+import Control.Monad.Reader (MonadReader)
 
 import qualified Control.Category as C
 import qualified Reflex as R
@@ -123,7 +124,7 @@ data LayoutS t = LayoutS {  _lsTree::LayoutTree t
                          }
 
 
-newtype LayoutM t m a = LayoutM { unLayoutM::StateT (LayoutS t) (ReaderT (LayoutConfig t) m) a } deriving (Functor,Applicative,Monad,MonadFix,MonadIO,MonadException,MonadAsyncException,MonadState (LayoutS t))
+newtype LayoutM t m a = LayoutM { unLayoutM::StateT (LayoutS t) (ReaderT (LayoutConfig t) m) a } deriving (Functor,Applicative,Monad,MonadFix,MonadIO,MonadException,MonadAsyncException,MonadState (LayoutS t), MonadReader (LayoutConfig t))
 
 
 
