@@ -1,13 +1,14 @@
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE TemplateHaskell        #-}
-{-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE UndecidableInstances   #-}
-{-# LANGUAGE OverloadedStrings      #-}
-{-# LANGUAGE ConstraintKinds        #-}
-{-# LANGUAGE StandaloneDeriving     #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FunctionalDependencies     #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 module Reflex.Dom.Contrib.Layout.LayoutM
        (
@@ -31,10 +32,10 @@ import qualified GHCJS.DOM.Element               as E
 import           GHCJS.DOM.Types                 (IsElement)
 import qualified Reflex                          as R
 import qualified Reflex.Class                    as RC
-import qualified Reflex.Host.Class               as RC
 import qualified Reflex.Dom                      as RD
-import qualified Reflex.Dom.Class                as RD
 import qualified Reflex.Dom.Builder.Class        as RD
+import qualified Reflex.Dom.Class                as RD
+import qualified Reflex.Host.Class               as RC
 --import qualified Reflex.Dom.Old                  as RD
 
 
@@ -46,19 +47,20 @@ import           Control.Monad.Fix               (MonadFix)
 import           Control.Monad.IO.Class          (MonadIO, liftIO)
 import           Control.Monad.Reader            (MonadReader, ReaderT, ask,
                                                   runReaderT)
+import           Control.Monad.Ref               (MonadRef, Ref)
 import           Control.Monad.State             (MonadState, StateT, get, lift,
                                                   put, runStateT)
 import           Control.Monad.Trans             (MonadTrans)
-import           Control.Monad.Trans.Control     (MonadTransControl(..),defaultLiftWith,defaultRestoreT)
-import           Control.Monad.Ref               (MonadRef,Ref)
+import           Control.Monad.Trans.Control     (MonadTransControl (..),
+                                                  liftThrough)
 import           Data.List                       (foldl')
 import qualified Data.List.NonEmpty              as NE
 import qualified Data.Map                        as M
 import           Data.Maybe                      (catMaybes, fromJust)
 import           Data.Monoid                     ((<>))
 import           Data.String                     (unwords, words)
-import           Data.Traversable                (sequenceA)
 import qualified Data.Text                       as T
+import           Data.Traversable                (sequenceA)
 
 import           Reflex.Dom.Contrib.Layout.Types
 
@@ -211,8 +213,8 @@ runLayoutTree lc classesForAll lt = do
       children = (lt' ^. lnChildren)
       dynamicCss = maybe (R.constDyn mempty) id (lt' ^. lnInfo.liDynamicCss)
       child = mapM_ (runLayoutTree lc classesForAll) children
-  RD.elDynAttr "div" (classesToAttributesDyn classesForElt dynamicCss) child    
-  
+  RD.elDynAttr "div" (classesToAttributesDyn classesForElt dynamicCss) child
+
 
 runStyledLayout::(RD.MonadWidget t m, MonadIO (RD.PushM t))=>CssClasses->LayoutClassMap->LayoutClassDynamicMap t->LayoutConfig t->LayoutM t m a->m a
 runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
@@ -274,12 +276,12 @@ noLayoutInside f action w = do
   put s'
   return x
 
-deriving instance R.MonadSample t m => R.MonadSample t (LayoutM t m)
-deriving instance R.MonadHold t m   => R.MonadHold t (LayoutM t m)
+--deriving instance R.MonadSample t m => R.MonadSample t (LayoutM t m)
+--deriving instance R.MonadHold t m   => R.MonadHold t (LayoutM t m)
 
 instance MonadTrans (LayoutM t) where
   lift = liftLM
-  
+
 instance R.PerformEvent t m => R.PerformEvent t (LayoutM t m) where
   type Performable (LayoutM t m) = R.Performable m
   performEvent_ = lift . R.performEvent_
@@ -287,17 +289,50 @@ instance R.PerformEvent t m => R.PerformEvent t (LayoutM t m) where
 
 --type LayoutMStack t m = StateT (LayoutS t) (ReaderT (LayoutConfig t) m)
 
-instance MonadTransControl (LayoutM t) where
-  type StT (LayoutM t) a = (a,LayoutS t) 
-  liftWith f = LayoutM $ 
-  restoreT = defaultRestoreT LayoutM
+runLayoutM::LayoutM t m a->LayoutS t->LayoutConfig t->m (a,LayoutS t)
+runLayoutM lma ls lc = runReaderT (runStateT (unLayoutM lma) ls) lc
 
-type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, R.Performable m ~ m, RC.MonadReflexCreateTrigger t m, RD.Deletable t m, MonadRef m, Ref m ~ Ref IO)
+
+instance MonadTransControl (LayoutM t) where
+  type StT (LayoutM t) a = (a,LayoutS t)
+  liftWith f = do
+    lc <- ask
+    ls <- get
+    liftLM $ f $ \t -> runLayoutM t ls lc
+  restoreT x = do
+    (a,ls) <- liftLM x
+    put ls
+    return a
 
 {-
-instance SupportsLayoutM t m => DomBuilder t (LayoutM t m) where
-  type DomBuilderSpace (LayoutM t m) = GhcjsDomSpace
+instance (RD.DomBuilder t m, RD.DomBuilderSpace (LayoutM t m) ~ RD.GhcjsDomSpace)=>MonadTransControl (LayoutM t) where
+  type StT (LayoutM t) a = a
+  liftWith f = do
+    lc <- ask
+    dynamicCssMap <- use lsDynamicCssMap
+    staticCssMap <- use lsClassMap
+    liftLM $ f $ \t -> runLayout staticCssMap dynamicCssMap lc t
+  restoreT = liftLM
 -}
+
+instance RD.Deletable t m => RD.Deletable t (LayoutM t m) where
+  deletable d = liftThrough $ RD.deletable d
+
+instance RD.PostBuild t m => RD.PostBuild t (LayoutM t m) where
+  getPostBuild = liftLM RD.getPostBuild
+
+
+type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, R.Performable m ~ m, RC.MonadReflexCreateTrigger t m, RD.Deletable t m, MonadRef m, Ref m ~ Ref IO, RD.DomBuilder t m)
+
+
+instance (SupportsLayoutM t m, RD.DomSpace (RD.DomBuilderSpace m)) => RD.DomBuilder t (LayoutM t m) where
+  type DomBuilderSpace (LayoutM t m) = RD.DomBuilderSpace m
+  element t cfg child = liftWith $ \run -> RD.element t (RD.liftElementConfig cfg) $ fst <$> run child
+  selectElement cfg child = do
+    let cfg' = cfg
+          { RD._selectElementConfig_elementConfig = RD.liftElementConfig $ RD._selectElementConfig_elementConfig cfg
+          }
+    liftWith $ \run -> RD.selectElement cfg' $ fst <$> run child
 
 {-
 instance (RD.MonadWidget t m,MonadIO (RD.PushM t))=>RD.MonadWidget t (LayoutM t m) where
