@@ -6,7 +6,7 @@
 module Main where
 
 import Reflex.Dom.Contrib.Layout.All
-import Reflex.Dom.Contrib.Layout.LayoutM()
+import Reflex.Dom.Contrib.Layout.LayoutM (SupportsLayoutM)
 import Reflex.Dom.Contrib.Layout.GridConfigs
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexSizedItem,flexRow,flexCol,flexItem,flexCssBS)
 import qualified Reflex.Dom.Contrib.Layout.OptimizedFlexLayout as OF
@@ -94,7 +94,7 @@ row = lmFlexLayoutRow
 col::MonadWidget t m=>Int->LayoutM t m a->LayoutM t m a
 col = lmFlexCol
 
-subWidgetSimple::(MonadWidget t m,MonadIO (PushM t))=>LayoutM t m ()
+subWidgetSimple::(MonadWidget t m,SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
 subWidgetSimple = do
   row $ do
     col 1 $ demoDiv "C"

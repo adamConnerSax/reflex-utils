@@ -20,6 +20,7 @@ module Reflex.Dom.Contrib.Layout.LayoutM
        , LayoutClassDynamicMap
        , mergeCssUpdates
        , emptyCss
+       , SupportsLayoutM
        , runStyledLayout
        , runLayout
        , runLayoutMain
@@ -282,10 +283,6 @@ noLayoutInside f action w = do
 instance MonadTrans (LayoutM t) where
   lift = liftLM
 
-instance R.PerformEvent t m => R.PerformEvent t (LayoutM t m) where
-  type Performable (LayoutM t m) = R.Performable m
-  performEvent_ = lift . R.performEvent_
-  performEvent  = lift . R.performEvent
 
 --type LayoutMStack t m = StateT (LayoutS t) (ReaderT (LayoutConfig t) m)
 
@@ -315,17 +312,12 @@ instance (RD.DomBuilder t m, RD.DomBuilderSpace (LayoutM t m) ~ RD.GhcjsDomSpace
   restoreT = liftLM
 -}
 
-instance RD.Deletable t m => RD.Deletable t (LayoutM t m) where
-  deletable d = liftThrough $ RD.deletable d
-
-instance RD.PostBuild t m => RD.PostBuild t (LayoutM t m) where
-  getPostBuild = liftLM RD.getPostBuild
 
 
-type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, R.Performable m ~ m, RC.MonadReflexCreateTrigger t m, RD.Deletable t m, MonadRef m, Ref m ~ Ref IO, RD.DomBuilder t m)
+type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, R.Performable m ~ m, RD.Deletable t m, MonadRef m, Ref m ~ Ref IO, MonadRef (LayoutM t m), Ref (LayoutM t m) ~ Ref IO, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace)
 
 
-instance (SupportsLayoutM t m, RD.DomSpace (RD.DomBuilderSpace m)) => RD.DomBuilder t (LayoutM t m) where
+instance SupportsLayoutM t m => RD.DomBuilder t (LayoutM t m) where
   type DomBuilderSpace (LayoutM t m) = RD.DomBuilderSpace m
   element t cfg child = liftWith $ \run -> RD.element t (RD.liftElementConfig cfg) $ fst <$> run child
   selectElement cfg child = do
@@ -333,6 +325,43 @@ instance (SupportsLayoutM t m, RD.DomSpace (RD.DomBuilderSpace m)) => RD.DomBuil
           { RD._selectElementConfig_elementConfig = RD.liftElementConfig $ RD._selectElementConfig_elementConfig cfg
           }
     liftWith $ \run -> RD.selectElement cfg' $ fst <$> run child
+
+
+instance RD.Deletable t m => RD.Deletable t (LayoutM t m) where
+  deletable d = liftThrough $ RD.deletable d
+
+instance RD.PerformEvent t m=>RD.PerformEvent t (LayoutM t m) where
+  type Performable (LayoutM t m) = RD.Performable m
+  {-# INLINABLE performEvent_ #-}
+  performEvent_ e = lift $ R.performEvent_ e
+  {-# INLINABLE performEvent #-}
+  performEvent e = lift $ R.performEvent e
+
+instance RD.PostBuild t m => RD.PostBuild t (LayoutM t m) where
+  {-# INLINABLE getPostBuild #-}
+  getPostBuild = lift RD.getPostBuild
+
+instance RC.MonadReflexCreateTrigger t m => RC.MonadReflexCreateTrigger t (LayoutM t m) where
+  {-# INLINABLE newEventWithTrigger #-}
+  newEventWithTrigger = lift . RC.newEventWithTrigger
+  {-# INLINABLE newFanEventWithTrigger #-}
+  newFanEventWithTrigger f = lift $ RC.newFanEventWithTrigger f
+
+
+instance RD.TriggerEvent t m => RD.TriggerEvent t (LayoutM t m) where
+  {-# INLINABLE newTriggerEvent #-}
+  newTriggerEvent = lift RD.newTriggerEvent
+  {-# INLINABLE newTriggerEventWithOnComplete #-}
+  newTriggerEventWithOnComplete = lift RD.newTriggerEventWithOnComplete 
+  {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
+  newEventWithLazyTriggerWithOnComplete = lift . RD.newEventWithLazyTriggerWithOnComplete 
+
+
+instance RD.HasWebView m => RD.HasWebView (LayoutM t m) where
+  type WebViewPhantom (LayoutM t m) = RD.WebViewPhantom m
+  askWebView = lift RD.askWebView
+
+
 
 {-
 instance (RD.MonadWidget t m,MonadIO (RD.PushM t))=>RD.MonadWidget t (LayoutM t m) where
