@@ -54,6 +54,7 @@ import           Control.Monad.State             (MonadState, StateT, get, lift,
 import           Control.Monad.Trans             (MonadTrans)
 import           Control.Monad.Trans.Control     (MonadTransControl (..),
                                                   liftThrough)
+import           Control.Monad.Exception         (MonadAsyncException)
 import           Data.List                       (foldl')
 import qualified Data.List.NonEmpty              as NE
 import qualified Data.Map                        as M
@@ -129,7 +130,7 @@ dynamicCss desc dynMap = do
         R.foldDyn (flip addCssUpdate) initial ev
       getMaybeDyn key = makeDyn <$> M.lookup key dynMap -- Maybe (m (Dynamic t CssClasses))
   getLMaybeDyn <- sequence $ catMaybes (getMaybeDyn <$> classKeys) --m [Dynamic t CssClasses]
-  if (null classKeys) || (null getLMaybeDyn) then return Nothing else Just <$> R.mconcatDyn getLMaybeDyn
+  if (null classKeys) || (null getLMaybeDyn) then return Nothing else Just <$> (return $ mconcat getLMaybeDyn)
 
 addDynamicCss::(R.Reflex t, R.MonadHold t m, MonadFix m)=>LayoutDescription t->LayoutTree t->LayoutM t m (LayoutTree t)
 addDynamicCss desc lTree = do
@@ -262,9 +263,9 @@ instance RD.HasPostGui t h m => RD.HasPostGui t h (LayoutM t m) where
   askRunWithActions = liftL RD.askRunWithActions
 -}
 -- which to use??  Both work on demo.  So far.  Need to add widgetHold or dyn...
-layoutInside::(MonadIO (RD.PushM t),RD.MonadWidget t m)=>(m a -> m b)->LayoutM t m a->LayoutM t m b
+layoutInside::(MonadIO (RD.PushM t),SupportsLayoutM t m)=>(m a -> m b)->LayoutM t m a->LayoutM t m b
 layoutInside f w = do
-  lc <- ask
+  lc <- askLayoutConfig
   dynamicCssMap <- use lsDynamicCssMap
   staticCssMap <- use lsClassMap
   liftLM $ f $ runLayout staticCssMap dynamicCssMap lc w
@@ -272,7 +273,7 @@ layoutInside f w = do
 noLayoutInside::(RD.MonadWidget t m ,s~LayoutS t)=>(d->(b,s))->(m (a,s) -> m d)->LayoutM t m a->LayoutM t m b
 noLayoutInside f action w = do
   s <- get
-  lc <- ask
+  lc <- askLayoutConfig
   (x,s') <- f <$> (liftLM $ action $ runReaderT (runStateT (unLayoutM w) s) lc)
   put s'
   return x
@@ -293,7 +294,7 @@ runLayoutM lma ls lc = runReaderT (runStateT (unLayoutM lma) ls) lc
 instance MonadTransControl (LayoutM t) where
   type StT (LayoutM t) a = (a,LayoutS t)
   liftWith f = do
-    lc <- ask
+    lc <- askLayoutConfig
     ls <- get
     liftLM $ f $ \t -> runLayoutM t ls lc
   restoreT x = do
@@ -314,7 +315,7 @@ instance (RD.DomBuilder t m, RD.DomBuilderSpace (LayoutM t m) ~ RD.GhcjsDomSpace
 
 
 
-type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, R.Performable m ~ m, RD.Deletable t m, MonadRef m, Ref m ~ Ref IO, MonadRef (LayoutM t m), Ref (LayoutM t m) ~ Ref IO, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace)
+type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, R.Performable m ~ m, RD.Deletable t m, MonadRef m, Ref m ~ Ref IO, MonadRef (LayoutM t m), Ref (LayoutM t m) ~ Ref IO, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, MonadAsyncException m, RD.TriggerEvent t m, RD.PostBuild t m, RC.MonadReflexCreateTrigger t m, RD.HasWebView m)
 
 
 instance SupportsLayoutM t m => RD.DomBuilder t (LayoutM t m) where
@@ -325,6 +326,8 @@ instance SupportsLayoutM t m => RD.DomBuilder t (LayoutM t m) where
           { RD._selectElementConfig_elementConfig = RD.liftElementConfig $ RD._selectElementConfig_elementConfig cfg
           }
     liftWith $ \run -> RD.selectElement cfg' $ fst <$> run child
+  placeholder = lift . RD.placeholder
+
 
 
 instance RD.Deletable t m => RD.Deletable t (LayoutM t m) where

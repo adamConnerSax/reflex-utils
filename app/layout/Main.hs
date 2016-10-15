@@ -14,6 +14,7 @@ import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$))
 
 import Reflex
 import Reflex.Dom
+import Reflex.PerformEvent.Base
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 
 import Control.Monad.IO.Class (MonadIO)
@@ -225,7 +226,12 @@ allCss = tabCssBS
 
 main::IO ()
 main = do
-  B.putStr allCss
-  mainWidgetWithCss allCss $ do
-      tabbedWidget
-      return ()
+  B.putStr allCss 
+  let lmw::(MonadIO (PushM t), SupportsLayoutM t m)=>LayoutM t m ()
+      lmw = boxesWidget
+      w::PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (PerformEventT Spider (SpiderHost Global)))) ()
+      w = runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) lmw
+  mainWidgetWithCss allCss w
+--  mainWidgetWithCss allCss $ do
+--      tabbedWidget
+--      return ()
