@@ -155,7 +155,7 @@ addNewLayoutNode desc newChildren = do
 -}
 
 -- ??
-addNewLayoutNode::(RD.MonadWidget t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
+addNewLayoutNode::(SupportsLayoutM t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
 addNewLayoutNode desc child = do
   curLS <- get
   emptyLS <- newLayoutS desc
@@ -207,7 +207,7 @@ unionM::(Monad m,Ord k)=>(a->a->m a)->M.Map k a->M.Map k a->m (M.Map k a)
 unionM f m1 m2 = sequenceA $ M.mergeWithKey (\_ a b -> Just $ f a b) (fmap return) (fmap return) m1 m2
 
 -- do current node then children
-runLayoutTree::(RD.MonadWidget t m,MonadIO (R.PushM t))=>LayoutConfig t->CssClasses->LayoutTree t->m ()
+runLayoutTree::(SupportsLayoutM t m,MonadIO (R.PushM t))=>LayoutConfig t->CssClasses->LayoutTree t->m ()
 runLayoutTree lc classesForAll lt = do
   let lt' = (lt  ^. lnInfo.liDescription.ldLayoutF) lc lt
 --      elt = fromJust (lt' ^. lnInfo.liElt)
@@ -218,7 +218,7 @@ runLayoutTree lc classesForAll lt = do
   RD.elDynAttr "div" (classesToAttributesDyn classesForElt dynamicCss) child
 
 
-runStyledLayout::(RD.MonadWidget t m, MonadIO (RD.PushM t))=>CssClasses->LayoutClassMap->LayoutClassDynamicMap t->LayoutConfig t->LayoutM t m a->m a
+runStyledLayout::(SupportsLayoutM t m, MonadIO (RD.PushM t))=>CssClasses->LayoutClassMap->LayoutClassDynamicMap t->LayoutConfig t->LayoutM t m a->m a
 runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
   combinedDynamicCssMap <- unionM mergeLayoutClassDynamic (conf ^. lcDynamicCssMap) dynamicCssMap --dynamic classes are
   let combinedStaticCssMap = M.union staticCssMap (conf ^. lcStaticCssMap) --static classes are overwritten by later classes. ??
@@ -228,10 +228,10 @@ runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
   mapM_ (runLayoutTree conf classesForAll) (layoutS ^. lsTree.lnChildren) -- there is no elt on top
   return x
 
-runLayout::(RD.MonadWidget t m, MonadIO (RD.PushM t))=>LayoutClassMap->LayoutClassDynamicMap t -> LayoutConfig t->LayoutM t m a->m a
+runLayout::(SupportsLayoutM t m, MonadIO (RD.PushM t))=>LayoutClassMap->LayoutClassDynamicMap t -> LayoutConfig t->LayoutM t m a->m a
 runLayout = runStyledLayout emptyCss
 
-runLayoutMain::(RD.MonadWidget t m, MonadIO (RD.PushM t))=>LayoutConfig t->LayoutM t m a->m a
+runLayoutMain::(SupportsLayoutM t m, MonadIO (RD.PushM t))=>LayoutConfig t->LayoutM t m a->m a
 runLayoutMain = runLayout emptyClassMap emptyDynamicCssMap
 
 -- Class Instances
@@ -326,7 +326,12 @@ instance SupportsLayoutM t m => RD.DomBuilder t (LayoutM t m) where
           { RD._selectElementConfig_elementConfig = RD.liftElementConfig $ RD._selectElementConfig_elementConfig cfg
           }
     liftWith $ \run -> RD.selectElement cfg' $ fst <$> run child
-  placeholder = lift . RD.placeholder
+
+  placeholder (RD.PlaceholderConfig insertAbove delete) = do
+    lc <- askLayoutConfig
+    ls <- get
+    let insertAbove' = fmap (\x->fst <$> runLayoutM x ls lc) insertAbove  
+    lift $ RD.placeholder (RD.PlaceholderConfig insertAbove' delete) 
 
 
 
