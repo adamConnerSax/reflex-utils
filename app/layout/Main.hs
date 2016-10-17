@@ -226,6 +226,7 @@ allCss = tabCssBS
 main::IO ()
 main = do
   B.putStr allCss
-  mainWidgetWithCss allCss $ do
-      tabbedWidget
-      return ()
+  mainWidgetWithCss allCss $ runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) boxesWidget
+--  mainWidgetWithCss allCss $ do
+--    tabbedWidget
+--    return ()

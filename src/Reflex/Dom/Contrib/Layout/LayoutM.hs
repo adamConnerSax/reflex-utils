@@ -230,7 +230,7 @@ runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
 runLayout::(RD.MonadWidget t m, MonadIO (RD.PushM t))=>LayoutClassMap->LayoutClassDynamicMap t -> LayoutConfig t->LayoutM t m a->m a
 runLayout = runStyledLayout emptyCss
 
-runLayoutMain::(RD.MonadWidget t m, MonadIO (RD.PushM t))=>LayoutConfig t->LayoutM t m a->m a
+runLayoutMain::(RD.MonadWidget t m, SupportsLayoutM t m,MonadIO (RD.PushM t))=>LayoutConfig t->LayoutM t m a->m a
 runLayoutMain = runLayout emptyClassMap emptyDynamicCssMap
 
 -- Class Instances
@@ -352,9 +352,9 @@ instance RD.TriggerEvent t m => RD.TriggerEvent t (LayoutM t m) where
   {-# INLINABLE newTriggerEvent #-}
   newTriggerEvent = lift RD.newTriggerEvent
   {-# INLINABLE newTriggerEventWithOnComplete #-}
-  newTriggerEventWithOnComplete = lift RD.newTriggerEventWithOnComplete 
+  newTriggerEventWithOnComplete = lift RD.newTriggerEventWithOnComplete
   {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
-  newEventWithLazyTriggerWithOnComplete = lift . RD.newEventWithLazyTriggerWithOnComplete 
+  newEventWithLazyTriggerWithOnComplete = lift . RD.newEventWithLazyTriggerWithOnComplete
 
 
 instance RD.HasWebView m => RD.HasWebView (LayoutM t m) where
