@@ -55,12 +55,12 @@ colF _ lTree = lTree
 colD::R.Reflex t=>GridColWidth->LayoutDescription t
 colD w = LayoutDescription colF (LPK_Width RD.=: (LP_Width w)) ["all","col"]
 
-newRow::RD.MonadWidget t m=>LayoutM t m a -> LayoutM t m a
+newRow::SupportsLayoutM t m=>LayoutM t m a -> LayoutM t m a
 newRow = addNewLayoutNode rowD
 
-newCol::RD.MonadWidget t m=>GridColWidth->LayoutM t m a->LayoutM t m a
+newCol::SupportsLayoutM t m=>GridColWidth->LayoutM t m a->LayoutM t m a
 newCol w = addNewLayoutNode (colD w)
 
 
-newRow'::RD.MonadWidget t m=>LayoutM t m a -> LayoutM t m a
+newRow'::SupportsLayoutM t m=>LayoutM t m a -> LayoutM t m a
 newRow' x = newRow $ newCol 1 x
