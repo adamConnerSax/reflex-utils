@@ -101,6 +101,8 @@ executable reflex-utils-layout-exe
                      , reflex-dom
                      , reflex-dom-contrib
                      , reflex-utils
+                     , exception-transformers
+                     , ref-tf
                      , transformers
                      , mtl
                      , file-embed

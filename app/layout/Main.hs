@@ -15,10 +15,14 @@ import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$))
 import Reflex
 import Reflex.Dom
 import Reflex.PerformEvent.Base
+import Reflex.Host.Class (MonadReflexCreateTrigger)
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 
 import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Exception (MonadAsyncException)
 import Control.Monad.Trans (lift)
+import Control.Monad.Ref (Ref,MonadRef)
+import           Control.Monad.Fix               (MonadFix)
 import Data.Monoid ((<>))
 import Data.FileEmbed
 
@@ -83,7 +87,15 @@ updaterLabel (UpdateDynamic x) = T.pack $ L.drop (L.length ("demo-box-"::String)
 updaterLabel (AddToDynamic x) = undefined
 
 innerBoxDfltUpdater = innerBoxUpdaters !! 1
-innerBoxClassDDEvent::MonadWidget t m=>Event t CssUpdate -> m (Event t CssUpdate)
+innerBoxClassDDEvent::(DomBuilder t m,DomBuilderSpace m ~ GhcjsDomSpace,
+                       PostBuild t m,HasWebView m,MonadAsyncException m,
+                       Ref m ~ Ref IO, Ref (Performable m) ~ Ref IO,
+                       MonadFix m, MonadRef m, MonadRef (Performable m),
+                       TriggerEvent t m, PerformEvent t m,
+                       MonadReflexCreateTrigger t m, MonadHold t m,
+                       MonadSample t (Performable m),
+                       HasWebView (Performable m),
+                       MonadAsyncException (Performable m))=>Event t CssUpdate -> m (Event t CssUpdate)
 innerBoxClassDDEvent setEv = RDC._widget0_change <$> RDC.htmlDropdownStatic innerBoxUpdaters updaterLabel
                              Prelude.id (RDC.WidgetConfig setEv innerBoxDfltUpdater (constDyn M.empty))
 
@@ -126,7 +138,8 @@ subWidgetToggle = do
   widgetHold subWidget1 switchToEv
   return ()
 
-testControl::(SupportsLayoutM t m,MonadIO (PushM t))=>Event t CssUpdate->LayoutM t m (Event t CssUpdate)
+testControl::(SupportsLayoutM t m, PostBuild t m, MonadAsyncException m,
+              HasWebView m, MonadIO (PushM t))=>Event t CssUpdate->LayoutM t m (Event t CssUpdate)
 testControl setEv  = mdo
   (evSelf,evChildren) <- row $ do
     addKeyedCssUpdateEventBelow "row" innerBoxInitialCss evSelf 
@@ -156,7 +169,7 @@ sfTab::(SupportsLayoutM t m)=>TabInfo t m ()
 sfTab = TabInfo "sf" "Simple Flex" simpleFlexWidget
 
 
-optFlexWidget::(SupportsLayoutM t m,MonadIO (PushM t))=>m ()
+optFlexWidget::(SupportsLayoutM t m, PostBuild t m,HasWebView m,MonadAsyncException m,MonadIO (PushM t))=>m ()
 optFlexWidget = do
   let w = OF.flexRow #$ do
         OF.flexSizedItem 2 #$ (divClass "demo-box-black" $ text  "A")
@@ -189,7 +202,7 @@ optFlexTab::(SupportsLayoutM t m)=>TabInfo t m ()
 optFlexTab = TabInfo "optFlex" "optFlex" optFlexWidget
 
 
-boxesWidget::(SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
+boxesWidget::(SupportsLayoutM t m,PostBuild t m,HasWebView m, MonadAsyncException m,MonadIO (PushM t))=>LayoutM t m ()
 boxesWidget = do
   ev1 <- testControl never
   setter <- addKeyedCssUpdateEventBelow' "row" innerBoxInitialCss ev1
@@ -211,7 +224,7 @@ laidOut w = mainWidgetWithCss allCss $
             runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) $ w 
 -}
 
-tabbedWidget::(SupportsLayoutM t m, MonadIO (PushM t))=>m (Dynamic t [()])
+tabbedWidget::(SupportsLayoutM t m, PostBuild t m, HasWebView m, MonadAsyncException m, MonadIO (PushM t))=>m (Dynamic t [()])
 tabbedWidget = do
   el "p" $ text ""
   el "br" $ blank

@@ -39,17 +39,17 @@ import qualified Reflex.Dom.Class                as RD
 import qualified Reflex.Host.Class               as RC
 --import qualified Reflex.Dom.Old                  as RD
 
-
 import           Control.Lens                    (makeClassy, makeLenses, set,
                                                   use, view, (%=), (.=), (.~),
                                                   (<>=), (<>~), (^.))
 import           Control.Monad                   (forM, forM_, mapM_, sequence)
-import           Control.Monad.Exception         (MonadAsyncException)
+--import           Control.Monad.Exception         (MonadAsyncException)
 import           Control.Monad.Fix               (MonadFix)
+
 import           Control.Monad.IO.Class          (MonadIO, liftIO)
 import           Control.Monad.Reader            (MonadReader, ReaderT, ask,
                                                   runReaderT)
-import           Control.Monad.Ref               (MonadRef, Ref)
+import           Control.Monad.Ref               (MonadRef (..), Ref)
 import           Control.Monad.State             (MonadState, StateT, get, lift,
                                                   put, runStateT)
 import           Control.Monad.Trans             (MonadTrans)
@@ -207,7 +207,7 @@ unionM::(Monad m,Ord k)=>(a->a->m a)->M.Map k a->M.Map k a->m (M.Map k a)
 unionM f m1 m2 = sequenceA $ M.mergeWithKey (\_ a b -> Just $ f a b) (fmap return) (fmap return) m1 m2
 
 -- do current node then children
-runLayoutTree::(SupportsLayoutM t m,MonadIO (R.PushM t))=>LayoutConfig t->CssClasses->LayoutTree t->m ()
+runLayoutTree::(SupportsLayoutM t m,RD.PostBuild t m, MonadIO (R.PushM t))=>LayoutConfig t->CssClasses->LayoutTree t->m ()
 runLayoutTree lc classesForAll lt = do
   let lt' = (lt  ^. lnInfo.liDescription.ldLayoutF) lc lt
 --      elt = fromJust (lt' ^. lnInfo.liElt)
@@ -218,7 +218,7 @@ runLayoutTree lc classesForAll lt = do
   RD.elDynAttr "div" (classesToAttributesDyn classesForElt dynamicCss) child
 
 
-runStyledLayout::(SupportsLayoutM t m, MonadIO (RD.PushM t))=>CssClasses->LayoutClassMap->LayoutClassDynamicMap t->LayoutConfig t->LayoutM t m a->m a
+runStyledLayout::(SupportsLayoutM t m, RD.PostBuild t m, MonadIO (RD.PushM t))=>CssClasses->LayoutClassMap->LayoutClassDynamicMap t->LayoutConfig t->LayoutM t m a->m a
 runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
   combinedDynamicCssMap <- unionM mergeLayoutClassDynamic (conf ^. lcDynamicCssMap) dynamicCssMap --dynamic classes are
   let combinedStaticCssMap = M.union staticCssMap (conf ^. lcStaticCssMap) --static classes are overwritten by later classes. ??
@@ -228,10 +228,10 @@ runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
   mapM_ (runLayoutTree conf classesForAll) (layoutS ^. lsTree.lnChildren) -- there is no elt on top
   return x
 
-runLayout::(SupportsLayoutM t m, MonadIO (RD.PushM t))=>LayoutClassMap->LayoutClassDynamicMap t -> LayoutConfig t->LayoutM t m a->m a
+runLayout::(SupportsLayoutM t m, RD.PostBuild t m, MonadIO (RD.PushM t))=>LayoutClassMap->LayoutClassDynamicMap t -> LayoutConfig t->LayoutM t m a->m a
 runLayout = runStyledLayout emptyCss
 
-runLayoutMain::(SupportsLayoutM t m, MonadIO (RD.PushM t))=>LayoutConfig t->LayoutM t m a->m a
+runLayoutMain::(SupportsLayoutM t m, RD.PostBuild t m, MonadIO (RD.PushM t))=>LayoutConfig t->LayoutM t m a->m a
 runLayoutMain = runLayout emptyClassMap emptyDynamicCssMap
 
 -- Class Instances
@@ -263,7 +263,7 @@ instance RD.HasPostGui t h m => RD.HasPostGui t h (LayoutM t m) where
   askRunWithActions = liftL RD.askRunWithActions
 -}
 -- which to use??  Both work on demo.  So far.  Need to add widgetHold or dyn...
-layoutInside::(MonadIO (RD.PushM t),SupportsLayoutM t m)=>(m a -> m b)->LayoutM t m a->LayoutM t m b
+layoutInside::(MonadIO (RD.PushM t),RD.PostBuild t m, SupportsLayoutM t m)=>(m a -> m b)->LayoutM t m a->LayoutM t m b
 layoutInside f w = do
   lc <- askLayoutConfig
   dynamicCssMap <- use lsDynamicCssMap
@@ -313,8 +313,10 @@ instance (RD.DomBuilder t m, RD.DomBuilderSpace (LayoutM t m) ~ RD.GhcjsDomSpace
   restoreT = liftLM
 -}
 
+--type SupportsImmediateDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref IO)
 
-type SupportsLayoutM t m = (RD.SupportsImmediateDomBuilder t m, {-MonadRef (LayoutM t m), Ref (LayoutM t m) ~ Ref IO,-} RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, MonadAsyncException m, RD.TriggerEvent t m, RD.PostBuild t m, RC.MonadReflexCreateTrigger t m, RD.HasWebView m)
+--TriggerEvent makes me nervous
+type SupportsLayoutM t m = (RD.SupportsImmediateDomBuilder t m, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, RD.TriggerEvent t m)
 
 
 instance SupportsLayoutM t m => RD.DomBuilder t (LayoutM t m) where
@@ -353,6 +355,15 @@ instance RC.MonadReflexCreateTrigger t m => RC.MonadReflexCreateTrigger t (Layou
   newEventWithTrigger = lift . RC.newEventWithTrigger
   {-# INLINABLE newFanEventWithTrigger #-}
   newFanEventWithTrigger f = lift $ RC.newFanEventWithTrigger f
+
+instance MonadRef m => MonadRef (LayoutM t m) where
+  type Ref (LayoutM t m) = Ref m
+  {-# INLINABLE newRef #-}
+  newRef = lift . newRef
+  {-# INLINABLE readRef #-}
+  readRef = lift . readRef
+  {-# INLINABLE writeRef #-}
+  writeRef r = lift . writeRef r
 
 
 instance RD.TriggerEvent t m => RD.TriggerEvent t (LayoutM t m) where
