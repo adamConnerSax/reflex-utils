@@ -2,11 +2,13 @@
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE RecursiveDo       #-}
-{-# LANGUAGE GADTs             #-}  
+--{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RankNTypes        #-}
 module Main where
 
 import Reflex.Dom.Contrib.Layout.All
-import Reflex.Dom.Contrib.Layout.LayoutM (SupportsLayoutM)
+import Reflex.Dom.Contrib.Layout.LayoutM (SupportsLayoutM,runLayoutM)
 import Reflex.Dom.Contrib.Layout.GridConfigs
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexSizedItem,flexRow,flexCol,flexItem,flexCssBS)
 import qualified Reflex.Dom.Contrib.Layout.OptimizedFlexLayout as OF
@@ -240,11 +242,12 @@ allCss = tabCssBS
 main::IO ()
 main = do
   B.putStr allCss 
-  let lmw::(MonadIO (PushM t), SupportsLayoutM t m)=>LayoutM t m ()
+{-  let lmw::(MonadIO (PushM t), SupportsLayoutM t m)=>LayoutM t m ()
       lmw = subWidgetSimple --boxesWidget
-      w::PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (PerformEventT Spider (SpiderHost Global)))) ()
-      w = runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) lmw
-  mainWidgetWithCss allCss w
+      w::(forall x. PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (PerformEventT Spider (SpiderHost Global)))) ())
+      w = runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) lmw -}
+  mainWidget $ {- runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) $-}  runInputDisabledT $ demoDiv "blah"
+--  mainWidget $ runInputDisabledT $ demoDiv "blah" 
 --  mainWidgetWithCss allCss $ do
 --      tabbedWidget
 --      return ()

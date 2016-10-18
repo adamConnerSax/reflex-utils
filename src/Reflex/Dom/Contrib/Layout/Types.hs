@@ -12,7 +12,7 @@
 
 module Reflex.Dom.Contrib.Layout.Types where
 
-import Control.Lens (makeLenses,makeClassy)
+import Control.Lens (makeLenses,makeClassy,use)
 import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
@@ -124,12 +124,10 @@ data LayoutS t = LayoutS {  _lsTree::LayoutTree t
                          }
 
 
-newtype LayoutM t m a = LayoutM { unLayoutM::StateT (LayoutS t) (ReaderT (LayoutConfig t) m) a } deriving (Functor,Applicative,Monad,MonadFix,MonadIO,MonadException,MonadAsyncException,MonadState (LayoutS t))
+newtype LayoutM t m a = LayoutM { unLayoutM::StateT (LayoutS t) (ReaderT (LayoutConfig t) m) a } deriving (Functor,Applicative,Monad,MonadFix,MonadIO,MonadException,MonadAsyncException)
 
 askLayoutConfig::Monad m=>LayoutM t m (LayoutConfig t)
 askLayoutConfig = LayoutM $ lift ask
-
-
 
 makeClassy ''CssGridConfig
 makeClassy ''LayoutConfig
@@ -140,3 +138,8 @@ makeClassy ''LayoutTree
 makeClassy ''LayoutS
 
 
+askClassMap::Monad m=>LayoutM t m (LayoutClassMap)
+askClassMap = LayoutM $ use lsClassMap
+
+askDynamicCssMap::(R.Reflex t, Monad m)=>LayoutM t m (LayoutClassDynamicMap t)
+askDynamicCssMap = LayoutM $ use lsDynamicCssMap

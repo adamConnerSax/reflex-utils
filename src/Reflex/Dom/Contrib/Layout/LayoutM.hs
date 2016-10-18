@@ -24,6 +24,7 @@ module Reflex.Dom.Contrib.Layout.LayoutM
        , runStyledLayout
        , runLayout
        , runLayoutMain
+       , runLayoutM
        , getLayoutPropertyDef
        , addNewClassesToTreeTop
        , addNewLayoutNode
@@ -134,7 +135,7 @@ dynamicCss desc dynMap = do
 
 addDynamicCss::(R.Reflex t, R.MonadHold t m, MonadFix m)=>LayoutDescription t->LayoutTree t->LayoutM t m (LayoutTree t)
 addDynamicCss desc lTree = do
-  dynamicCssMap <- use lsDynamicCssMap
+  dynamicCssMap <- askDynamicCssMap
   mDyn <- dynamicCss desc dynamicCssMap
   return (lnInfo.liDynamicCss .~ mDyn $ lTree)
 
@@ -142,7 +143,7 @@ setElement::E.Element->LayoutTree t->LayoutTree t
 setElement elt lTree = (lnInfo.liElt .~ Just elt) $ lTree
 
 newLayoutS::(R.Reflex t,Monad m)=>LayoutDescription t->LayoutM t m (LayoutS t)
-newLayoutS desc = LayoutS (newTree desc) <$> use lsClassMap <*> use lsDynamicCssMap
+newLayoutS desc = LayoutS (newTree desc) <$> askClassMap <*> askDynamicCssMap
 
 {-
 addNewLayoutNode::(RD.MonadWidget t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
@@ -156,13 +157,13 @@ addNewLayoutNode desc newChildren = do
 
 -- ??
 addNewLayoutNode::(SupportsLayoutM t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
-addNewLayoutNode desc child = do
+addNewLayoutNode desc child = LayoutM $ do
   curLS <- get
-  emptyLS <- newLayoutS desc
+  emptyLS <- unLayoutM $ newLayoutS desc
   put emptyLS
-  x <- child
+  x <- unLayoutM child
   childLS <- get
-  addStaticClasses desc (childLS ^. lsTree) >>= addDynamicCss desc >>= addNode'
+  unLayoutM $ addStaticClasses desc (childLS ^. lsTree) >>= addDynamicCss desc >>= addNode'
   put curLS
   return x
 
@@ -266,15 +267,15 @@ instance RD.HasPostGui t h m => RD.HasPostGui t h (LayoutM t m) where
 layoutInside::(MonadIO (RD.PushM t),RD.PostBuild t m, SupportsLayoutM t m)=>(m a -> m b)->LayoutM t m a->LayoutM t m b
 layoutInside f w = do
   lc <- askLayoutConfig
-  dynamicCssMap <- use lsDynamicCssMap
-  staticCssMap <- use lsClassMap
+  dynamicCssMap <- askDynamicCssMap
+  staticCssMap <- askClassMap
   liftLM $ f $ runLayout staticCssMap dynamicCssMap lc w
 
 noLayoutInside::(RD.MonadWidget t m ,s~LayoutS t)=>(d->(b,s))->(m (a,s) -> m d)->LayoutM t m a->LayoutM t m b
-noLayoutInside f action w = do
+noLayoutInside f action w = LayoutM $ do
   s <- get
-  lc <- askLayoutConfig
-  (x,s') <- f <$> (liftLM $ action $ runReaderT (runStateT (unLayoutM w) s) lc)
+  lc <- ask
+  (x,s') <- f <$> (lift . lift $ action $ runReaderT (runStateT (unLayoutM w) s) lc)
   put s'
   return x
 
@@ -293,12 +294,12 @@ runLayoutM lma ls lc = runReaderT (runStateT (unLayoutM lma) ls) lc
 
 instance MonadTransControl (LayoutM t) where
   type StT (LayoutM t) a = (a,LayoutS t)
-  liftWith f = do
-    lc <- askLayoutConfig
+  liftWith f = LayoutM $ do
+    lc <- ask
     ls <- get
-    liftLM $ f $ \t -> runLayoutM t ls lc
-  restoreT x = do
-    (a,ls) <- liftLM x
+    lift . lift $ f $ \t -> runLayoutM t ls lc
+  restoreT x = LayoutM $ do
+    (a,ls) <- lift . lift $  x
     put ls
     return a
 
@@ -328,11 +329,11 @@ instance SupportsLayoutM t m => RD.DomBuilder t (LayoutM t m) where
           }
     liftWith $ \run -> RD.selectElement cfg' $ fst <$> run child
 
-  placeholder (RD.PlaceholderConfig insertAbove delete) = do
-    lc <- askLayoutConfig
+  placeholder (RD.PlaceholderConfig insertAbove delete) = LayoutM $ do
+    lc <- ask
     ls <- get
     let insertAbove' = fmap (\x->fst <$> runLayoutM x ls lc) insertAbove
-    lift $ RD.placeholder (RD.PlaceholderConfig insertAbove' delete)
+    lift . lift $ RD.placeholder (RD.PlaceholderConfig insertAbove' delete)
 
 
 

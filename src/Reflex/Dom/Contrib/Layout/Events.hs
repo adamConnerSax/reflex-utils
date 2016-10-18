@@ -30,14 +30,14 @@ import Control.Monad.Fix (MonadFix)
 
 
 addClassesToLast::(R.Reflex t,Monad m)=>CssClasses->LayoutM t m ()
-addClassesToLast css = (lsTree.lnInfo.liNewClasses) <>= css
+addClassesToLast css = LayoutM $ (lsTree.lnInfo.liNewClasses) <>= css
 
 
 addKeyedClassBelow::(R.Reflex t,Monad m)=>(LayoutClassKey,CssClasses)->LayoutM t m ()
 addKeyedClassBelow kc = addKeyedClassesBelow [kc]
 
 addKeyedClassesBelow::(R.Reflex t,Monad m)=>[(LayoutClassKey,CssClasses)]->LayoutM t m ()
-addKeyedClassesBelow keyedCss = do
+addKeyedClassesBelow keyedCss = LayoutM $ do
   let f m (key,css)  = M.insertWith mappend key css m
   lsClassMap %= (\m->foldl f m keyedCss)
 
@@ -46,7 +46,7 @@ addKeyedClassesBelow keyedCss = do
 --addCssUpdateEventToLast ev = (lsTree.lnInfo.liEvents) <>= [ev] 
 
 getKeyedCssUpdateEvent::(R.Reflex t, MonadFix m, RD.MonadHold t m)=>LayoutClassKey->LayoutM t m (Maybe (R.Event t CssUpdate))
-getKeyedCssUpdateEvent key = do
+getKeyedCssUpdateEvent key = LayoutM $ do
   dynamicCssMap <- use lsDynamicCssMap
   return $ _lcdEvent <$> (M.lookup key dynamicCssMap)
 
@@ -66,14 +66,15 @@ addKeyedCssUpdateEventsBelow' kEv@(key,_,_) = do
 
 addMultipleKeyedCssUpdateEventsBelow::(R.Reflex t, MonadFix m,RD.MonadHold t m)=>[(LayoutClassKey,CssClasses,[R.Event t CssUpdate])]->LayoutM t m ()
 addMultipleKeyedCssUpdateEventsBelow kEvs = do
-  let createDyn initialCss cssUpdEv = R.foldDyn (flip addCssUpdate) initialCss cssUpdEv
-      f m (key,initialCss,cssEvs)  = do
-        let newEv = R.mergeWith mergeCssUpdates $ maybe cssEvs (\x->(_lcdEvent x):cssEvs) (M.lookup key m)
-        cssDyn <- createDyn initialCss newEv
-        return $ M.insert key (LayoutClassDynamic cssDyn newEv) m
-  dynamicCssMap <- use lsDynamicCssMap
-  newMap <- foldM f dynamicCssMap kEvs
-  lsDynamicCssMap .= newMap
+  newMap <- do
+    let createDyn initialCss cssUpdEv = R.foldDyn (flip addCssUpdate) initialCss cssUpdEv
+        f m (key,initialCss,cssEvs)  = do
+          let newEv = R.mergeWith mergeCssUpdates $ maybe cssEvs (\x->(_lcdEvent x):cssEvs) (M.lookup key m)
+          cssDyn <- createDyn initialCss newEv
+          return $ M.insert key (LayoutClassDynamic cssDyn newEv) m
+    dynamicCssMap <- askDynamicCssMap
+    foldM f dynamicCssMap kEvs
+  LayoutM $ lsDynamicCssMap .= newMap
 
 
 
