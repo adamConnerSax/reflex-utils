@@ -246,7 +246,7 @@ main = do
       lmw = subWidgetSimple --boxesWidget
       w::(forall x. PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (PerformEventT Spider (SpiderHost Global)))) ())
       w = runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) lmw -}
-  mainWidget $ {- runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) $-}  runInputDisabledT $ demoDiv "blah"
+  mainWidget $ runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) subWidgetSimple
 --  mainWidget $ runInputDisabledT $ demoDiv "blah" 
 --  mainWidgetWithCss allCss $ do
 --      tabbedWidget
