@@ -314,8 +314,7 @@ instance (RD.DomBuilder t m, RD.DomBuilderSpace (LayoutM t m) ~ RD.GhcjsDomSpace
 -}
 
 
-
-type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, R.Performable m ~ m, RD.Deletable t m, MonadRef m, Ref m ~ Ref IO, MonadRef (LayoutM t m), Ref (LayoutM t m) ~ Ref IO, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, MonadAsyncException m, RD.TriggerEvent t m, RD.PostBuild t m, RC.MonadReflexCreateTrigger t m, RD.HasWebView m)
+type SupportsLayoutM t m = (RD.SupportsImmediateDomBuilder t m, {-MonadRef (LayoutM t m), Ref (LayoutM t m) ~ Ref IO,-} RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, MonadAsyncException m, RD.TriggerEvent t m, RD.PostBuild t m, RC.MonadReflexCreateTrigger t m, RD.HasWebView m)
 
 
 instance SupportsLayoutM t m => RD.DomBuilder t (LayoutM t m) where

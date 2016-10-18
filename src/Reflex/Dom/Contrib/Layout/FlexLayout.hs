@@ -101,36 +101,36 @@ flexCss = do
 flexCssBS::B.ByteString
 flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty []  flexCss
 
-flexRow::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexRow::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexRow = RD.divClass "gl-flex-row" 
 
-flexCol::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexCol::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexCol = RD.divClass "gl-flex-col" 
 
-flexItem::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexItem::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexItem = RD.divClass "gl-flex-item" 
 
-flexSizedItem::(RD.MonadWidget t m,MonadIO (R.PushM t))=>Int->m a->m a
+flexSizedItem::(RD.DomBuilder t m,MonadIO (R.PushM t))=>Int->m a->m a
 flexSizedItem n = let n' = Prelude.min n numberFlexGrowOptions in RD.divClass $ T.pack ("gl-flex-item-" ++ show n') 
 
-wrapWidget::RD.MonadWidget t m=>m a->m a
+wrapWidget::RD.DomBuilder t m=>m a->m a
 wrapWidget = RD.divClass "" 
 
 
-flexFillR::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexFillR::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexFillR w = 
   RD.divClass "flexFillH" $ do
     a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
-flexFillL::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexFillL::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexFillL w = 
   RD.divClass "flexFillH" $ do  
     RD.divClass "fill" RD.blank
     wrapWidget w
 
-flexHCenter::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexHCenter::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexHCenter w = 
   RD.divClass "flexFillH" $ do
     RD.divClass "fill" RD.blank
@@ -138,7 +138,7 @@ flexHCenter w =
     RD.divClass "fill" RD.blank
     return a
 
-flexVCenter::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexVCenter::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexVCenter w = 
   RD.divClass "flexFillV" $ do
     RD.divClass "fill" RD.blank
@@ -146,14 +146,14 @@ flexVCenter w =
     RD.divClass "fill" RD.blank
     return a
 
-flexFillD::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexFillD::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexFillD w = 
   RD.divClass "flexFillV" $ do
     a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
-flexFillU::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexFillU::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexFillU w = 
   RD.divClass "flexFillV" $ do  
     RD.divClass "fill" RD.blank
@@ -162,10 +162,10 @@ flexFillU w =
 
 
 infixl 2 ##
-(##)::(RD.MonadWidget t m,MonadIO (R.PushM t))=>(m a->m a)->m a->m a
+(##)::(RD.DomBuilder t m,MonadIO (R.PushM t))=>(m a->m a)->m a->m a
 (##) = ($)
 
 infix 1 #$
-(#$)::RD.MonadWidget t m=>(m a->m a)->m a->m a
+(#$)::RD.DomBuilder t m=>(m a->m a)->m a->m a
 (#$) = ($)
 
