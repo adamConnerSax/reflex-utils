@@ -242,11 +242,11 @@ allCss = tabCssBS
 main::IO ()
 main = do
   B.putStr allCss 
-{-  let lmw::(MonadIO (PushM t), SupportsLayoutM t m)=>LayoutM t m ()
-      lmw = subWidgetSimple --boxesWidget
+  let --lmw::SupportsLayoutM t m=>LayoutM t m ()
+      --lmw = subWidgetSimple --boxesWidget
       w::(forall x. PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (PerformEventT Spider (SpiderHost Global)))) ())
-      w = runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) lmw -}
-  mainWidget $ runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) subWidgetSimple
+      w = runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) $ lift $ text "blah"
+  mainWidget w
 --  mainWidget $ runInputDisabledT $ demoDiv "blah" 
 --  mainWidgetWithCss allCss $ do
 --      tabbedWidget

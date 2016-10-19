@@ -208,7 +208,7 @@ unionM::(Monad m,Ord k)=>(a->a->m a)->M.Map k a->M.Map k a->m (M.Map k a)
 unionM f m1 m2 = sequenceA $ M.mergeWithKey (\_ a b -> Just $ f a b) (fmap return) (fmap return) m1 m2
 
 -- do current node then children
-runLayoutTree::(SupportsLayoutM t m,RD.PostBuild t m, MonadIO (R.PushM t))=>LayoutConfig t->CssClasses->LayoutTree t->m ()
+runLayoutTree::(SupportsLayoutM t m,RD.PostBuild t m)=>LayoutConfig t->CssClasses->LayoutTree t->m ()
 runLayoutTree lc classesForAll lt = do
   let lt' = (lt  ^. lnInfo.liDescription.ldLayoutF) lc lt
 --      elt = fromJust (lt' ^. lnInfo.liElt)
@@ -219,7 +219,7 @@ runLayoutTree lc classesForAll lt = do
   RD.elDynAttr "div" (classesToAttributesDyn classesForElt dynamicCss) child
 
 
-runStyledLayout::(SupportsLayoutM t m, RD.PostBuild t m, MonadIO (RD.PushM t))=>CssClasses->LayoutClassMap->LayoutClassDynamicMap t->LayoutConfig t->LayoutM t m a->m a
+runStyledLayout::(SupportsLayoutM t m, RD.PostBuild t m)=>CssClasses->LayoutClassMap->LayoutClassDynamicMap t->LayoutConfig t->LayoutM t m a->m a
 runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
   combinedDynamicCssMap <- unionM mergeLayoutClassDynamic (conf ^. lcDynamicCssMap) dynamicCssMap --dynamic classes are
   let combinedStaticCssMap = M.union staticCssMap (conf ^. lcStaticCssMap) --static classes are overwritten by later classes. ??
@@ -229,10 +229,10 @@ runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
   mapM_ (runLayoutTree conf classesForAll) (layoutS ^. lsTree.lnChildren) -- there is no elt on top
   return x
 
-runLayout::(SupportsLayoutM t m, RD.PostBuild t m, MonadIO (RD.PushM t))=>LayoutClassMap->LayoutClassDynamicMap t -> LayoutConfig t->LayoutM t m a->m a
+runLayout::(SupportsLayoutM t m, RD.PostBuild t m)=>LayoutClassMap->LayoutClassDynamicMap t -> LayoutConfig t->LayoutM t m a->m a
 runLayout = runStyledLayout emptyCss
 
-runLayoutMain::(SupportsLayoutM t m, RD.PostBuild t m, MonadIO (RD.PushM t))=>LayoutConfig t->LayoutM t m a->m a
+runLayoutMain::(SupportsLayoutM t m, RD.PostBuild t m)=>LayoutConfig t->LayoutM t m a->m a
 runLayoutMain = runLayout emptyClassMap emptyDynamicCssMap
 
 -- Class Instances
@@ -262,7 +262,7 @@ instance (RD.MonadWidget t m,RD.MonadIORestore m, MonadIO (RD.PushM t)) => RD.Mo
 instance RD.HasPostGui t h m => RD.HasPostGui t h (LayoutM t m) where
   askPostGui = liftL RD.askPostGui
   askRunWithActions = liftL RD.askRunWithActions
--}
+
 -- which to use??  Both work on demo.  So far.  Need to add widgetHold or dyn...
 layoutInside::(MonadIO (RD.PushM t),RD.PostBuild t m, SupportsLayoutM t m)=>(m a -> m b)->LayoutM t m a->LayoutM t m b
 layoutInside f w = do
@@ -278,7 +278,7 @@ noLayoutInside f action w = LayoutM $ do
   (x,s') <- f <$> (lift . lift $ action $ runReaderT (runStateT (unLayoutM w) s) lc)
   put s'
   return x
-
+-}
 --deriving instance R.MonadSample t m => R.MonadSample t (LayoutM t m)
 --deriving instance R.MonadHold t m   => R.MonadHold t (LayoutM t m)
 
@@ -380,7 +380,9 @@ instance RD.HasWebView m => RD.HasWebView (LayoutM t m) where
   type WebViewPhantom (LayoutM t m) = RD.WebViewPhantom m
   askWebView = lift RD.askWebView
 
-
+instance RD.HasJS js m => RD.HasJS js (LayoutM t m) where
+  type JSM (LayoutM t m) = RD.JSM m
+  liftJS = lift . RD.liftJS
 
 {-
 instance (RD.MonadWidget t m,MonadIO (RD.PushM t))=>RD.MonadWidget t (LayoutM t m) where
