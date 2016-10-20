@@ -5,6 +5,7 @@
 --{-# LANGUAGE GADTs             #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 module Main where
 
 import Reflex.Dom.Contrib.Layout.All
@@ -109,7 +110,7 @@ row = lmFlexLayoutRow
 col::SupportsLayoutM t m=>Int->LayoutM t m a->LayoutM t m a
 col = lmFlexCol
 
-subWidgetSimple::(SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
+subWidgetSimple::(PostBuild t m,SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
 subWidgetSimple = do
   row $ do
     col 1 $ demoDiv "C"
@@ -117,20 +118,20 @@ subWidgetSimple = do
   subWidget1
 
 
-subWidget1::(SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
+subWidget1::(PostBuild t m,SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
 subWidget1 = do
   row $ demoDiv "D"
   row $ demoDiv "E"
   row $ demoDiv "F"
 
-subWidget2::(SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
+subWidget2::(PostBuild t m,SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
 subWidget2 = do
   row $ do
     col 1 $ demoDiv "D"
     col 1 $ demoDiv "E"
     col 1 $ demoDiv "F"
 
-subWidgetToggle::(SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
+subWidgetToggle::(PostBuild t m, SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
 subWidgetToggle = do
   switchToEv <- row $ do
     col 1 $ demoDiv "C"
@@ -241,12 +242,9 @@ allCss = tabCssBS
 
 main::IO ()
 main = do
+--  let runM = runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap)
   B.putStr allCss 
-  let --lmw::SupportsLayoutM t m=>LayoutM t m ()
-      --lmw = subWidgetSimple --boxesWidget
-      w::(forall x. PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (PerformEventT Spider (SpiderHost Global)))) ())
-      w = runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) $ lift $ text "blah"
-  mainWidget w
+  mainWidgetWithCss allCss $ runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) subWidgetSimple
 --  mainWidget $ runInputDisabledT $ demoDiv "blah" 
 --  mainWidgetWithCss allCss $ do
 --      tabbedWidget

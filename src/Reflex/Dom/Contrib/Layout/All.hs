@@ -1,7 +1,6 @@
 module Reflex.Dom.Contrib.Layout.All
        (
          module Reflex.Dom.Contrib.Layout.Types
-       , module Reflex.Dom.Contrib.Layout.LayoutM
         -- These don't use LayoutM
        , TabInfo(..)
        , staticTabbedLayout
@@ -19,6 +18,7 @@ module Reflex.Dom.Contrib.Layout.All
        , cssToBS
        , tabCssBS
          -- from here down we are using LayoutM machinery
+       , module Reflex.Dom.Contrib.Layout.LayoutM
        , newRow
        , newRow'
        , newCol

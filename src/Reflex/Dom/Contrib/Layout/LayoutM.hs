@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE AllowAmbiguousTypes    #-}
 
 module Reflex.Dom.Contrib.Layout.LayoutM
        (
@@ -44,7 +45,7 @@ import           Control.Lens                    (makeClassy, makeLenses, set,
                                                   use, view, (%=), (.=), (.~),
                                                   (<>=), (<>~), (^.))
 import           Control.Monad                   (forM, forM_, mapM_, sequence)
---import           Control.Monad.Exception         (MonadAsyncException)
+import           Control.Monad.Exception         (MonadAsyncException)
 import           Control.Monad.Fix               (MonadFix)
 
 import           Control.Monad.IO.Class          (MonadIO, liftIO)
@@ -208,7 +209,7 @@ unionM::(Monad m,Ord k)=>(a->a->m a)->M.Map k a->M.Map k a->m (M.Map k a)
 unionM f m1 m2 = sequenceA $ M.mergeWithKey (\_ a b -> Just $ f a b) (fmap return) (fmap return) m1 m2
 
 -- do current node then children
-runLayoutTree::(SupportsLayoutM t m,RD.PostBuild t m)=>LayoutConfig t->CssClasses->LayoutTree t->m ()
+runLayoutTree::(SupportsLayoutM t m, RD.PostBuild t m)=>LayoutConfig t->CssClasses->LayoutTree t->m ()
 runLayoutTree lc classesForAll lt = do
   let lt' = (lt  ^. lnInfo.liDescription.ldLayoutF) lc lt
 --      elt = fromJust (lt' ^. lnInfo.liElt)
@@ -226,6 +227,7 @@ runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
       emptyD = LayoutDescription (const id) noProperties []
       emptyS = LayoutS (newTree emptyD) combinedStaticCssMap combinedDynamicCssMap
   (x,layoutS) <- runReaderT (runStateT (unLayoutM layout) emptyS) conf
+  liftIO . putStrLn . show . printLayoutTree $ layoutS ^. lsTree
   mapM_ (runLayoutTree conf classesForAll) (layoutS ^. lsTree.lnChildren) -- there is no elt on top
   return x
 
@@ -292,6 +294,7 @@ runLayoutM::LayoutM t m a->LayoutS t->LayoutConfig t->m (a,LayoutS t)
 runLayoutM lma ls lc = runReaderT (runStateT (unLayoutM lma) ls) lc
 
 
+
 instance MonadTransControl (LayoutM t) where
   type StT (LayoutM t) a = (a,LayoutS t)
   liftWith f = LayoutM $ do
@@ -302,6 +305,17 @@ instance MonadTransControl (LayoutM t) where
     (a,ls) <- lift . lift $  x
     put ls
     return a
+
+
+{-
+instance MonadTransControl (LayoutM t) where
+  type StT (LayoutM t) a = a
+  liftWith f = LayoutM $ do
+    lc <- ask
+    ls <- get
+    lift . lift $ f $ \t -> runLayoutMain lc t
+  restoreT x = LayoutM $ lift . lift $  x
+-}
 
 {-
 instance (RD.DomBuilder t m, RD.DomBuilderSpace (LayoutM t m) ~ RD.GhcjsDomSpace)=>MonadTransControl (LayoutM t) where
@@ -317,24 +331,38 @@ instance (RD.DomBuilder t m, RD.DomBuilderSpace (LayoutM t m) ~ RD.GhcjsDomSpace
 --type SupportsImmediateDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref IO)
 
 --TriggerEvent makes me nervous
-type SupportsLayoutM t m = (RD.SupportsImmediateDomBuilder t m, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, RD.TriggerEvent t m)
+type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, RC.MonadReflexCreateTrigger t m, RD.Deletable t m, MonadRef m, Ref m ~ Ref IO, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, RD.TriggerEvent t m, Ref (R.Performable m) ~ Ref IO, RD.HasWebView (R.Performable m), MonadAsyncException (R.Performable m), MonadRef (R.Performable m), R.MonadSample t (R.Performable m))
 
 
-instance SupportsLayoutM t m => RD.DomBuilder t (LayoutM t m) where
+instance (RD.PostBuild t m, SupportsLayoutM t m) => RD.DomBuilder t (LayoutM t m) where
   type DomBuilderSpace (LayoutM t m) = RD.DomBuilderSpace m
-  element t cfg child = liftWith $ \run -> RD.element t (RD.liftElementConfig cfg) $ fst <$> run child
+  element t cfg child = do
+    lc <- askLayoutConfig
+    liftWith $ \run -> RD.element t (RD.liftElementConfig cfg) $ do
+      (a,ls) <- run child
+      runLayoutTree lc emptyCss (ls ^. lsTree)
+      return a
+    
   selectElement cfg child = do
     let cfg' = cfg
           { RD._selectElementConfig_elementConfig = RD.liftElementConfig $ RD._selectElementConfig_elementConfig cfg
           }
-    liftWith $ \run -> RD.selectElement cfg' $ fst <$> run child
+    lc <- askLayoutConfig
+    liftWith $ \run -> RD.selectElement cfg' $ do
+      (a,ls) <- run child
+      runLayoutTree lc emptyCss (ls ^. lsTree)
+      return a
+
 
   placeholder (RD.PlaceholderConfig insertAbove delete) = LayoutM $ do
     lc <- ask
     ls <- get
-    let insertAbove' = fmap (\x->fst <$> runLayoutM x ls lc) insertAbove
+    let f x = do
+          (a,ls') <- runLayoutM x ls lc
+          runLayoutTree lc emptyCss (ls' ^. lsTree)
+          return a
+        insertAbove' = fmap f insertAbove
     lift . lift $ RD.placeholder (RD.PlaceholderConfig insertAbove' delete)
-
 
 
 instance RD.Deletable t m => RD.Deletable t (LayoutM t m) where

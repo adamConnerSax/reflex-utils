@@ -124,11 +124,6 @@ data LayoutS t = LayoutS {  _lsTree::LayoutTree t
                          }
 
 
-newtype LayoutM t m a = LayoutM { unLayoutM::StateT (LayoutS t) (ReaderT (LayoutConfig t) m) a } deriving (Functor,Applicative,Monad,MonadFix,MonadIO,MonadException,MonadAsyncException)
-
-askLayoutConfig::Monad m=>LayoutM t m (LayoutConfig t)
-askLayoutConfig = LayoutM $ lift ask
-
 makeClassy ''CssGridConfig
 makeClassy ''LayoutConfig
 makeClassy ''LayoutClassDynamic
@@ -137,6 +132,11 @@ makeClassy ''LayoutInfo
 makeClassy ''LayoutTree
 makeClassy ''LayoutS
 
+
+newtype LayoutM t m a = LayoutM { unLayoutM::StateT (LayoutS t) (ReaderT (LayoutConfig t) m) a } deriving (Functor,Applicative,Monad,MonadFix,MonadIO,MonadException,MonadAsyncException)
+
+askLayoutConfig::Monad m=>LayoutM t m (LayoutConfig t)
+askLayoutConfig = LayoutM $ lift ask
 
 askClassMap::Monad m=>LayoutM t m (LayoutClassMap)
 askClassMap = LayoutM $ use lsClassMap
