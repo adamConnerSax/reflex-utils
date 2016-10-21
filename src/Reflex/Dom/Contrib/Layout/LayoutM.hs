@@ -443,4 +443,8 @@ printLayoutConfig lc = do
   putStrLn $ "dynamicCss Keys=" ++ (show $ M.keys (_lcDynamicCssMap lc))
 
 printLayoutTree::LayoutTree t->T.Text
-printLayoutTree (LayoutNode i c) = "Node: classes=" <> toCssString (i ^. liNewClasses) <> "\n\t" <> (mconcat $ printLayoutTree <$> c)
+printLayoutTree (LayoutNode i c) = "Node: classes="
+                                   <> toCssString (i ^. liNewClasses)
+                                   <> T.pack (show (i ^. liDescription))
+                                   <> "\n\t"
+                                   <> (mconcat $ printLayoutTree <$> c)

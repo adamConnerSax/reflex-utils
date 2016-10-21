@@ -105,8 +105,10 @@ type LayoutF t = LayoutConfig t->LayoutTree t->LayoutTree t
 data LayoutDescription t = LayoutDescription { _ldLayoutF::LayoutF t
                                              , _ldProperties::LayoutPropertyMap
                                              , _ldLayoutClassKeys::[LayoutClassKey]
-                                             } 
+                                             }
 
+instance Show (LayoutDescription t) where
+  show (LayoutDescription _ props classKeys) = "props=" ++ show props ++ "; classKeys=" ++ show classKeys 
 
 data LayoutInfo t = LayoutInfo { _liDescription::LayoutDescription t
                                , _liNewClasses::CssClasses
