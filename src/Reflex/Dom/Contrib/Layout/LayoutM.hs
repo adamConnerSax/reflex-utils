@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -9,7 +10,6 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
-{-# LANGUAGE AllowAmbiguousTypes    #-}
 
 module Reflex.Dom.Contrib.Layout.LayoutM
        (
@@ -164,8 +164,9 @@ addNewLayoutNode desc child = LayoutM $ do
   put emptyLS
   x <- unLayoutM child
   childLS <- get
-  unLayoutM $ addStaticClasses desc (childLS ^. lsTree) >>= addDynamicCss desc >>= addNode'
   put curLS
+  unLayoutM $ addStaticClasses desc (childLS ^. lsTree) >>= addDynamicCss desc >>= addNode'
+  liftIO . putStrLn . show . printLayoutTree $ curLS ^. lsTree
   return x
 
 cssToAttr::IsCssClass c=>c->RD.AttributeMap
@@ -211,6 +212,7 @@ unionM f m1 m2 = sequenceA $ M.mergeWithKey (\_ a b -> Just $ f a b) (fmap retur
 -- do current node then children
 runLayoutTree::(SupportsLayoutM t m, RD.PostBuild t m)=>LayoutConfig t->CssClasses->LayoutTree t->m ()
 runLayoutTree lc classesForAll lt = do
+  liftIO . putStrLn . show . printLayoutTree $ lt
   let lt' = (lt  ^. lnInfo.liDescription.ldLayoutF) lc lt
 --      elt = fromJust (lt' ^. lnInfo.liElt)
       classesForElt = (lt' ^. lnInfo.liNewClasses) <> classesForAll
@@ -342,7 +344,7 @@ instance (RD.PostBuild t m, SupportsLayoutM t m) => RD.DomBuilder t (LayoutM t m
       (a,ls) <- run child
       runLayoutTree lc emptyCss (ls ^. lsTree)
       return a
-    
+
   selectElement cfg child = do
     let cfg' = cfg
           { RD._selectElementConfig_elementConfig = RD.liftElementConfig $ RD._selectElementConfig_elementConfig cfg
