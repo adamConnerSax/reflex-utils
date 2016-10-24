@@ -154,9 +154,9 @@ addNewLayoutNode desc newChildren = do
   let taggedChild = setElement (RDC._raw_element elt) (childLS ^. lsTree)
   addStaticClasses desc taggedChild >>= addDynamicCss desc >>= addNode'
   return x
--}
 
--- ??
+
+
 addNewLayoutNode::(SupportsLayoutM t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
 addNewLayoutNode desc child = LayoutM $ do
   curLS <- get
@@ -168,6 +168,21 @@ addNewLayoutNode desc child = LayoutM $ do
   unLayoutM $ addStaticClasses desc (childLS ^. lsTree) >>= addDynamicCss desc >>= addNode'
   liftIO . putStrLn $  "Adding " ++ show desc ++ ". Tree=" ++ T.unpack (printLayoutTree $ curLS ^. lsTree)
   return x
+-}
+
+addNewLayoutNode::(SupportsLayoutM t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
+addNewLayoutNode desc child = LayoutM $ do
+  lc <- askLayoutConfig
+  ls <- get
+  let lF  = desc ^. ldLayoutF
+      lt = ls ^. lsTree
+      lt' = lF lc lt
+      classesForElt = lt' ^. lnInfo.liNewClasses
+      dynamicss = maybe (R.constDyn mempty) id (lt' ^. lnInfo.liDynamicCss)
+      child' = runLayoutM child lc ls
+  lift . lift $ RD.elDynAttr "div" (classesToAttributesDyn classesForElt dynamicCss) child'
+  
+  
 
 cssToAttr::IsCssClass c=>c->RD.AttributeMap
 cssToAttr cssClass = ("class" RD.=: (toCssString cssClass))
