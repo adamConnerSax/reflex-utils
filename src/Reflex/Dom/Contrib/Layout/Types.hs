@@ -82,18 +82,18 @@ type CssGridRowClass = CssClass
 type CssColumnClasses = CssClasses
 type GridColWidth = Int
 
-data CssGridConfig = CssGridConfig { _gcGridRow::CssClass, _gcGridColumns::CssClasses } deriving (Show)
+--data CssGridConfig = CssGridConfig { _gcGridRow::CssClass, _gcGridColumns::CssClasses } deriving (Show)
 
 type LayoutClassKey = String
 type LayoutClassMap = M.Map LayoutClassKey CssClasses
 data LayoutClassDynamic t = LayoutClassDynamic { _lcdInitDyn::R.Dynamic t CssClasses, _lcdEvent::R.Event t CssUpdate }
 type LayoutClassDynamicMap t = M.Map LayoutClassKey (LayoutClassDynamic t)
 
-data LayoutConfig t = LayoutConfig { _lcGridConfig::CssGridConfig, _lcStaticCssMap::LayoutClassMap, _lcDynamicCssMap::LayoutClassDynamicMap t }
+data LayoutConfig t = LayoutConfig { _lcStaticCssMap::LayoutClassMap, _lcDynamicCssMap::LayoutClassDynamicMap t }
 
 data CssUpdate = UpdateDynamic CssClasses | AddToDynamic CssClasses deriving (Eq,Show)
 
-
+{-
 data LayoutPropertyKey = LPK_Width deriving (Ord,Eq,Show)
 data LayoutProperty = LP_Width { lpWidth::Int } deriving (Show)
 type LayoutPropertyMap = M.Map LayoutPropertyKey LayoutProperty
@@ -101,24 +101,22 @@ type LayoutPropertyMap = M.Map LayoutPropertyKey LayoutProperty
 
 
 type LayoutF t = LayoutConfig t->LayoutTree t->LayoutTree t
+-}
 
-data LayoutDescription t = LayoutDescription { _ldLayoutF::LayoutF t
-                                             , _ldProperties::LayoutPropertyMap
+data LayoutDescription t = LayoutDescription { _ldClasses::CssClasses
                                              , _ldLayoutClassKeys::[LayoutClassKey]
                                              }
 
 instance Show (LayoutDescription t) where
-  show (LayoutDescription _ props classKeys) = "props=" ++ show props ++ "; classKeys=" ++ show classKeys 
+  show (LayoutDescription classes classKeys) = "classes=" ++ show classes ++ "; classKeys=" ++ show classKeys 
 
 data LayoutInfo t  = LayoutInfo { _liDescription::LayoutDescription t
                                 , _liNewClasses::CssClasses
                                 , _liDynamicCss::Maybe (R.Dynamic t CssClasses)
---                              , _liChild::
                                 } 
 
 
 data LayoutTree t = LayoutNode { _lnInfo::LayoutInfo t, _lnChildren::[LayoutTree t]} --Rose Tree
-
 
 data LayoutS t = LayoutS {  _lsTree::LayoutTree t
                           , _lsClassMap::LayoutClassMap
@@ -126,7 +124,6 @@ data LayoutS t = LayoutS {  _lsTree::LayoutTree t
                          }
 
 
-makeClassy ''CssGridConfig
 makeClassy ''LayoutConfig
 makeClassy ''LayoutClassDynamic
 makeClassy ''LayoutDescription

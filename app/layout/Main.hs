@@ -10,7 +10,7 @@ module Main where
 
 import Reflex.Dom.Contrib.Layout.All
 import Reflex.Dom.Contrib.Layout.LayoutM (SupportsLayoutM,runLayoutM)
-import Reflex.Dom.Contrib.Layout.GridConfigs
+--import Reflex.Dom.Contrib.Layout.GridConfigs
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexSizedItem,flexRow,flexCol,flexItem,flexCssBS)
 import qualified Reflex.Dom.Contrib.Layout.OptimizedFlexLayout as OF
 import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$))
@@ -220,7 +220,7 @@ boxesWidget = do
     return ()
 
 boxesTab::(SupportsLayoutM t m)=>TabInfo t m ()
-boxesTab = TabInfo "boxes" "Dynamic/Events" $ runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) boxesWidget
+boxesTab = TabInfo "boxes" "Dynamic/Events" $ runLayoutMain (LayoutConfig emptyClassMap emptyDynamicCssMap) boxesWidget
 {-
 laidOut::(MonadWidget t m, MonadIO (PushM t))=>LayoutM t m () -> IO ()
 laidOut w = mainWidgetWithCss allCss $

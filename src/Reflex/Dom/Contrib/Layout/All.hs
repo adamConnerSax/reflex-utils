@@ -19,9 +19,6 @@ module Reflex.Dom.Contrib.Layout.All
        , tabCssBS
          -- from here down we are using LayoutM machinery
        , module Reflex.Dom.Contrib.Layout.LayoutM
-       , newRow
-       , newRow'
-       , newCol
 --       , addClassesToLast
        , addKeyedClassesBelow
        , addKeyedCssUpdateEventBelow
@@ -53,8 +50,6 @@ import Reflex.Dom.Contrib.Layout.LayoutM (emptyCss,emptyClassMap,emptyDynamicCss
 import Reflex.Dom.Contrib.Layout.LayoutMFlex (lmFlexLayoutRow,lmFlexCol,lmFlexLayoutCol,lmFlexRow,
                                               lmFlexLayoutRow',lmFlexCol',lmFlexLayoutCol',lmFlexRow')
 
-
-import Reflex.Dom.Contrib.Layout.GridLayout (newRow,newRow',newCol)
 
 import Reflex.Dom.Contrib.Layout.Events (addKeyedClassesBelow,
                                          addKeyedCssUpdateEventBelow,addKeyedCssUpdateEventsBelow,addMultipleKeyedCssUpdateEventsBelow,
