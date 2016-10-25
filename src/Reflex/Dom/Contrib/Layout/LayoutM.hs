@@ -93,7 +93,7 @@ emptyDynamicCssMap::R.Reflex t=>LayoutClassDynamicMap t
 emptyDynamicCssMap = M.empty
 
 newInfo::R.Reflex t=>LayoutDescription t->LayoutInfo t
-newInfo ld = LayoutInfo ld (CssClasses []) Nothing Nothing
+newInfo ld = LayoutInfo ld (CssClasses []) Nothing
 
 newTree::R.Reflex t=>LayoutDescription t->LayoutTree t
 newTree desc = LayoutNode (newInfo desc) []
@@ -140,8 +140,10 @@ addDynamicCss desc lTree = do
   mDyn <- dynamicCss desc dynamicCssMap
   return (lnInfo.liDynamicCss .~ mDyn $ lTree)
 
+{-
 setElement::E.Element->LayoutTree t->LayoutTree t
 setElement elt lTree = (lnInfo.liElt .~ Just elt) $ lTree
+-}
 
 newLayoutS::(R.Reflex t,Monad m)=>LayoutDescription t->LayoutM t m (LayoutS t)
 newLayoutS desc = LayoutS (newTree desc) <$> askClassMap <*> askDynamicCssMap
@@ -170,17 +172,20 @@ addNewLayoutNode desc child = LayoutM $ do
   return x
 -}
 
-addNewLayoutNode::(SupportsLayoutM t m,R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
+addNewLayoutNode::(SupportsLayoutM t m,RD.PostBuild t m, R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
 addNewLayoutNode desc child = LayoutM $ do
-  lc <- askLayoutConfig
+  lc <- ask
   ls <- get
   let lF  = desc ^. ldLayoutF
       lt = ls ^. lsTree
       lt' = lF lc lt
       classesForElt = lt' ^. lnInfo.liNewClasses
-      dynamicss = maybe (R.constDyn mempty) id (lt' ^. lnInfo.liDynamicCss)
-      child' = runLayoutM child lc ls
-  lift . lift $ RD.elDynAttr "div" (classesToAttributesDyn classesForElt dynamicCss) child'
+      dynamicCssMap = ls ^. lsDynamicCssMap
+--      dynamicCss = maybe (R.constDyn mempty) id (lt' ^. lnInfo.liDynamicCss)
+      child' = fst <$> runLayoutM child ls lc
+  lift . lift $ do
+    mDyn <- dynamicCss desc dynamicCssMap
+    RD.elDynAttr "div" (classesToAttributesDyn' classesForElt mDyn) child'
   
   
 
@@ -201,6 +206,9 @@ updateCssNE cssUpdates nodeCss = foldl' updateCss nodeCss (NE.toList cssUpdates)
 classesToAttributesDyn::R.Reflex t=>CssClasses->R.Dynamic t CssClasses->R.Dynamic t (M.Map T.Text T.Text)
 classesToAttributesDyn staticCss dynamicCssDyn = (cssToAttr . LayoutNodeCss staticCss) <$> dynamicCssDyn
 
+classesToAttributesDyn'::R.Reflex t=>CssClasses->Maybe (R.Dynamic t CssClasses)->R.Dynamic t (M.Map T.Text T.Text)
+classesToAttributesDyn' staticCss mDynamicCssDyn =
+  let x = maybe (R.constDyn emptyCss) id mDynamicCssDyn in classesToAttributesDyn staticCss x
 {-
 addClassesDynamic::(RD.MonadWidget t m, IsElement e)=>CssClasses->e->R.Dynamic t CssClasses->m ()
 addClassesDynamic staticCss elt dynamicCssDyn = do
@@ -355,35 +363,40 @@ instance (RD.PostBuild t m, SupportsLayoutM t m) => RD.DomBuilder t (LayoutM t m
   type DomBuilderSpace (LayoutM t m) = RD.DomBuilderSpace m
   element t cfg child = do
     liftIO $ putStrLn "element"
-    lc <- askLayoutConfig
-    liftWith $ \run -> RD.element t (RD.liftElementConfig cfg) $ do
+--    lc <- askLayoutConfig
+    liftWith $ \run -> RD.element t (RD.liftElementConfig cfg) $ fst <$> run child
+{-    
       (a,ls) <- run child
       liftIO $ putStrLn $ "(Tree=" ++ T.unpack (printLayoutTree (ls ^. lsTree)) ++ ")"
       runLayoutTree lc emptyCss (ls ^. lsTree)
       return a
+-}
 
   selectElement cfg child = do
     liftIO $ putStrLn "selectElement"
     let cfg' = cfg
           { RD._selectElementConfig_elementConfig = RD.liftElementConfig $ RD._selectElementConfig_elementConfig cfg
           }
-    lc <- askLayoutConfig
-    liftWith $ \run -> RD.selectElement cfg' $ do
+--    lc <- askLayoutConfig
+    liftWith $ \run -> RD.selectElement cfg' $ fst <$> run child
+{-    
       (a,ls) <- run child
       liftIO $ putStrLn $ "(Tree=" ++ T.unpack (printLayoutTree (ls ^. lsTree)) ++ ")"
       runLayoutTree lc emptyCss (ls ^. lsTree)
       return a
-
+-}
 
   placeholder (RD.PlaceholderConfig insertAbove delete) = LayoutM $ do
     liftIO $ putStrLn "placeholder"
     lc <- ask
     ls <- get
-    let f x = do
+    let f x = fst <$> runLayoutM x ls lc
+{-
           (a,ls') <- runLayoutM x ls lc
           liftIO $ putStrLn $ "(Tree=" ++ T.unpack (printLayoutTree (ls ^. lsTree)) ++ ")"
           runLayoutTree lc emptyCss (ls' ^. lsTree)
           return a
+-}
         insertAbove' = fmap f insertAbove
     lift . lift $ RD.placeholder (RD.PlaceholderConfig insertAbove' delete)
 

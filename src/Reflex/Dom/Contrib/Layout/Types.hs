@@ -110,11 +110,11 @@ data LayoutDescription t = LayoutDescription { _ldLayoutF::LayoutF t
 instance Show (LayoutDescription t) where
   show (LayoutDescription _ props classKeys) = "props=" ++ show props ++ "; classKeys=" ++ show classKeys 
 
-data LayoutInfo t = LayoutInfo { _liDescription::LayoutDescription t
-                               , _liNewClasses::CssClasses
-                               , _liDynamicCss::Maybe (R.Dynamic t CssClasses)
-                               , _liElt::Maybe E.Element
-                               } 
+data LayoutInfo t  = LayoutInfo { _liDescription::LayoutDescription t
+                                , _liNewClasses::CssClasses
+                                , _liDynamicCss::Maybe (R.Dynamic t CssClasses)
+--                              , _liChild::
+                                } 
 
 
 data LayoutTree t = LayoutNode { _lnInfo::LayoutInfo t, _lnChildren::[LayoutTree t]} --Rose Tree

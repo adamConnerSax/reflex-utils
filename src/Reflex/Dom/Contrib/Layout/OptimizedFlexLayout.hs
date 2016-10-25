@@ -35,6 +35,7 @@ import Data.Sequence ((><),(|>),Seq,empty,singleton)
 import Data.Foldable (mapM_,foldl')
 import qualified Data.Text as T
 import Data.Monoid ((<>))
+
 {-
 class AddLayout a where
   addLayout::LISeq->a->a

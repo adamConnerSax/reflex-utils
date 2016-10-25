@@ -22,7 +22,7 @@ module Reflex.Dom.Contrib.Layout.All
        , newRow
        , newRow'
        , newCol
-       , addClassesToLast
+--       , addClassesToLast
        , addKeyedClassesBelow
        , addKeyedCssUpdateEventBelow
        , addKeyedCssUpdateEventsBelow
@@ -56,7 +56,7 @@ import Reflex.Dom.Contrib.Layout.LayoutMFlex (lmFlexLayoutRow,lmFlexCol,lmFlexLa
 
 import Reflex.Dom.Contrib.Layout.GridLayout (newRow,newRow',newCol)
 
-import Reflex.Dom.Contrib.Layout.Events (addClassesToLast,addKeyedClassesBelow,
+import Reflex.Dom.Contrib.Layout.Events (addKeyedClassesBelow,
                                          addKeyedCssUpdateEventBelow,addKeyedCssUpdateEventsBelow,addMultipleKeyedCssUpdateEventsBelow,
                                          addKeyedCssUpdateEventBelow',addKeyedCssUpdateEventsBelow',getKeyedCssUpdateEvent)
 

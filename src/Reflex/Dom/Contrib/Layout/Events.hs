@@ -2,7 +2,7 @@
 module Reflex.Dom.Contrib.Layout.Events
        (
          addKeyedClassesBelow
-       , addClassesToLast
+--       , addClassesToLast
        , addKeyedCssUpdateEventBelow
        , addKeyedCssUpdateEventsBelow
        , addMultipleKeyedCssUpdateEventsBelow
@@ -29,8 +29,8 @@ import Control.Monad.Fix (MonadFix)
 
 
 
-addClassesToLast::(R.Reflex t,Monad m)=>CssClasses->LayoutM t m ()
-addClassesToLast css = LayoutM $ (lsTree.lnInfo.liNewClasses) <>= css
+--addClassesToLast::(R.Reflex t,Monad m)=>CssClasses->LayoutM t m ()
+--addClassesToLast css = LayoutM $ (lsTree.lnInfo.liNewClasses) <>= css
 
 
 addKeyedClassBelow::(R.Reflex t,Monad m)=>(LayoutClassKey,CssClasses)->LayoutM t m ()

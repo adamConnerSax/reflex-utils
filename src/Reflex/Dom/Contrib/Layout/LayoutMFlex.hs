@@ -32,10 +32,10 @@ flexLayoutRowF _ lTree =
 flexLayoutRowD::R.Reflex t=>[String]->LayoutDescription t
 flexLayoutRowD tags = LayoutDescription flexLayoutRowF M.empty (["all","row","flexContainer"]++tags)
 
-lmFlexLayoutRow::SupportsLayoutM t m=>LayoutM t m a->LayoutM t m a
+lmFlexLayoutRow::(RD.PostBuild t m ,SupportsLayoutM t m)=>LayoutM t m a->LayoutM t m a
 lmFlexLayoutRow = addNewLayoutNode $ flexLayoutRowD []
 
-lmFlexLayoutRow'::SupportsLayoutM t m=>[String]->LayoutM t m a->LayoutM t m a 
+lmFlexLayoutRow'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[String]->LayoutM t m a->LayoutM t m a 
 lmFlexLayoutRow' tags = addNewLayoutNode $ flexLayoutRowD tags
 
 flexColF::R.Reflex t=>Int->LayoutF t
@@ -47,10 +47,10 @@ flexColF w _ lTree =
 flexColD::R.Reflex t=>[String]->Int->LayoutDescription t
 flexColD tags w = LayoutDescription (flexColF w) M.empty (["all","col","flexItem"]++tags)
 
-lmFlexCol::SupportsLayoutM t m=>Int->LayoutM t m a->LayoutM t m a
+lmFlexCol::(RD.PostBuild t m ,SupportsLayoutM t m)=>Int->LayoutM t m a->LayoutM t m a
 lmFlexCol w = addNewLayoutNode (flexColD [] w)
 
-lmFlexCol'::SupportsLayoutM t m=>[String]->Int->LayoutM t m a->LayoutM t m a
+lmFlexCol'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[String]->Int->LayoutM t m a->LayoutM t m a
 lmFlexCol' tags w = addNewLayoutNode (flexColD tags w)
 
 flexLayoutColF::R.Reflex t=>LayoutF t
@@ -61,10 +61,10 @@ flexLayoutColF _ lTree =
 flexLayoutColD::R.Reflex t=>[String]->LayoutDescription t
 flexLayoutColD tags = LayoutDescription flexLayoutColF M.empty (["all","col","flexContainer"] ++ tags)
 
-lmFlexLayoutCol::SupportsLayoutM t m=>LayoutM t m a->LayoutM t m a
+lmFlexLayoutCol::(RD.PostBuild t m ,SupportsLayoutM t m)=>LayoutM t m a->LayoutM t m a
 lmFlexLayoutCol = addNewLayoutNode (flexLayoutColD [])
 
-lmFlexLayoutCol'::SupportsLayoutM t m=>[String]->LayoutM t m a->LayoutM t m a
+lmFlexLayoutCol'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[String]->LayoutM t m a->LayoutM t m a
 lmFlexLayoutCol' tags = addNewLayoutNode (flexLayoutColD tags)
 
 
@@ -77,8 +77,8 @@ flexRowF h _ lTree =
 flexRowD::R.Reflex t=>[String]->Int->LayoutDescription t
 flexRowD tags h = LayoutDescription (flexRowF h) M.empty (["all","row","flexItem"]++tags)
 
-lmFlexRow::SupportsLayoutM t m=>Int->LayoutM t m a->LayoutM t m a
+lmFlexRow::(RD.PostBuild t m ,SupportsLayoutM t m)=>Int->LayoutM t m a->LayoutM t m a
 lmFlexRow h = addNewLayoutNode (flexRowD [] h)
 
-lmFlexRow'::SupportsLayoutM t m=>[String]->Int->LayoutM t m a->LayoutM t m a
+lmFlexRow'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[String]->Int->LayoutM t m a->LayoutM t m a
 lmFlexRow' tags h = addNewLayoutNode (flexRowD tags h)

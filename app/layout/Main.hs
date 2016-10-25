@@ -104,10 +104,10 @@ innerBoxClassDDEvent setEv = RDC._widget0_change <$> RDC.htmlDropdownStatic inne
 
 innerBoxInitialCss = CssClasses [CssClass "demo-box-black"]
 
-row::SupportsLayoutM t m=>LayoutM t m a->LayoutM t m a
+row::(PostBuild t m ,SupportsLayoutM t m)=>LayoutM t m a->LayoutM t m a
 row = lmFlexLayoutRow
 
-col::SupportsLayoutM t m=>Int->LayoutM t m a->LayoutM t m a
+col::(PostBuild t m ,SupportsLayoutM t m)=>Int->LayoutM t m a->LayoutM t m a
 col = lmFlexCol
 
 subWidgetSimple::(PostBuild t m,SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
@@ -242,11 +242,8 @@ allCss = tabCssBS
 
 main::IO ()
 main = do
---  let runM = runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap)
   B.putStr allCss 
-  mainWidgetWithCss allCss $ runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) subWidgetSimple
---  mainWidget $ runInputDisabledT $ demoDiv "blah" 
---  mainWidgetWithCss allCss $ do
---      tabbedWidget
---      return ()
+  mainWidgetWithCss allCss $ do
+      tabbedWidget
+      return ()
 
