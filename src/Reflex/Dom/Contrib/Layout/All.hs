@@ -19,7 +19,6 @@ module Reflex.Dom.Contrib.Layout.All
        , tabCssBS
          -- from here down we are using LayoutM machinery
        , module Reflex.Dom.Contrib.Layout.LayoutM
---       , addClassesToLast
        , addKeyedClassesBelow
        , addKeyedCssUpdateEventBelow
        , addKeyedCssUpdateEventsBelow
@@ -37,26 +36,40 @@ module Reflex.Dom.Contrib.Layout.All
        , lmFlexRow'
        ) where
 
-import Reflex.Dom.Contrib.Layout.Types
+import           Reflex.Dom.Contrib.Layout.Types
 
-import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,flexRow,flexCol,flexItem,
-                                             flexFillR,flexFillL,flexHCenter,
-                                             flexFillD,flexFillU,flexVCenter)
-
-       
-
-import Reflex.Dom.Contrib.Layout.LayoutM (emptyCss,emptyClassMap,emptyDynamicCssMap,runLayout,runStyledLayout,runLayoutMain)
-
-import Reflex.Dom.Contrib.Layout.LayoutMFlex (lmFlexLayoutRow,lmFlexCol,lmFlexLayoutCol,lmFlexRow,
-                                              lmFlexLayoutRow',lmFlexCol',lmFlexLayoutCol',lmFlexRow')
-
-
-import Reflex.Dom.Contrib.Layout.Events (addKeyedClassesBelow,
-                                         addKeyedCssUpdateEventBelow,addKeyedCssUpdateEventsBelow,addMultipleKeyedCssUpdateEventsBelow,
-                                         addKeyedCssUpdateEventBelow',addKeyedCssUpdateEventsBelow',getKeyedCssUpdateEvent)
+import           Reflex.Dom.Contrib.Layout.FlexLayout  (flexCol, flexCssBS,
+                                                        flexFillD, flexFillL,
+                                                        flexFillR, flexFillU,
+                                                        flexHCenter, flexItem,
+                                                        flexRow, flexVCenter)
 
 
 
-import Reflex.Dom.Contrib.Layout.TabLayout (tabCssBS,TabInfo(..),staticTabbedLayout,dynamicTabbedLayout)
+import           Reflex.Dom.Contrib.Layout.LayoutM     (emptyClassMap, emptyCss,
+                                                        emptyDynamicCssMap,
+                                                        runLayoutMain)
 
-import Reflex.Dom.Contrib.Layout.ClayUtils (cssToBS)
+import           Reflex.Dom.Contrib.Layout.LayoutMFlex (lmFlexCol, lmFlexCol',
+                                                        lmFlexLayoutCol,
+                                                        lmFlexLayoutCol',
+                                                        lmFlexLayoutRow,
+                                                        lmFlexLayoutRow',
+                                                        lmFlexRow, lmFlexRow')
+
+
+import           Reflex.Dom.Contrib.Layout.Events      (addKeyedClassesBelow, addKeyedCssUpdateEventBelow,
+                                                        addKeyedCssUpdateEventBelow',
+                                                        addKeyedCssUpdateEventsBelow,
+                                                        addKeyedCssUpdateEventsBelow',
+                                                        addMultipleKeyedCssUpdateEventsBelow,
+                                                        getKeyedCssUpdateEvent)
+
+
+
+import           Reflex.Dom.Contrib.Layout.TabLayout   (TabInfo (..),
+                                                        dynamicTabbedLayout,
+                                                        staticTabbedLayout,
+                                                        tabCssBS)
+
+import           Reflex.Dom.Contrib.Layout.ClayUtils   (cssToBS)

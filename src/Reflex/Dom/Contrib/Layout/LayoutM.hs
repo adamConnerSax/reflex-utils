@@ -22,12 +22,8 @@ module Reflex.Dom.Contrib.Layout.LayoutM
        , mergeCssUpdates
        , emptyCss
        , SupportsLayoutM
-       , runStyledLayout
-       , runLayout
        , runLayoutMain
        , runLayoutM
-       , getLayoutPropertyDef
-       , addNewClassesToTreeTop
        , addNewLayoutNode
        ) where
 
@@ -39,7 +35,6 @@ import qualified Reflex.Dom                      as RD
 import qualified Reflex.Dom.Builder.Class        as RD
 import qualified Reflex.Dom.Class                as RD
 import qualified Reflex.Host.Class               as RC
---import qualified Reflex.Dom.Old                  as RD
 
 import           Control.Lens                    (makeClassy, makeLenses, set,
                                                   use, view, (%=), (.=), (.~),
@@ -92,35 +87,6 @@ emptyDynamicCssMap = M.empty
 newInfo::R.Reflex t=>LayoutDescription t->LayoutInfo t
 newInfo ld = LayoutInfo ld (CssClasses []) Nothing
 
-newTree::R.Reflex t=>LayoutDescription t->LayoutTree t
-newTree desc = LayoutNode (newInfo desc) []
-
-{-
-getLayoutProperty::R.Reflex t=>LayoutPropertyKey->LayoutTree t->Maybe LayoutProperty
-getLayoutProperty key lTree =
-  let pm = lTree ^. (lnInfo.liDescription.ldProperties) in M.lookup key pm
-
-getLayoutPropertyDef::R.Reflex t=>LayoutProperty->LayoutPropertyKey->LayoutTree t->LayoutProperty
-getLayoutPropertyDef def key lTree = maybe def id $ getLayoutProperty key lTree
--}
-
-addNewClassesToTreeTop::R.Reflex t=>CssClasses->LayoutTree t->LayoutTree t
-addNewClassesToTreeTop cssCs lt = lnInfo.liNewClasses <>~ cssCs $ lt
-
-addNode::R.Reflex t=>LayoutTree t->LayoutTree t->LayoutTree t
-addNode ln newChild = lnChildren <>~ [newChild] $ ln
-
-addNode'::(R.Reflex t,Monad m)=>LayoutTree t->LayoutM t m ()
-addNode' tree = LayoutM $ do
-  lsTree %= flip addNode tree
-
-addStaticClasses::Monad m=>LayoutDescription t->LayoutTree t->LayoutM t m (LayoutTree t)
-addStaticClasses desc lTree = LayoutM $ do
-  classMap <- use lsClassMap
-  let getCss key = maybe emptyCss id $ M.lookup key classMap
-      css = mconcat $ getCss <$> (desc ^. ldLayoutClassKeys)
-  return (lnInfo.liNewClasses <>~ css $ lTree)
-
 --TODO: Figure out how to use "pull" here to make "sample" okay
 dynamicCss::(R.Reflex t, R.MonadHold t m, MonadFix m)=>LayoutDescription t->LayoutClassDynamicMap t->m (Maybe (R.Dynamic t CssClasses))
 dynamicCss desc dynMap = do
@@ -133,23 +99,12 @@ dynamicCss desc dynMap = do
   getLMaybeDyn <- sequence $ catMaybes (getMaybeDyn <$> classKeys) --m [Dynamic t CssClasses]
   if (null classKeys) || (null getLMaybeDyn) then return Nothing else Just <$> (return $ mconcat getLMaybeDyn)
 
-addDynamicCss::(R.Reflex t, R.MonadHold t m, MonadFix m)=>LayoutDescription t->LayoutTree t->LayoutM t m (LayoutTree t)
-addDynamicCss desc lTree = do
-  dynamicCssMap <- askDynamicCssMap
-  mDyn <- dynamicCss desc dynamicCssMap
-  return (lnInfo.liDynamicCss .~ mDyn $ lTree)
-
-newLayoutS::(R.Reflex t,Monad m)=>LayoutDescription t->LayoutM t m (LayoutS t)
-newLayoutS desc = LayoutS (newTree desc) <$> askClassMap <*> askDynamicCssMap
 
 addNewLayoutNode::(SupportsLayoutM t m,RD.PostBuild t m, R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
 addNewLayoutNode desc child = LayoutM $ do
   lc <- ask
   ls <- get
-  let {- lF  = desc ^. ldLayoutF
-      lt = ls ^. lsTree
-      lt' = lF lc lt -}
-      classKeys = desc ^. ldLayoutClassKeys
+  let classKeys = desc ^. ldLayoutClassKeys
       staticClassMap = ls ^. lsClassMap
       dynamicCssMap = ls ^. lsDynamicCssMap
       staticClasses = (mconcat . catMaybes $ fmap (\x->M.lookup x staticClassMap) classKeys) <> (desc ^. ldClasses)
@@ -187,35 +142,9 @@ mergeLayoutClassDynamic (LayoutClassDynamic initialADyn evA) (LayoutClassDynamic
 unionM::(Monad m,Ord k)=>(a->a->m a)->M.Map k a->M.Map k a->m (M.Map k a)
 unionM f m1 m2 = sequenceA $ M.mergeWithKey (\_ a b -> Just $ f a b) (fmap return) (fmap return) m1 m2
 
-{-
--- do current node then children
-runLayoutTree::(SupportsLayoutM t m, RD.PostBuild t m)=>LayoutConfig t->CssClasses->LayoutTree t->m ()
-runLayoutTree lc classesForAll lt = do
-  let lt' = (lt  ^. lnInfo.liDescription.ldLayoutF) lc lt
-      classesForElt = (lt' ^. lnInfo.liNewClasses) <> classesForAll
-      children = (lt' ^. lnChildren)
-      dynamicCss = maybe (R.constDyn mempty) id (lt' ^. lnInfo.liDynamicCss)
-      child = mapM_ (runLayoutTree lc classesForAll) children
-  RD.elDynAttr "div" (classesToAttributesDyn classesForElt dynamicCss) child
-
-
-runStyledLayout::(SupportsLayoutM t m, RD.PostBuild t m)=>CssClasses->LayoutClassMap->LayoutClassDynamicMap t->LayoutConfig t->LayoutM t m a->m a
-runStyledLayout classesForAll staticCssMap dynamicCssMap conf layout = do
-  combinedDynamicCssMap <- unionM mergeLayoutClassDynamic (conf ^. lcDynamicCssMap) dynamicCssMap --dynamic classes are
-  let combinedStaticCssMap = M.union staticCssMap (conf ^. lcStaticCssMap) --static classes are overwritten by later classes. ??
-      emptyD = LayoutDescription (const id) noProperties []
-      emptyS = LayoutS (newTree emptyD) combinedStaticCssMap combinedDynamicCssMap
-  (x,layoutS) <- runReaderT (runStateT (unLayoutM layout) emptyS) conf
-  liftIO . putStrLn . show . printLayoutTree $ layoutS ^. lsTree
-  mapM_ (runLayoutTree conf classesForAll) (layoutS ^. lsTree.lnChildren) -- there is no elt on top
-  return x
-
-runLayout::(SupportsLayoutM t m, RD.PostBuild t m)=>LayoutClassMap->LayoutClassDynamicMap t->LayoutConfig t->LayoutM t m a->m a
-runLayout = runStyledLayout emptyCss
--}
 
 runLayoutMain::(SupportsLayoutM t m, RD.PostBuild t m)=>LayoutConfig t->LayoutM t m a->m a
-runLayoutMain lc lma = runLayoutM lma (LayoutS emptyClassMap emptyDynamicCssMap
+runLayoutMain lc lma = runLayoutM lma (LayoutS emptyClassMap emptyDynamicCssMap) lc
 
 -- Class Instances
 liftLM::Monad m=>m a->LayoutM t m a
@@ -235,10 +164,6 @@ instance MonadTrans (LayoutM t) where
 runLayoutM::Functor m=>LayoutM t m a->LayoutS t->LayoutConfig t->m a
 runLayoutM lma ls lc = fst <$> runReaderT (runStateT (unLayoutM lma) ls) lc
 
-{-
-lowerLayoutM::Functor m=>LayoutM t m a->m a
-lowerLayoutM lma = runLayoutM lma  
--}
 
 instance MonadTransControl (LayoutM t) where
   type StT (LayoutM t) a = a
@@ -316,9 +241,3 @@ printLayoutConfig lc = do
   putStrLn $ "static Css=" ++ (show $ M.toList (_lcStaticCssMap lc))
   putStrLn $ "dynamicCss Keys=" ++ (show $ M.keys (_lcDynamicCssMap lc))
 
-printLayoutTree::LayoutTree t->T.Text
-printLayoutTree (LayoutNode i c) = "Node: classes="
-                                   <> toCssString (i ^. liNewClasses)
-                                   <> T.pack (show (i ^. liDescription))
-                                   <> "\n\t"
-                                   <> (mconcat $ printLayoutTree <$> c)

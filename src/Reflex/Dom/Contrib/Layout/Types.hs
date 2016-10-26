@@ -116,19 +116,16 @@ data LayoutInfo t  = LayoutInfo { _liDescription::LayoutDescription t
                                 } 
 
 
-data LayoutTree t = LayoutNode { _lnInfo::LayoutInfo t, _lnChildren::[LayoutTree t]} --Rose Tree
+--data LayoutTree t = LayoutNode { _lnInfo::LayoutInfo t, _lnChildren::[LayoutTree t]} --Rose Tree
 
-data LayoutS t = LayoutS {  _lsTree::LayoutTree t
-                          , _lsClassMap::LayoutClassMap
+data LayoutS t = LayoutS {  _lsClassMap::LayoutClassMap
                           , _lsDynamicCssMap::LayoutClassDynamicMap t
                          }
-
 
 makeClassy ''LayoutConfig
 makeClassy ''LayoutClassDynamic
 makeClassy ''LayoutDescription
 makeClassy ''LayoutInfo
-makeClassy ''LayoutTree
 makeClassy ''LayoutS
 
 
