@@ -24,7 +24,7 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 import Data.Monoid ((<>))
 
-flexLayoutRowD::R.Reflex t=>[String]->LayoutDescription t
+flexLayoutRowD::R.Reflex t=>[T.Text]->LayoutDescription t
 flexLayoutRowD tags =
   let flexRowClasses = CssClasses [CssClass "gl-flex-row"]
   in LayoutDescription flexRowClasses (["all","row","flexContainer"]++tags)
@@ -32,10 +32,10 @@ flexLayoutRowD tags =
 lmFlexLayoutRow::(RD.PostBuild t m ,SupportsLayoutM t m)=>LayoutM t m a->LayoutM t m a
 lmFlexLayoutRow = addNewLayoutNode $ flexLayoutRowD []
 
-lmFlexLayoutRow'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[String]->LayoutM t m a->LayoutM t m a 
+lmFlexLayoutRow'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[T.Text]->LayoutM t m a->LayoutM t m a 
 lmFlexLayoutRow' tags = addNewLayoutNode $ flexLayoutRowD tags
 
-flexColD::R.Reflex t=>[String]->Int->LayoutDescription t
+flexColD::R.Reflex t=>[T.Text]->Int->LayoutDescription t
 flexColD tags w =
   let n = Prelude.max 1 $ Prelude.min w numberFlexGrowOptions
       flexColClasses = CssClasses [CssClass ("gl-flex-item-" <> (T.pack $ show n))]
@@ -44,10 +44,10 @@ flexColD tags w =
 lmFlexCol::(RD.PostBuild t m ,SupportsLayoutM t m)=>Int->LayoutM t m a->LayoutM t m a
 lmFlexCol w = addNewLayoutNode (flexColD [] w)
 
-lmFlexCol'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[String]->Int->LayoutM t m a->LayoutM t m a
+lmFlexCol'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[T.Text]->Int->LayoutM t m a->LayoutM t m a
 lmFlexCol' tags w = addNewLayoutNode (flexColD tags w)
 
-flexLayoutColD::R.Reflex t=>[String]->LayoutDescription t
+flexLayoutColD::R.Reflex t=>[T.Text]->LayoutDescription t
 flexLayoutColD tags =
   let flexColClasses = CssClasses [CssClass "gl-flex-col"]
   in LayoutDescription flexColClasses (["all","col","flexContainer"] ++ tags)
@@ -55,10 +55,10 @@ flexLayoutColD tags =
 lmFlexLayoutCol::(RD.PostBuild t m ,SupportsLayoutM t m)=>LayoutM t m a->LayoutM t m a
 lmFlexLayoutCol = addNewLayoutNode (flexLayoutColD [])
 
-lmFlexLayoutCol'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[String]->LayoutM t m a->LayoutM t m a
+lmFlexLayoutCol'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[T.Text]->LayoutM t m a->LayoutM t m a
 lmFlexLayoutCol' tags = addNewLayoutNode (flexLayoutColD tags)
 
-flexRowD::R.Reflex t=>[String]->Int->LayoutDescription t
+flexRowD::R.Reflex t=>[T.Text]->Int->LayoutDescription t
 flexRowD tags h =
   let n = Prelude.max 1 $ Prelude.min h numberFlexGrowOptions
       flexRowClasses = CssClasses [CssClass ("gl-flex-item-" <> (T.pack $ show n))]
@@ -67,5 +67,5 @@ flexRowD tags h =
 lmFlexRow::(RD.PostBuild t m ,SupportsLayoutM t m)=>Int->LayoutM t m a->LayoutM t m a
 lmFlexRow h = addNewLayoutNode (flexRowD [] h)
 
-lmFlexRow'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[String]->Int->LayoutM t m a->LayoutM t m a
+lmFlexRow'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[T.Text]->Int->LayoutM t m a->LayoutM t m a
 lmFlexRow' tags h = addNewLayoutNode (flexRowD tags h)

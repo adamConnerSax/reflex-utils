@@ -84,7 +84,7 @@ type GridColWidth = Int
 
 --data CssGridConfig = CssGridConfig { _gcGridRow::CssClass, _gcGridColumns::CssClasses } deriving (Show)
 
-type LayoutClassKey = String
+type LayoutClassKey = T.Text
 type LayoutClassMap = M.Map LayoutClassKey CssClasses
 data LayoutClassDynamic t = LayoutClassDynamic { _lcdInitDyn::R.Dynamic t CssClasses, _lcdEvent::R.Event t CssUpdate }
 type LayoutClassDynamicMap t = M.Map LayoutClassKey (LayoutClassDynamic t)
@@ -93,15 +93,6 @@ data LayoutConfig t = LayoutConfig { _lcStaticCssMap::LayoutClassMap, _lcDynamic
 
 data CssUpdate = UpdateDynamic CssClasses | AddToDynamic CssClasses deriving (Eq,Show)
 
-{-
-data LayoutPropertyKey = LPK_Width deriving (Ord,Eq,Show)
-data LayoutProperty = LP_Width { lpWidth::Int } deriving (Show)
-type LayoutPropertyMap = M.Map LayoutPropertyKey LayoutProperty
-
-
-
-type LayoutF t = LayoutConfig t->LayoutTree t->LayoutTree t
--}
 
 data LayoutDescription t = LayoutDescription { _ldClasses::CssClasses
                                              , _ldLayoutClassKeys::[LayoutClassKey]
