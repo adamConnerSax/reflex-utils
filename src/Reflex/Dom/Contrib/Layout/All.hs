@@ -48,7 +48,7 @@ import           Reflex.Dom.Contrib.Layout.FlexLayout  (flexCol, flexCssBS,
 
 import           Reflex.Dom.Contrib.Layout.LayoutM     (emptyClassMap, emptyCss,
                                                         emptyDynamicCssMap,
-                                                        runLayoutMain)
+                                                        runLayoutMain,SupportsLayoutM)
 
 import           Reflex.Dom.Contrib.Layout.LayoutMFlex (lmFlexCol, lmFlexCol',
                                                         lmFlexLayoutCol,
