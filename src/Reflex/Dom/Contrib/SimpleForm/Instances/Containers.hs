@@ -109,6 +109,22 @@ buttonNoSubmit t = do
   (e, _) <- RD.element "button" (pdCfg def) $ RD.text t
   return $ RD.domEvent RD.Click e
 
+buttonNoSubmit'::(RD.PostBuild t m,RD.DomBuilder t m)=>T.Text -> m (RD.Event t ())
+buttonNoSubmit' t = do
+  let attrs = M.fromList [("type","button")]
+  (e,_) <- RD.elDynAttr' "button" (RD.constDyn attrs) $ RD.text t
+  return $ RD.domEvent RD.Click e
+  
+clickableLabel::RD.DomBuilder t m=>T.Text -> m (RD.Event t ())
+clickableLabel t = do
+  (e,_) <- RD.element "label" def $ RD.text t
+  return $ RD.domEvent RD.Click e
+
+checkBoxClicker::(RD.PostBuild t m, RD.DomBuilder t m) => T.Text -> m (RD.Event t ())
+checkBoxClicker _ = fmap (fmap (const ())) (RD._checkbox_change <$> RD.checkbox False def)
+  
+containerActionButton::(RD.PostBuild t m, RD.DomBuilder t m)=>T.Text -> m (RD.Event t ())
+containerActionButton = buttonNoSubmit'
 
 buildReadOnlyContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
                         =>CRepI fa (g b)->BuildF e t m fa
@@ -265,7 +281,7 @@ buildSFContainer aI buildTr mFN mfa = mdo
       let emptyB = unSF $ B.buildA Nothing Nothing
       -- we have to clear it once it's used. For now we replace it with a new one.
       dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-      clickEv <-  layoutVC . itemR . lift $ buttonNoSubmit "+" 
+      clickEv <-  layoutVC . itemR . lift $ containerActionButton "+" 
       return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb)  clickEv -- only fires if button is clicked when mb is a Just.
         
     let insert mfa' b = insertB aI <$> Just b <*> mfa'  
@@ -290,7 +306,7 @@ buildSFContainer' aI buildTr mFN mfa = mdo
       let emptyB = unSF $ B.buildA Nothing Nothing
       -- we have to clear it once it's used. For now we replace it with a new one.
       dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-      clickEv <-  layoutVC . itemR . lift $ buttonNoSubmit "+" 
+      clickEv <-  layoutVC . itemR . lift $ containerActionButton "+" 
       return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb)  clickEv -- only fires if button is clicked when mb is a Just.
         
     let insert mfa' b = insertB aI <$> Just b <*> mfa'  
@@ -304,7 +320,7 @@ buildOneDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b)
 buildOneDeletable dI mFN ma = liftLF' formRow $ do     
     (evs,curS) <- get
     dma <- lift . itemL . unSF $ B.buildA mFN ma
-    ev  <- lift . layoutVC . itemR . lift $ buttonNoSubmit "-" 
+    ev  <- lift . layoutVC . itemR . lift $ containerActionButton "-" 
     let ev' = R.attachPromptlyDynWithMaybe (\ma' _ -> getKey dI <$> ma' <*> Just curS) (unDynMaybe dma) ev
     put (ev':evs,updateS dI curS)
     return dma

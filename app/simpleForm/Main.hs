@@ -141,6 +141,7 @@ test cfg = do
   _ <- flexFillR $ observeDynMaybe cfg (CssClass "sf-observer") cDynM
   el "p" blank
   _ <- observeFlow cfg (CssClass "sf-form") (CssClass "sf-observer") flowTestWidget 2
+  _ <- button "Press Me!"
   return ()
 
 {-
