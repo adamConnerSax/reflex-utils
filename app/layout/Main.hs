@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE FlexibleContexts  #-}
@@ -16,10 +17,12 @@ import qualified Reflex.Dom.Contrib.Layout.OptimizedFlexLayout as OF
 import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$))
 
 import Reflex
-import Reflex.Dom
+import Reflex.Dom.Core
 import Reflex.PerformEvent.Base
 import Reflex.Host.Class (MonadReflexCreateTrigger)
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
+
+import GHCJS.DOM.Types (MonadJSM,JSM)
 
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Exception (MonadAsyncException)
@@ -37,6 +40,10 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map as M
 import qualified Data.List as L
 import qualified Data.Text as T
+
+#ifdef USE_WKWEBVIEW
+import Language.Javascript.JSaddle.WKWebView (run)
+#endif
 
 {-
 -- This is what the GridConfig looks like for a particular Css Grid Framework
@@ -91,14 +98,15 @@ updaterLabel (AddToDynamic x) = undefined
 
 innerBoxDfltUpdater = innerBoxUpdaters !! 1
 innerBoxClassDDEvent::(DomBuilder t m,DomBuilderSpace m ~ GhcjsDomSpace,
-                       PostBuild t m,HasWebView m,MonadAsyncException m,
+                       PostBuild t m,HasWebView m,{- MonadAsyncException m, -}
                        Ref m ~ Ref IO, Ref (Performable m) ~ Ref IO,
                        MonadFix m, MonadRef m, MonadRef (Performable m),
                        TriggerEvent t m, PerformEvent t m,
                        MonadReflexCreateTrigger t m, MonadHold t m,
                        MonadSample t (Performable m),
                        HasWebView (Performable m),
-                       MonadAsyncException (Performable m))=>Event t CssUpdate -> m (Event t CssUpdate)
+                       MonadAsyncException (Performable m),MonadJSM m,
+                       MonadJSM (Performable m))=>Event t CssUpdate -> m (Event t CssUpdate)
 innerBoxClassDDEvent setEv = RDC._widget0_change <$> RDC.htmlDropdownStatic innerBoxUpdaters updaterLabel
                              Prelude.id (RDC.WidgetConfig setEv innerBoxDfltUpdater (constDyn M.empty))
 
@@ -141,8 +149,9 @@ subWidgetToggle = do
   widgetHold subWidget1 switchToEv
   return ()
 
-testControl::(SupportsLayoutM t m, PostBuild t m, MonadAsyncException m,
-              HasWebView m, MonadIO (PushM t))=>Event t CssUpdate->LayoutM t m (Event t CssUpdate)
+testControl::(SupportsLayoutM t m, PostBuild t m, {- MonadAsyncException m, -}
+              HasWebView m, MonadIO (PushM t),MonadJSM (Performable m),
+              MonadJSM (LayoutM t m))=>Event t CssUpdate->LayoutM t m (Event t CssUpdate)
 testControl setEv  = mdo
   (evSelf,evChildren) <- row $ do
     addKeyedCssUpdateEventBelow "row" innerBoxInitialCss evSelf 
@@ -172,7 +181,8 @@ sfTab::(SupportsLayoutM t m)=>TabInfo t m ()
 sfTab = TabInfo "sf" "Simple Flex" simpleFlexWidget
 
 
-optFlexWidget::(SupportsLayoutM t m, PostBuild t m,HasWebView m,MonadAsyncException m,MonadIO (PushM t))=>m ()
+optFlexWidget::(SupportsLayoutM t m, PostBuild t m,HasWebView m,{- MonadAsyncException m, -}MonadIO (PushM t),
+                MonadJSM m, MonadJSM (Performable m))=>m ()
 optFlexWidget = do
   let w = OF.flexRow #$ do
         OF.flexSizedItem 2 #$ (divClass "demo-box-black" $ text  "A")
@@ -201,11 +211,12 @@ optFlexWidget = do
       r "Row 3"
 -}
 
-optFlexTab::(SupportsLayoutM t m)=>TabInfo t m ()
+optFlexTab::(SupportsLayoutM t m{-, MonadAsyncException m -})=>TabInfo t m ()
 optFlexTab = TabInfo "optFlex" "optFlex" optFlexWidget
 
 
-boxesWidget::(SupportsLayoutM t m,PostBuild t m,HasWebView m, MonadAsyncException m,MonadIO (PushM t))=>LayoutM t m ()
+boxesWidget::(SupportsLayoutM t m,PostBuild t m,HasWebView m, {- MonadAsyncException m, -}
+              MonadIO (PushM t),MonadJSM (Performable m),MonadJSM (LayoutM t m))=>LayoutM t m ()
 boxesWidget = do
   ev1 <- testControl never
   setter <- addKeyedCssUpdateEventBelow' "row" innerBoxInitialCss ev1
@@ -219,7 +230,7 @@ boxesWidget = do
       return ()
     return ()
 
-boxesTab::(SupportsLayoutM t m)=>TabInfo t m ()
+boxesTab::(SupportsLayoutM t m, {- MonadAsyncException m,-} MonadJSM (LayoutM t m))=>TabInfo t m ()
 boxesTab = TabInfo "boxes" "Dynamic/Events" $ runLayoutMain (LayoutConfig emptyClassMap emptyDynamicCssMap) boxesWidget
 {-
 laidOut::(MonadWidget t m, MonadIO (PushM t))=>LayoutM t m () -> IO ()
@@ -227,7 +238,9 @@ laidOut w = mainWidgetWithCss allCss $
             runLayoutMain (LayoutConfig pure24GridConfig emptyClassMap emptyDynamicCssMap) $ w 
 -}
 
-tabbedWidget::(SupportsLayoutM t m, PostBuild t m, HasWebView m, MonadAsyncException m, MonadIO (PushM t))=>m (Dynamic t [()])
+tabbedWidget::(SupportsLayoutM t m, PostBuild t m, HasWebView m,
+               {- MonadAsyncException m,-} MonadIO (PushM t),
+               MonadJSM m, MonadJSM (Performable m),MonadJSM (LayoutM t m))=>m (Dynamic t [()])
 tabbedWidget = do
   el "p" $ text ""
   el "br" $ blank
@@ -240,10 +253,17 @@ allCss = tabCssBS
 --         <> $(embedFile "/Users/adam/Development/webResources/css/flexboxgrid-6.3.0/flexboxgrid.css")
 
 
-main::IO ()
-main = do
-  B.putStr allCss 
+layoutMain::JSM ()
+layoutMain = do
+  --B.putStr allCss 
   mainWidgetWithCss allCss $ do
       tabbedWidget
       return ()
 
+#ifdef USE_WKWEBVIEW
+main::IO ()
+main = run layoutMain
+#else
+main :: IO ()
+main = layoutMain
+#endif

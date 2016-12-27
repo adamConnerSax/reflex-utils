@@ -239,13 +239,18 @@ buildTraversableSFA' crI buildOne _ mfa =
     Nothing -> return $ dynMaybeNothing
 
 -- styled, in case we ever want an editable container without add/remove
-buildTraversableSFA::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m fa 
+
+buildTraversableSFA::forall e t m b g fa.(SimpleFormC e t m,
+                      B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m fa 
 buildTraversableSFA crI md mfa = do
   validClasses <- validItemStyle
-  formCol' (R.constDyn $ cssClassAttr validClasses) $ layoutCollapsible "" CollapsibleStartsOpen $ buildTraversableSFA' crI (\x -> itemL . unSF . B.buildA x) md mfa
+  let attrsDyn = R.constDyn $ cssClassAttr validClasses :: R.Dynamic t (M.Map T.Text T.Text)
+  formCol' attrsDyn $ layoutCollapsible "" CollapsibleStartsOpen $ buildTraversableSFA' crI (\x -> itemL . unSF . B.buildA x) md mfa
 
 -- TODO: need a new version to do widgetHold over whole thing if collapsible depends on size
-buildSFContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
+buildSFContainer::(SimpleFormC e t m,
+                   B.Builder (SimpleFormR e t m) b,
+                   Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
 buildSFContainer aI buildTr mFN mfa = mdo
   attrsDyn <- sfAttrs dmfa mFN Nothing
   let initial = Just $ maybe (emptyT aI) (toT aI) mfa 

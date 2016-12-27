@@ -26,7 +26,7 @@ import Reflex.Dom.Contrib.Widgets.DynTabs
 import Control.Monad.IO.Class (MonadIO)
 import qualified Data.ByteString as B
 import qualified Data.Map as M
-
+--import Control.Lens ((^.))
 
 import Prelude hiding (div)
 import Clay
@@ -111,15 +111,16 @@ instance Eq (TabInfo t m a) where
 instance Ord (TabInfo t m a) where
   compare (TabInfo _ x _) (TabInfo _ y _) = compare x y
 
-instance RD.MonadWidget t m=>Tab m (TabInfo t m a) where
-  tabIndicator (TabInfo _ label _) = RD.el "span" $ RD.text label 
+instance RD.MonadWidget t m=>Tab t m (TabInfo t m a) where
+  tabIndicator (TabInfo _ label _) boolDyn = RD.button label --RD.el "span" $ RD.text label 
 
 dynamicTabbedLayout::(MonadIO (R.PushM t), R.MonadSample t m, RD.MonadWidget t m)=>
                      TabInfo t m a->R.Dynamic t [TabInfo t m a]->m (R.Dynamic t [a])
 dynamicTabbedLayout cur allDyn = do
   allSampled <- R.sample $ R.current allDyn
-  curTabDyn <- tabBar "" cur allSampled (R.updated allDyn) R.never (R.constDyn S.empty)
-  let setTabWidget t@(TabInfo _ _ w) = tabPane curTabDyn t w -- m a 
+  tabBar <- tabBar (TabBarConfig cur  allSampled (R.updated allDyn) R.never) --(R.constDyn S.empty)
+  let emptyAttrs = M.empty :: M.Map T.Text T.Text
+      setTabWidget t@(TabInfo _ _ w) = tabPane emptyAttrs (_tabBar_curTab tabBar) t w -- m a 
       setTabWidgets tabs = mapM setTabWidget tabs -- m [a]
       widgetDyn = setTabWidgets <$> allDyn -- m (Dynamic t (m [a])) 
   RD.widgetHold (setTabWidgets allSampled) (R.updated widgetDyn)

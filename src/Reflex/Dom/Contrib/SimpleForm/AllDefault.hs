@@ -101,10 +101,13 @@ instance (MonadIO (PushM t),RD.MonadWidget t m,
           MonadFix (l m), MonadIO (l m), MonadRef (l m),MonadException (l m),
           Ref (StackedMW l m) ~ Ref IO)=>SimpleFormConfiguration DefSFCfg t (StackedMW l m) where
 -}
-instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormConfiguration DefSFCfg t m where
+instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormBuilderFunctions DefSFCfg t m where
   failureF = defFailureF
   sumF = defSumF
   dynamicDiv  attrsDyn = liftLF $ RD.elDynAttr "div" attrsDyn
+  
+instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormLayoutFunctions DefSFCfg m where
+
   formItem    = liftLF flexItem 
   layoutVert  = liftLF flexCol 
   layoutHoriz = liftLF flexRow

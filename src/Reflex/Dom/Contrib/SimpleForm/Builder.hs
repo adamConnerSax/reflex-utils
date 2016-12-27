@@ -25,7 +25,8 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , SFRW
        , SimpleFormR(..)
        , CollapsibleInitialState(..)
-       , SimpleFormConfiguration(..)
+       , SimpleFormBuilderFunctions(..)
+       , SimpleFormLayoutFunctions(..)
        , SFLayoutF
        , runSimpleFormR
        , SimpleFormC
@@ -124,7 +125,9 @@ instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR e t m) where
 runSimpleFormR::Monad m=>e->SimpleFormR e t m a->m (DynMaybe t a)
 runSimpleFormR cfg sfra = runReaderT (unSF sfra) cfg
 
-type SimpleFormC e t m = (RD.MonadWidget t m,SimpleFormConfiguration e t m)
+type SimpleFormC e t m = (RD.MonadWidget t m,
+                          SimpleFormBuilderFunctions e t m,
+                          SimpleFormLayoutFunctions e m)
 
 
 switchingSFR::SimpleFormC e t m=>(a->SimpleFormR e t m b)->a->R.Event t a->SimpleFormR e t m b
@@ -195,11 +198,13 @@ data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed d
 -- | class to hold form configuration.  For different configurations, declare an env type and then
 -- | instantiate the class for that type.
 -- TODO: Should this all just be a data type (record-of-functions)?
-class SimpleFormConfiguration e t m | m->t  where
+class SimpleFormBuilderFunctions e t m where
   failureF::T.Text->SimpleFormR e t m a
   sumF::[(B.ConName,SimpleFormR e t m a)]->Maybe B.ConName->SimpleFormR e t m a
-  formItem::SFLayoutF e m a
   dynamicDiv::DynAttrs t->SFLayoutF e m a
+
+class SimpleFormLayoutFunctions e m where
+  formItem::SFLayoutF e m a
   layoutVert::SFLayoutF e m a
   layoutHoriz::SFLayoutF e m a
   layoutL::SFLayoutF e m a
@@ -250,22 +255,22 @@ labelTop label ra = do
     ra
 -}
 
-itemL::SimpleFormConfiguration e t m=>SFLayoutF e m a
+itemL::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
 itemL = layoutL . formItem
 
-itemR::SimpleFormConfiguration e t m=>SFLayoutF e m a
+itemR::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
 itemR = layoutR . formItem
 
-formRow::SimpleFormConfiguration e t m=>SFLayoutF e m a
+formRow::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
 formRow  = formItem . layoutHoriz
 
-formCol::SimpleFormConfiguration e t m=>SFLayoutF e m a
+formCol::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
 formCol = formItem . layoutVert
 
-formRow'::SimpleFormConfiguration e t m=>DynAttrs t->SFLayoutF e m a
+formRow'::(RD.Reflex t, SimpleFormLayoutFunctions e m,SimpleFormBuilderFunctions e t m)=>DynAttrs t->SFLayoutF e m a
 formRow' attrsDyn  = formItem . dynamicDiv attrsDyn . layoutHoriz
 
-formCol'::SimpleFormConfiguration e t m=>DynAttrs t->SFLayoutF e m a
+formCol'::(RD.Reflex t,SimpleFormLayoutFunctions e m, SimpleFormBuilderFunctions e t m)=>DynAttrs t->SFLayoutF e m a
 formCol' attrsDyn = formItem . dynamicDiv attrsDyn .layoutVert
 
 {-
@@ -283,11 +288,11 @@ titleAttr x = ("title" RD.=: x)
 cssClassAttr::CssClasses->M.Map T.Text T.Text
 cssClassAttr x = ("class" RD.=: toCssString x)
 
-sfAttrs::(RD.MonadHold t m, R.Reflex t, SimpleFormConfiguration e t m)
+sfAttrs::(RD.MonadHold t m, R.Reflex t, SimpleFormLayoutFunctions e m)
          =>DynMaybe t a->Maybe FieldName->Maybe T.Text->ReaderT e m (R.Dynamic t (M.Map T.Text T.Text))
 sfAttrs mDyn mFN mTypeS = sfAttrs' mDyn mFN mTypeS (CssClasses [])
 
-sfAttrs'::(RD.MonadHold t m, R.Reflex t, SimpleFormConfiguration e t m)
+sfAttrs'::(RD.MonadHold t m, R.Reflex t, SimpleFormLayoutFunctions e m)
          =>DynMaybe t a->Maybe FieldName->Maybe T.Text->CssClasses->ReaderT e m (R.Dynamic t (M.Map T.Text T.Text))
 sfAttrs' mDyn mFN mTypeS fixedCss = do
   validClasses <- validItemStyle

@@ -1,40 +1,49 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 module Main where
 
-import Prelude hiding (rem,div,span)
-import Control.Monad (foldM)
-import Control.Monad.IO.Class as IOC (MonadIO)
-import Control.Monad.Trans (MonadTrans)
-import Control.Monad.Ref (Ref)
-import Data.Monoid ((<>))
-import Data.FileEmbed
-import Text.Show.Pretty (ppShow)
-import qualified GHC.Generics as GHC
+import           Control.Monad                         (foldM)
+import           Control.Monad.IO.Class                as IOC (MonadIO)
+import           Control.Monad.Ref                     (Ref)
+import           Control.Monad.Trans                   (MonadTrans)
+import           Data.FileEmbed
+import           Data.Monoid                           ((<>))
+import qualified GHC.Generics                          as GHC
+import           Prelude                               hiding (div, rem, span)
+import           Text.Show.Pretty                      (ppShow)
 --import Clay hiding (button,col,Color)
-import qualified Data.Text as T
-import qualified Data.Map as M
-import qualified Data.Sequence as Seq
-import qualified Data.HashSet as HS
-import Data.Time.Clock (UTCTime(..))
-import Data.Time.Calendar (Day(..),fromGregorian)
+import qualified Data.HashSet                          as HS
+import qualified Data.Map                              as M
+import qualified Data.Sequence                         as Seq
+import qualified Data.Text                             as T
+import           Data.Time.Calendar                    (Day (..), fromGregorian)
+import           Data.Time.Clock                       (UTCTime (..))
 
-import Reflex
-import Reflex.Dynamic.TH
-import Reflex.Dom
-import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
+import           Reflex
+import qualified Reflex.Dom.Contrib.Widgets.Common     as RDC
+import           Reflex.Dom.Core
+import           Reflex.Dynamic.TH
 
-import Reflex.Dom.Contrib.Layout.Types (CssClasses(..),CssClass(..),emptyCss)
-import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,flexFillR)
-import Reflex.Dom.Contrib.Layout.ClayUtils (cssToBS)
+import           GHCJS.DOM.Types                       (JSM)
+import           Reflex.Dom.Contrib.Layout.ClayUtils   (cssToBS)
+import           Reflex.Dom.Contrib.Layout.FlexLayout  (flexCssBS, flexFillR)
+import           Reflex.Dom.Contrib.Layout.Types       (CssClass (..),
+                                                        CssClasses (..),
+                                                        emptyCss)
+
+#ifdef USE_WKWEBVIEW
+import           Language.Javascript.JSaddle.WKWebView (run)
+#endif
+
 --import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
-import Reflex.Dom.Contrib.SimpleForm
+import           Reflex.Dom.Contrib.SimpleForm
 --import DataBuilder
 
 -- Some types to demonstrate what we can make into a form
@@ -50,12 +59,12 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 
 
 -- generic instances
--- NB: "Generic" below is the Generics.SOP sort.  
+-- NB: "Generic" below is the Generics.SOP sort.
 -- NB: You don't need the "buildA .. = .. gBuildA .. " lines if the default formatting is okay.  But this allows you to insert layout on a per type basis.
 
 instance Generic A
 instance HasDatatypeInfo A
-instance SimpleFormC e t m=>Builder (SimpleFormR e t m) A where 
+instance SimpleFormC e t m=>Builder (SimpleFormR e t m) A where
   buildA mFN = liftF formRow . gBuildA mFN
 
 instance Generic B
@@ -65,7 +74,7 @@ instance SimpleFormC e t m=>Builder (SimpleFormR e t m) B where
 
 instance Generic MyMap
 instance HasDatatypeInfo MyMap
-instance SimpleFormC e t m=>Builder (SimpleFormR e t m) MyMap 
+instance SimpleFormC e t m=>Builder (SimpleFormR e t m) MyMap
 
 instance Generic C
 instance HasDatatypeInfo C
@@ -73,7 +82,7 @@ instance SimpleFormC e t m=>Builder (SimpleFormR e t m) C where
   buildA mFN = liftF (legend "C" . formCol) . gBuildA mFN
 
 
--- More layout options are available if you write custom instances. 
+-- More layout options are available if you write custom instances.
 -- handwritten single constructor instance
 instance SimpleFormC e t m=>Builder (SimpleFormR e t m) BRec where
   buildA mFN mBRec= liftF (textOnTop "BRec" . formRow) $ BRec
@@ -149,11 +158,19 @@ demoCfg = DefSFCfg {
   , cfgObserver = False
   }
 
-main  :: IO ()
-main  = mainWidgetWithCss (flexCssBS
+simpleFormMain  :: JSM ()
+simpleFormMain  = mainWidgetWithCss (flexCssBS
                            <> cssToBS simpleFormDefaultCss
                            <> cssToBS simpleObserverDefaultCss) $  test demoCfg
 
 
 
 
+
+#ifdef USE_WKWEBVIEW
+main::IO ()
+main = run simpleFormMain
+#else
+main :: IO ()
+main = simpleFormMain
+#endif

@@ -28,7 +28,8 @@ module Reflex.Dom.Contrib.Layout.LayoutM
        ) where
 
 import qualified GHCJS.DOM.Element               as E
-import           GHCJS.DOM.Types                 (IsElement)
+import           GHCJS.DOM.Types                 (IsElement,
+                                                  MonadJSM (liftJSM'))
 import qualified Reflex                          as R
 import qualified Reflex.Class                    as RC
 import qualified Reflex.Dom                      as RD
@@ -47,11 +48,16 @@ import           Control.Monad.IO.Class          (MonadIO, liftIO)
 import           Control.Monad.Reader            (MonadReader, ReaderT, ask,
                                                   runReaderT)
 import           Control.Monad.Ref               (MonadRef (..), Ref)
-import           Control.Monad.State             (MonadState, StateT, get, lift,
-                                                  put, runStateT)
+import           Control.Monad.State             (MonadState, StateT (StateT),
+                                                  evalStateT, get, lift, put,
+                                                  runStateT)
 import           Control.Monad.Trans             (MonadTrans)
 import           Control.Monad.Trans.Control     (MonadTransControl (..),
                                                   liftThrough)
+import           Data.Coerce                     (coerce)
+import           Data.Dependent.Map              (DMap, DSum (..),
+                                                  GCompare (..))
+import qualified Data.Dependent.Map              as DMap
 import           Data.List                       (foldl')
 import qualified Data.List.NonEmpty              as NE
 import qualified Data.Map                        as M
@@ -60,7 +66,6 @@ import           Data.Monoid                     ((<>))
 import           Data.String                     (unwords, words)
 import qualified Data.Text                       as T
 import           Data.Traversable                (sequenceA)
-
 import           Reflex.Dom.Contrib.Layout.Types
 
 data LayoutNodeCss = LayoutNodeCss { _lncStatic::CssClasses, _lncDynamic::CssClasses }
@@ -176,20 +181,17 @@ instance MonadTransControl (LayoutM t) where
 --type SupportsImmediateDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref IO)
 
 --TriggerEvent makes me nervous
-type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, RC.MonadReflexCreateTrigger t m, RD.Deletable t m, MonadRef m, Ref m ~ Ref IO, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, RD.TriggerEvent t m, Ref (R.Performable m) ~ Ref IO, RD.HasWebView (R.Performable m), MonadAsyncException (R.Performable m), MonadRef (R.Performable m), R.MonadSample t (R.Performable m))
+type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, RC.MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref IO, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, RD.TriggerEvent t m, Ref (R.Performable m) ~ Ref IO, RD.HasWebView (R.Performable m), MonadAsyncException (R.Performable m), MonadRef (R.Performable m), R.MonadSample t (R.Performable m))
 
 instance (RD.PostBuild t m, SupportsLayoutM t m) => RD.DomBuilder t (LayoutM t m) where
   type DomBuilderSpace (LayoutM t m) = RD.DomBuilderSpace m
-  placeholder (RD.PlaceholderConfig insertAbove delete) = LayoutM $ do
+{-  placeholder (RD.PlaceholderConfig insertAbove delete) = LayoutM $ do
     lc <- ask
     ls <- get
     let f x = runLayoutM x ls lc
         insertAbove' = fmap f insertAbove
     lift . lift $ RD.placeholder (RD.PlaceholderConfig insertAbove' delete)
-
-instance RD.Deletable t m => RD.Deletable t (LayoutM t m) where
-  deletable d = liftThrough $ RD.deletable d
-
+-}
 instance RD.PerformEvent t m=>RD.PerformEvent t (LayoutM t m) where
   type Performable (LayoutM t m) = RD.Performable m
   {-# INLINABLE performEvent_ #-}
@@ -225,13 +227,37 @@ instance RD.TriggerEvent t m => RD.TriggerEvent t (LayoutM t m) where
   {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
   newEventWithLazyTriggerWithOnComplete = lift . RD.newEventWithLazyTriggerWithOnComplete
 
+instance RD.MonadAdjust t m => RD.MonadAdjust t (StateT s m) where
+  runWithReplace a0 a' = do
+    s <- get
+    lift $ RD.runWithReplace (evalStateT a0 s) $ fmap (`evalStateT` s) a'
+  sequenceDMapWithAdjust dm0 dm' = do
+    s <- get
+    let loweredDm0 = DMap.map (`evalStateT` s) dm0
+        loweredDm' = RD.ffor dm' $ \(RD.PatchDMap p) -> RD.PatchDMap $
+          DMap.map (\(RD.ComposeMaybe mv) -> RD.ComposeMaybe $ fmap (`evalStateT` s) mv) p
+    lift $ RD.sequenceDMapWithAdjust loweredDm0 loweredDm'
 
+
+instance RD.MonadAdjust t m => RD.MonadAdjust t (LayoutM t m) where
+  runWithReplace a0 a' = LayoutM $ RD.runWithReplace (coerce a0) (RD.coerceEvent a')
+  sequenceDMapWithAdjust dm0 dm' = LayoutM $ RD.sequenceDMapWithAdjust (coerce dm0) (RD.coerceEvent dm')
+
+{-
 instance RD.HasWebView m => RD.HasWebView (LayoutM t m) where
   type WebViewPhantom (LayoutM t m) = RD.WebViewPhantom m
   askWebView = lift RD.askWebView
+-}
+
+instance MonadJSM m => MonadJSM (LayoutM t m) where
+  liftJSM' = liftLM . liftJSM'
+
+instance RD.HasJSContext m => RD.HasJSContext (LayoutM t m) where
+  type JSContextPhantom (LayoutM t m) = RD.JSContextPhantom m
+  askJSContext = lift RD.askJSContext
 
 instance RD.HasJS js m => RD.HasJS js (LayoutM t m) where
-  type JSM (LayoutM t m) = RD.JSM m
+  type JSX (LayoutM t m) = RD.JSX m
   liftJS = lift . RD.liftJS
 
 -- For debugging
