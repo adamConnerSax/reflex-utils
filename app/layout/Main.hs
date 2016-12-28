@@ -31,15 +31,17 @@ import Control.Monad.Ref (Ref,MonadRef)
 import           Control.Monad.Fix               (MonadFix)
 import Data.Monoid ((<>))
 import Data.FileEmbed
+import Control.Lens ((%~))
 
 import Prelude hiding (rem,div,span)
-import Clay hiding (button,col,row)
+import Clay hiding (button,col,row,element)
 import Data.Text.Lazy.Encoding (encodeUtf8)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map as M
 import qualified Data.List as L
 import qualified Data.Text as T
+import Data.Proxy (Proxy(Proxy))
 
 #ifdef USE_WKWEBVIEW
 import Language.Javascript.JSaddle.WKWebView (run)

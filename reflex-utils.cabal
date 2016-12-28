@@ -79,12 +79,13 @@ library
     build-depends:     ghcjs-base
 
   default-language:    Haskell2010
-  ghc-options:        
+  ghc-prof-options: -fprof-auto
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2       
 
 executable reflex-utils-simpleForm
   hs-source-dirs:      app/simpleForm
   main-is:             Main.hs
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
   if flag(wkwebview)
    cpp-options: -DUSE_WKWEBVIEW
    build-depends: jsaddle-wkwebview
@@ -113,7 +114,7 @@ executable reflex-utils-simpleForm
 executable reflex-utils-layout
   hs-source-dirs:      app/layout
   main-is:             Main.hs
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
   if flag(wkwebview)
    cpp-options: -DUSE_WKWEBVIEW
    build-depends: jsaddle-wkwebview
@@ -126,6 +127,7 @@ executable reflex-utils-layout
                      , ghcjs-dom
                      , exception-transformers
                      , ref-tf
+                     , lens
                      , transformers
                      , mtl
                      , file-embed

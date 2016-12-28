@@ -305,9 +305,7 @@ sfAttrs' mDyn mFN mTypeS fixedCss = do
       observerAttr = titleAttr title <> cssClassAttr (observerClasses <> fixedCss)
   lift $ if isObserver
          then return $ R.constDyn observerAttr
-         else R.forDyn (unDynMaybe mDyn) $ \x -> if isJust x
-                                    then validAttrs
-                                    else invalidAttrs
+         else return $ fmap (maybe invalidAttrs (const validAttrs)) (unDynMaybe mDyn)
 
 
 componentTitle::Maybe FieldName->Maybe T.Text->T.Text

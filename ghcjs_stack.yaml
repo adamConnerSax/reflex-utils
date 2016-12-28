@@ -1,0 +1,164 @@
+# For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
+
+# Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
+#resolver: lts-3.21
+
+resolver: ghcjs-0.2.0.20151230.3_ghc-7.10.2
+compiler: ghcjs-0.2.0.20151230.3_ghc-7.10.2
+compiler-check: match-exact
+setup-info:
+  ghcjs:
+    source:
+      ghcjs-0.2.0.20151230.3_ghc-7.10.2:
+        url: "https://github.com/nrolland/ghcjs/releases/download/v.0.2.0.20151230.3/ghcjs-0.2.0.20151230.3.tar.gz"
+
+#resolver: ghcjs-0.2.0.20160414_ghc-7.10.3
+#compiler: ghcjs-0.2.0.20160414_ghc-7.10.3
+#compiler-check: match-exact
+#setup-info:
+#  ghcjs:
+#    source:
+#      ghcjs-0.2.0.20160414_ghc-7.10.3:
+#        url: https://s3.amazonaws.com/ghcjs/ghcjs-0.2.0.20160414_ghc-7.10.3.tar.gz
+#        sha1: 6d6f307503be9e94e0c96ef1308c7cf224d06be3
+
+
+# Local packages, usually specified by relative directory name
+packages:
+- location:
+    git: https://github.com/adamConnerSax/dataBuilder
+    commit: "18f65388a3cad7e3687cc59e112402767a1942bd"
+- location:
+#    git: https://github.com/ryantrinkle/reflex
+#    commit: "cc62c11a6cde31412582758c236919d4bb766ada"
+    git: https://github.com/reflex-frp/reflex
+    commit : "1511d28b08159918137171b79d9f976d9dbe9c65"
+- location:
+#    git: https://github.com/ryantrinkle/reflex-dom
+#    commit: "639d9ca13c2def075e83344c9afca6eafaf24219"
+    git: https://github.com/reflex-frp/reflex-dom
+    commit: "77e0c270f6270561d70d0b6ad925fb1ea82612a8"
+- location:
+    git: https://github.com/ghcjs/ghcjs-dom
+    commit: "1644ab2a058618ebbffefa12ee95cd7484169275"
+#- /Users/adam/Development/github/reflex/reflex-dom-contrib-0.4.2-develop    
+- location:
+#    git: https://github.com/reflex-frp/reflex-dom-contrib
+#    commit: "41c67daf2ad74281f2488cb80ceab7d12292142b"
+    git: https://github.com/adamConnerSax/reflex-dom-contrib # my fork of the functor-dynamic branch 
+    commit: "1dc6894eb15b774b25e3acb218e5b6fb541c3b6b"       
+- '.'
+
+# Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
+extra-deps:
+    - dependent-map-0.2.2.0
+    - dependent-sum-0.3.2.2
+    - ref-tf-0.4
+    - these-0.6.2.1	
+    - readable-0.3.1
+    - string-conv-0.1.2
+    - generics-sop-0.2.2.0
+    - bimap-0.3.2
+    - keycode-0.2.2
+    - monad-control-1.0.1.0
+    - unbounded-delays-0.1.0.9
+    - zenc-0.1.1
+    - transformers-base-0.4.4
+    - Glob-0.7.11
+    - MemoTrie-0.6.4
+    - StateVar-1.1.0.4
+    - abstract-deque-0.3
+    - abstract-par-0.3.3
+    - adjunctions-4.3
+    - ansi-terminal-0.6.2.3
+    - ansi-wl-pprint-0.6.7.3
+    - base-orphans-0.5.4
+    - bifunctors-5.2.1
+    - blaze-builder-0.4.0.2
+    - cassava-0.4.5.0
+    - cereal-0.5.3.0
+    - clay-0.11
+    - comonad-5
+    - contravariant-1.4
+    - cpphs-1.20.1
+    - criterion-1.1.1.0
+    - data-default-0.5.3
+    - data-default-class-0.0.1
+    - data-default-instances-base-0.1.0
+    - data-default-instances-containers-0.0.1
+    - data-default-instances-dlist-0.0.1
+    - data-default-instances-old-locale-0.0.1
+    - dependent-sum-template-0.0.0.5
+    - distributive-0.5.0.2
+    - erf-2.0.0.0
+    - exception-transformers-0.4.0.4
+    - exceptions-0.8.3
+    - fail-4.9.0.0
+    - file-embed-0.0.10
+    - free-4.12.4
+    - haskell-lexer-1.0
+    - haskell-src-exts-1.16.0.1
+    - haskell-src-meta-0.6.0.14
+    - hastache-0.6.1
+    - http-types-0.9.1
+    - ieee754-0.7.8
+    - kan-extensions-5.0.1
+    - lens-4.13.2.1
+    - math-functions-0.2.0.1
+    - mmorph-1.0.6
+    - monad-par-0.3.4.8
+    - monad-par-extras-0.3.3
+    - mwc-random-0.13.4.0
+    - optparse-applicative-0.12.1.0
+    - parsec-3.1.11
+    - polyparse-1.12
+    - prelude-extras-0.4.0.3
+    - pretty-show-1.6.12
+    - profunctors-5.2
+    - random-1.1
+    - reflection-2.1.2
+    - safe-0.3.9
+    - semigroupoids-5.0.1
+    - semigroups-0.18.2
+    - split-0.2.3.1
+    - statistics-0.13.3.0
+    - tagged-0.8.5
+    - th-expand-syns-0.4.0.0
+    - th-extras-0.0.0.4
+    - th-lift-0.7.6
+    - th-lift-instances-0.1.10
+    - th-orphans-0.13.2
+    - th-reify-many-0.1.6
+    - transformers-compat-0.5.1.4
+    - vector-algorithms-0.7.0.1
+    - vector-binary-instances-0.2.3.2
+    - vector-th-unbox-0.2.1.6
+    - void-0.7.1
+
+ 
+
+   
+# Override default flag values for local packages and extra-deps
+flags:
+  ghcjs-dom:
+    jsffi: true
+  semigroups:
+    bytestring-builder: false
+    
+# Extra package databases containing global packages
+extra-package-dbs: []
+
+# Control whether we use the GHC we find on the path
+# system-ghc: true
+
+# Require a specific version of stack, using version ranges
+# require-stack-version: -any # Default
+# require-stack-version: >= 0.1.10.0
+
+# Override the architecture used by stack, especially useful on Windows
+# arch: i386
+# arch: x86_64
+
+# Extra directories used by stack for building
+# extra-include-dirs: [/path/to/dir]
+# extra-lib-dirs: [/path/to/dir]

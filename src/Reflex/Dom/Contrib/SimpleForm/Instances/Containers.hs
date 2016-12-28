@@ -10,13 +10,8 @@
 {-# LANGUAGE GADTs                 #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
--- From this lib
-import Reflex.Dom.Contrib.Layout.Types (LayoutM,CssClasses,IsCssClass(..))
---import Reflex.Dom.Contrib.Layout.LayoutM() --for LayoutM instances
-
 -- All the basic (primitive types, tuples, etc.) are in here
 import Reflex.Dom.Contrib.SimpleForm.Instances.Basic()
-
 import Reflex.Dom.Contrib.SimpleForm.Builder
 
 -- reflex imports
@@ -24,12 +19,10 @@ import qualified Reflex as R
 import qualified Reflex.Dom as RD
 
 
-import Control.Monad (join)
-import Control.Arrow ((&&&))
+import Control.Monad (join,void)
 import Control.Monad.Reader (ReaderT, lift)
-import Control.Monad.State (StateT, runStateT, modify, get, put)
+import Control.Monad.State (StateT, runStateT, get, put)
 import Control.Monad.Morph (hoist)
-import Data.Monoid ((<>))
 import Control.Lens ((%~))
 import Data.Proxy (Proxy(..))
 import Data.Default (def)
@@ -121,14 +114,14 @@ clickableLabel t = do
   return $ RD.domEvent RD.Click e
 
 checkBoxClicker::(RD.PostBuild t m, RD.DomBuilder t m) => T.Text -> m (RD.Event t ())
-checkBoxClicker _ = fmap (fmap (const ())) (RD._checkbox_change <$> RD.checkbox False def)
+checkBoxClicker _ = fmap void (RD._checkbox_change <$> RD.checkbox False def)
   
 containerActionButton::(RD.PostBuild t m, RD.DomBuilder t m)=>T.Text -> m (RD.Event t ())
 containerActionButton = buttonNoSubmit'
 
 buildReadOnlyContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
                         =>CRepI fa (g b)->BuildF e t m fa
-buildReadOnlyContainer crI mFN = buildTraversableSFA crI mFN 
+buildReadOnlyContainer = buildTraversableSFA  
 
 
 listAppend::a->[a]->[a]
@@ -182,10 +175,10 @@ instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>B.Builder (SimpleF
 
 -- we transform to a map since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
 setSFA::Ord a=>SFAppendableI (S.Set a) (M.Map a) a
-setSFA = SFAppendableI (CRepI (\s ->M.fromList $ (\x->(x,x)) <$> S.toList s) (\m->S.fromList $ snd <$> M.toList m)) M.empty (\x s->S.insert x s) S.size
+setSFA = SFAppendableI (CRepI (\s ->M.fromList $ (\x->(x,x)) <$> S.toList s) (\m->S.fromList $ snd <$> M.toList m)) M.empty S.insert S.size
 
 setSFD::Ord a=>SFDeletableI (M.Map a) a a ()
-setSFD = SFDeletableI (\a _ -> a) () id M.delete
+setSFD = SFDeletableI const () id M.delete
 
 instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a,Ord a)=>B.Builder (SimpleFormR e t m) (S.Set a) where
   buildA = buildAdjustableContainer (SFAdjustableI setSFA setSFD)
@@ -206,10 +199,10 @@ instance (SimpleFormC e t m,
 
 -- we transform to a HashMap since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
 hashSetSFA::(Eq a,Hashable a)=>SFAppendableI (HS.HashSet a) (HML.HashMap a) a
-hashSetSFA = SFAppendableI (CRepI (\hs ->HML.fromList $ (\x->(x,x)) <$> HS.toList hs) (\hm->HS.fromList $ snd <$> HML.toList hm)) HML.empty (\x hs->HS.insert x hs) HS.size
+hashSetSFA = SFAppendableI (CRepI (\hs ->HML.fromList $ (\x->(x,x)) <$> HS.toList hs) (\hm->HS.fromList $ snd <$> HML.toList hm)) HML.empty HS.insert HS.size
 
 hashSetSFD::(Eq a, Hashable a)=>SFDeletableI (HML.HashMap a) a a ()
-hashSetSFD = SFDeletableI (\a _ -> a) () id HML.delete
+hashSetSFD = SFDeletableI const () id HML.delete
 
 instance (SimpleFormC e t m,
           B.Builder  (SimpleFormR e t m)  a, Eq a, Hashable a)
@@ -225,7 +218,7 @@ newtype SSFR s e t m a = SSFR { unSSFR::StateT s (ReaderT e m) (DynMaybe t a) }
 
 instance (R.Reflex t, R.MonadHold t m)=>Functor (SSFR s e t m) where
 --  fmap f ssfra = SSFR $ unSSFR ssfra >>= lift . lift . R.mapDyn (fmap f)
-  fmap f ssfra = SSFR $ (fmap f) <$> unSSFR ssfra 
+  fmap f ssfra = SSFR $ fmap f <$> unSSFR ssfra 
 
 instance (R.Reflex t, R.MonadHold t m)=>Applicative (SSFR s e t m) where
   pure x = SSFR $ return $ pure x
@@ -252,7 +245,7 @@ buildTraversableSFA'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Travers
 buildTraversableSFA' crI buildOne _ mfa =
   case mfa of
     Just fa -> unSF $ fromRep crI <$> traverse (liftF formRow . SimpleFormR . buildOne Nothing . Just) (toRep crI fa)
-    Nothing -> return $ dynMaybeNothing
+    Nothing -> return dynMaybeNothing
 
 -- styled, in case we ever want an editable container without add/remove
 

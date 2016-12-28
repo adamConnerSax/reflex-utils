@@ -1,54 +1,42 @@
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings     #-}
+--{-# LANGUAGE QuasiQuotes           #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE RecursiveDo           #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        (
          sfWidget
        ) where
 
-import Control.Applicative (liftA2)
-import Control.Monad.Reader (ReaderT, runReaderT, ask, lift)
-import Control.Monad.Morph (hoist)
-import Control.Monad.Fix (MonadFix)
-import qualified Data.Map as M
-import Data.Monoid ((<>))
-import Data.Maybe (isJust,fromJust)
-import Data.Readable (Readable)
-import qualified Data.Text as T
-import Text.Read (readMaybe)
+import           Control.Monad.Reader                  (ReaderT, lift)
+import           Data.Maybe                            (fromJust, fromMaybe)
+import           Data.Readable                         (Readable)
+import qualified Data.Text                             as T
+import           Text.Read                             (readMaybe)
 
 -- types for instances
-import GHC.Tuple
-import Data.Int (Int8,Int16,Int32,Int64)
-import Data.Word (Word8,Word16,Word32,Word64)
-import Data.ByteString (ByteString)
-import Data.Time.Clock (UTCTime)
-import Data.Time.Calendar (Day)
-
--- for using the generic builder
-import qualified GHC.Generics as GHCG
-
+import           Data.ByteString                       (ByteString)
+import           Data.Int                              (Int16, Int32, Int64,
+                                                        Int8)
+import           Data.Time.Calendar                    (Day)
+import           Data.Time.Clock                       (UTCTime)
+import           Data.Word                             (Word16, Word32, Word64,
+                                                        Word8)
 -- reflex imports
-import qualified Reflex as R 
-import qualified Reflex.Dom as RD
+import qualified Reflex                                as R
+import qualified Reflex.Dom                            as RD
 
-import Reflex.Dom.Contrib.Widgets.Common --(HtmlWidget,combineWidgets)
+import           Reflex.Dom.Contrib.Widgets.Common
 
--- From this lib
-import Reflex.Dom.Contrib.Layout.Types (CssClasses,IsCssClass(..))
+import qualified DataBuilder                           as B
 
-
-import qualified DataBuilder as B
-
-import Reflex.Dom.Contrib.SimpleForm.Builder
+import           Reflex.Dom.Contrib.SimpleForm.Builder
 
 -- instances
 
@@ -56,10 +44,10 @@ import Reflex.Dom.Contrib.SimpleForm.Builder
 showText::Show a=>a->T.Text
 showText = T.pack . show
 
-readOnlyW::RD.MonadWidget t m=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a) 
+readOnlyW::RD.MonadWidget t m=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
 readOnlyW f wc = do
   da <- R.foldDyn const (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
-  ds <- R.mapDyn f da
+  let ds = f <$> da
   RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
   return da
 
@@ -73,7 +61,8 @@ sfWidget::SimpleFormC e t m=>
 sfWidget fDyn fString mFN wc widget = do
   isObserver <- observer
   let lfnF = layoutFieldNameHelper mFN
-  lfnF . lift $ (if isObserver then readOnlyW fString wc else widget wc) >>= R.mapDyn fDyn
+  lfnF . lift $ fmap fDyn <$> (if isObserver then readOnlyW fString wc else widget wc)
+--  lfnF . lift $ (if isObserver then readOnlyW fString wc else widget wc) >>= R.mapDyn fDyn
 
 
 buildReadable::(SimpleFormC e t m,Readable a, Show a)=>Maybe FieldName->Maybe a->SimpleFormR e t m a
@@ -95,10 +84,10 @@ buildReadMaybe mFN ma = SimpleFormR $ mdo
 -- | String and Text
 instance SimpleFormC e t m =>B.Builder (SimpleFormR e t m) T.Text where
   buildA mFN mInitial = SimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just $ "Text")
-    let initial = maybe "" id mInitial
+    attrsDyn <- sfAttrs dma mFN (Just "Text")
+    let initial = fromMaybe "" mInitial
         wc = WidgetConfig RD.never initial attrsDyn
-    dma <- itemL $ DynMaybe <$> (sfWidget Just showText mFN wc $ \c -> do
+    dma <- itemL $ DynMaybe <$> (sfWidget Just showText mFN wc $ \c ->
       _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput "Text") c)
     return dma
 
@@ -118,14 +107,14 @@ instance SimpleFormC e t m=>B.Builder (RFormWidget e t m) Char where
 -- We don't need this.  If we leave it out, the Enum instance will work an we get a dropdown instead of a checkbox.  Which might be better...
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Bool where
   buildA mFN mInitial = SimpleFormR $ mdo
-    let initial = maybe False id mInitial
+    let initial = fromMaybe False mInitial
         wc = WidgetConfig RD.never initial attrsDyn
-    attrsDyn <- sfAttrs dynMaybeNothing mFN (Just $ "Bool")
+    attrsDyn <- sfAttrs dynMaybeNothing mFN (Just "Bool")
     itemL $ DynMaybe <$> (sfWidget Just showText mFN wc $ \c -> _hwidget_value <$> htmlCheckbox c)
 
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Double where
   buildA mFN mInitial = SimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just $ "Double")
+    attrsDyn <- sfAttrs dma mFN (Just "Double")
     let wc = WidgetConfig RD.never mInitial attrsDyn
     dma <- itemL $ DynMaybe <$> (sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter doubleWidget c)
     return dma
@@ -135,7 +124,7 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Float where
 
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Int where
   buildA mFN mInitial = SimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just $ "Int")
+    attrsDyn <- sfAttrs dma mFN (Just "Int")
     let wc = WidgetConfig RD.never mInitial attrsDyn
     dma <- itemL $ DynMaybe <$> (sfWidget id  (showText . fromJust) mFN wc $ \c->_hwidget_value <$> restrictWidget blurOrEnter intWidget c)
     return dma
@@ -143,7 +132,7 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Int where
 
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Integer where
   buildA mFN mInitial = SimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just $ "Int")
+    attrsDyn <- sfAttrs dma mFN (Just "Int")
     let wc = WidgetConfig RD.never mInitial attrsDyn
     dma <- itemL $ DynMaybe <$> (sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter integerWidget c)
     return dma
@@ -178,14 +167,14 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) ByteString where
 --dateTime and date
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) UTCTime where
   buildA mFN mInitial = SimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just $ "UTCTime")
+    attrsDyn <- sfAttrs dma mFN (Just "UTCTime")
     let wc = WidgetConfig RD.never mInitial attrsDyn
     dma<-itemL $ DynMaybe <$> (sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
     return dma
 
 instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Day where
   buildA mFN mInitial = SimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just $ "Day")
+    attrsDyn <- sfAttrs dma mFN (Just "Day")
     let wc = WidgetConfig RD.never mInitial attrsDyn
     dma <- itemL $ DynMaybe <$> (sfWidget id (showText . fromJust) mFN wc $ \c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
     return dma
@@ -194,7 +183,7 @@ instance SimpleFormC e t m=>B.Builder (SimpleFormR e t m) Day where
 instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>B.Builder (SimpleFormR e t m) (Maybe a)
 
 instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a,B.Builder (SimpleFormR e t m) b)=>B.Builder (SimpleFormR e t m) (Either a b)
-    
+
 
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (SimpleFormC e t m,Enum a,Show a,Bounded a, Eq a)
@@ -202,7 +191,7 @@ instance {-# OVERLAPPABLE #-} (SimpleFormC e t m,Enum a,Show a,Bounded a, Eq a)
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN Nothing
     let values = [minBound..] :: [a]
-        initial = maybe (head values) id mInitial
+        initial = fromMaybe (head values) mInitial
         wc = WidgetConfig RD.never initial attrsDyn
     dma <- itemL $ DynMaybe <$> (sfWidget Just showText mFN wc $ \c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
     return dma
@@ -212,7 +201,7 @@ instance {-# OVERLAPPABLE #-} (SimpleFormC e t m,Enum a,Show a,Bounded a, Eq a)
 instance (SimpleFormC e t m,
           B.Builder  (SimpleFormR e t m)  a,
           B.Builder  (SimpleFormR e t m)  b)
-         =>B.Builder (SimpleFormR e t m) (a,b) 
+         =>B.Builder (SimpleFormR e t m) (a,b)
 
 instance (SimpleFormC e t m,
           B.Builder  (SimpleFormR e t m)  a,
