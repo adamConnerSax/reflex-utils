@@ -18,10 +18,10 @@ import qualified Reflex as R
 import qualified Reflex.Dom as RD
 
 import qualified Data.Map as M
-import Control.Lens (set,(.~),(^.),(<>~),(<>=),(%=),(.=),use)
-import Data.Monoid (mappend)
+import Control.Lens ((%=),(.=),use)
+--import Data.Monoid (mappend)
 import Data.Maybe (fromJust)
-import Data.List (foldl')
+--import Data.List (foldl')
 import Control.Monad (foldM)
 import Control.Monad.Fix (MonadFix)
 
@@ -38,7 +38,7 @@ addKeyedClassesBelow keyedCss = LayoutM $ do
 getKeyedCssUpdateEvent::(R.Reflex t, MonadFix m, RD.MonadHold t m)=>LayoutClassKey->LayoutM t m (Maybe (R.Event t CssUpdate))
 getKeyedCssUpdateEvent key = LayoutM $ do
   dynamicCssMap <- use lsDynamicCssMap
-  return $ _lcdEvent <$> (M.lookup key dynamicCssMap)
+  return $ _lcdEvent <$> M.lookup key dynamicCssMap
 
 addKeyedCssUpdateEventBelow::(R.Reflex t, MonadFix m,RD.MonadHold t m)=>LayoutClassKey->CssClasses->R.Event t CssUpdate->LayoutM t m ()
 addKeyedCssUpdateEventBelow key initialCss ev = addKeyedCssUpdateEventsBelow (key,initialCss,[ev])
@@ -59,7 +59,7 @@ addMultipleKeyedCssUpdateEventsBelow kEvs = do
   newMap <- do
     let createDyn initialCss cssUpdEv = R.foldDyn (flip addCssUpdate) initialCss cssUpdEv
         f m (key,initialCss,cssEvs)  = do
-          let newEv = R.mergeWith mergeCssUpdates $ maybe cssEvs (\x->(_lcdEvent x):cssEvs) (M.lookup key m)
+          let newEv = R.mergeWith mergeCssUpdates $ maybe cssEvs (\x->_lcdEvent x:cssEvs) (M.lookup key m)
           cssDyn <- createDyn initialCss newEv
           return $ M.insert key (LayoutClassDynamic cssDyn newEv) m
     dynamicCssMap <- askDynamicCssMap

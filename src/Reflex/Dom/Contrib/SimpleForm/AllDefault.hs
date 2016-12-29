@@ -23,7 +23,7 @@ module Reflex.Dom.Contrib.SimpleForm.AllDefault
 -- | Also serves as an example for building others
 -- | and defFailureF and defSumF can be re-used for other implementations
 
-import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..))
+import Reflex.Dom.Contrib.Layout.Types (CssClasses(..))
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexCol,flexRow,flexItem,
                                              flexFillR,flexFillL,flexHCenter,
                                              flexFillU,flexFillD,flexVCenter)
@@ -40,17 +40,9 @@ import Reflex.Dom.Contrib.Widgets.Common (WidgetConfig(..),Widget0(..),htmlDropd
 import Clay ((?),(@=),(#))
 import qualified Clay as C
 
+import Control.Monad.Reader (ask, asks,local)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Lens ((^.))
-import Control.Monad.Reader (ReaderT, runReaderT, ask, asks, lift,local)
-import Control.Monad.Trans (MonadTrans)
-import Control.Monad.Ref (MonadRef,Ref)
-import Control.Monad.Fix (MonadFix)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Morph (MFunctor)
-import Control.Monad.Exception (MonadException,MonadAsyncException)
 import Data.Maybe (fromJust)
-import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Text as T
 import Data.Monoid ((<>))
@@ -72,7 +64,7 @@ defFailureF msg = SimpleFormR $ do
   RD.text msg
   return dynMaybeNothing
 
-data SFRPair e t m a = SFRPair { sfrpCN::B.ConName, sfrpV::(SimpleFormR e t m a) }
+data SFRPair e t m a = SFRPair { sfrpCN::B.ConName, sfrpV::SimpleFormR e t m a }
 
 instance Eq (SFRPair e t m a) where
   (SFRPair a _) == (SFRPair b _) = a == b
@@ -83,15 +75,15 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
       getSFRP::B.ConName->[(B.ConName,SimpleFormR e t m a)]->SFRPair e t m a
       getSFRP cn = SFRPair cn . fromJust . M.lookup cn . M.fromList 
       pft (x,y) = SFRPair x y
-      defPair = maybe (pft $ head conWidgets) (\cn->getSFRP cn conWidgets) mDefCon
+      defPair = maybe (pft $ head conWidgets) (`getSFRP` conWidgets) mDefCon
   validClasses <- validItemStyle
   observerClasses <- observerStyle
   isObserver <- observer
   let classes = if isObserver then observerClasses else validClasses 
-      attrsDyn = R.constDyn (cssClassAttr (classes) <> titleAttr "Constructor")
+      attrsDyn = R.constDyn (cssClassAttr classes <> titleAttr "Constructor")
       wc = WidgetConfig RD.never defPair attrsDyn
   formRow $ do
-    sfrpCW <- itemL $ (sfWidget id (T.pack . sfrpCN) Nothing wc $ \c -> _widget0_value <$> htmlDropdownStatic conNames T.pack (flip getSFRP conWidgets) wc)
+    sfrpCW <- itemL $ (sfWidget id (T.pack . sfrpCN) Nothing wc $ \wc' -> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getSFRP` conWidgets) wc')
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
 {-

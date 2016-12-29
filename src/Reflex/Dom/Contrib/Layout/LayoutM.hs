@@ -27,45 +27,30 @@ module Reflex.Dom.Contrib.Layout.LayoutM
        , addNewLayoutNode
        ) where
 
-import qualified GHCJS.DOM.Element               as E
-import           GHCJS.DOM.Types                 (IsElement,
-                                                  MonadJSM (liftJSM'))
+import           GHCJS.DOM.Types                 (MonadJSM (liftJSM'))
 import qualified Reflex                          as R
-import qualified Reflex.Class                    as RC
 import qualified Reflex.Dom                      as RD
-import qualified Reflex.Dom.Builder.Class        as RD
-import qualified Reflex.Dom.Class                as RD
 import qualified Reflex.Host.Class               as RC
 
-import           Control.Lens                    (makeClassy, makeLenses, set,
-                                                  use, view, (%=), (.=), (.~),
-                                                  (<>=), (<>~), (^.))
-import           Control.Monad                   (forM, forM_, mapM_, sequence)
+import           Control.Lens                    ((^.))
 import           Control.Monad.Exception         (MonadAsyncException)
 import           Control.Monad.Fix               (MonadFix)
 
-import           Control.Monad.IO.Class          (MonadIO, liftIO)
-import           Control.Monad.Reader            (MonadReader, ReaderT, ask,
-                                                  runReaderT)
+import           Control.Monad.IO.Class          (MonadIO)
+import           Control.Monad.Reader            (ask, runReaderT)
 import           Control.Monad.Ref               (MonadRef (..), Ref)
-import           Control.Monad.State             (MonadState, StateT (StateT),
-                                                  evalStateT, get, lift, put,
-                                                  runStateT)
+import           Control.Monad.State             (StateT (StateT), evalStateT,
+                                                  get, lift, runStateT)
 import           Control.Monad.Trans             (MonadTrans)
-import           Control.Monad.Trans.Control     (MonadTransControl (..),
-                                                  liftThrough)
+import           Control.Monad.Trans.Control     (MonadTransControl (..))
 import           Data.Coerce                     (coerce)
-import           Data.Dependent.Map              (DMap, DSum (..),
-                                                  GCompare (..))
 import qualified Data.Dependent.Map              as DMap
 import           Data.List                       (foldl')
 import qualified Data.List.NonEmpty              as NE
 import qualified Data.Map                        as M
-import           Data.Maybe                      (catMaybes, fromJust)
+import           Data.Maybe                      (catMaybes, fromMaybe)
 import           Data.Monoid                     ((<>))
-import           Data.String                     (unwords, words)
 import qualified Data.Text                       as T
-import           Data.Traversable                (sequenceA)
 import           Reflex.Dom.Contrib.Layout.Types
 
 data LayoutNodeCss = LayoutNodeCss { _lncStatic::CssClasses, _lncDynamic::CssClasses }
@@ -102,7 +87,7 @@ dynamicCss desc dynMap = do
         R.foldDyn (flip addCssUpdate) initial ev
       getMaybeDyn key = makeDyn <$> M.lookup key dynMap -- Maybe (m (Dynamic t CssClasses))
   getLMaybeDyn <- sequence $ catMaybes (getMaybeDyn <$> classKeys) --m [Dynamic t CssClasses]
-  if (null classKeys) || (null getLMaybeDyn) then return Nothing else Just <$> (return $ mconcat getLMaybeDyn)
+  if null classKeys || null getLMaybeDyn then return Nothing else Just <$> return (mconcat getLMaybeDyn)
 
 
 addNewLayoutNode::(SupportsLayoutM t m,RD.PostBuild t m, R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
@@ -112,14 +97,14 @@ addNewLayoutNode desc child = LayoutM $ do
   let classKeys = desc ^. ldLayoutClassKeys
       staticClassMap = ls ^. lsClassMap
       dynamicCssMap = ls ^. lsDynamicCssMap
-      staticClasses = (mconcat . catMaybes $ fmap (\x->M.lookup x staticClassMap) classKeys) <> (desc ^. ldClasses)
+      staticClasses = (mconcat . catMaybes $ fmap (`M.lookup` staticClassMap) classKeys) <> (desc ^. ldClasses)
       child' = runLayoutM child ls lc
   lift . lift $ do
     mDynClasses <- dynamicCss desc dynamicCssMap
     RD.elDynAttr "div" (classesToAttributesDyn' staticClasses mDynClasses) child'
 
 cssToAttr::IsCssClass c=>c->RD.AttributeMap
-cssToAttr cssClass = ("class" RD.=: (toCssString cssClass))
+cssToAttr cssClass = "class" RD.=: (toCssString cssClass)
 
 updateCss::LayoutNodeCss->CssUpdate->LayoutNodeCss
 updateCss (LayoutNodeCss s _) (UpdateDynamic d) = LayoutNodeCss s d
@@ -133,12 +118,12 @@ classesToAttributesDyn staticCss dynamicCssDyn = (cssToAttr . LayoutNodeCss stat
 
 classesToAttributesDyn'::R.Reflex t=>CssClasses->Maybe (R.Dynamic t CssClasses)->R.Dynamic t (M.Map T.Text T.Text)
 classesToAttributesDyn' staticCss mDynamicCssDyn =
-  let x = maybe (R.constDyn emptyCss) id mDynamicCssDyn in classesToAttributesDyn staticCss x
+  let x = fromMaybe (R.constDyn emptyCss) mDynamicCssDyn in classesToAttributesDyn staticCss x
 
 -- utilities for map merging
 -- biased to 2nd argument for initial conditons
 mergeLayoutClassDynamic::(R.Reflex t, R.MonadHold t m,MonadFix m)=>LayoutClassDynamic t->LayoutClassDynamic t->m (LayoutClassDynamic t)
-mergeLayoutClassDynamic (LayoutClassDynamic initialADyn evA) (LayoutClassDynamic initialBDyn evB) = do
+mergeLayoutClassDynamic (LayoutClassDynamic _ evA) (LayoutClassDynamic initialBDyn evB) = do
   let newEv = R.mergeWith mergeCssUpdates [evA,evB]
   initialValue <- R.sample $ R.current initialBDyn
   newInitialDyn <- R.foldDyn (flip addCssUpdate) initialValue newEv
@@ -264,6 +249,6 @@ instance RD.HasJS js m => RD.HasJS js (LayoutM t m) where
 
 printLayoutConfig::LayoutConfig t->IO ()
 printLayoutConfig lc = do
-  putStrLn $ "static Css=" ++ (show $ M.toList (_lcStaticCssMap lc))
-  putStrLn $ "dynamicCss Keys=" ++ (show $ M.keys (_lcDynamicCssMap lc))
+  putStrLn $ "static Css=" ++ show (M.toList (_lcStaticCssMap lc))
+  putStrLn $ "dynamicCss Keys=" ++ show (M.keys (_lcDynamicCssMap lc))
 

@@ -32,7 +32,7 @@ import qualified Reflex.Dom as RD
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.State (State,gets,modify,execState)
 import Data.Sequence ((><),(|>),Seq,empty,singleton)
-import Data.Foldable (mapM_,foldl')
+import Data.Foldable (foldl')
 import qualified Data.Text as T
 import Data.Monoid ((<>))
 
@@ -60,7 +60,7 @@ flexItem::LISeq
 flexItem = flexSimple InLNode "gl-flex-item"
 
 flexSizedItem::Int->LISeq
-flexSizedItem n = let n' = Prelude.min n numberFlexGrowOptions in flexSimple InLNode ("gl-flex-item-" <> (T.pack $ show n'))
+flexSizedItem n = let n' = Prelude.min n numberFlexGrowOptions in flexSimple InLNode ("gl-flex-item-" <> T.pack (show n'))
 
 flexFillH::LISeq
 flexFillH = flexSimple ClosesLNode "flexFillH"
@@ -149,7 +149,7 @@ closeCurrent::NodeBuilderState->NodeBuilderState
 closeCurrent nbs@(NodeBuilderState onM nodes) =
   case onM of
     Nothing -> nbs
-    Just on -> NodeBuilderState Nothing (nodes |> (closeLNode on))
+    Just on -> NodeBuilderState Nothing (nodes |> closeLNode on)
 
 doOneInstruction::LayoutInstruction->State NodeBuilderState ()
 doOneInstruction li@(LayoutInstruction lc oln) = do
@@ -169,7 +169,7 @@ sameNodeType lc css oln = do
     ClosesLNode -> addAndReplace (closeLNode oln') Nothing
 
 newNodeType::LayoutInstruction->Maybe OpenLNode->State NodeBuilderState ()
-newNodeType (LayoutInstruction lc oln) mOln = modify $ f . closeCurrent where
+newNodeType (LayoutInstruction lc oln) _ = modify $ f . closeCurrent where
   f = case lc of
     ClosesLNode -> addLNode (closeLNode oln)
     _              -> replaceON (Just oln)

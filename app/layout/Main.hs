@@ -22,9 +22,9 @@ import Reflex.PerformEvent.Base
 import Reflex.Host.Class (MonadReflexCreateTrigger)
 import qualified Reflex.Dom.Contrib.Widgets.Common as RDC
 
-import GHCJS.DOM.Types (MonadJSM,JSM)
+import GHCJS.DOM.Types (MonadJSM,JSM,liftJSM)
 
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO,liftIO)
 import Control.Monad.Exception (MonadAsyncException)
 import Control.Monad.Trans (lift)
 import Control.Monad.Ref (Ref,MonadRef)
@@ -257,7 +257,7 @@ allCss = tabCssBS
 
 layoutMain::JSM ()
 layoutMain = do
-  --B.putStr allCss 
+  liftIO $ B.putStr allCss 
   mainWidgetWithCss allCss $ do
       tabbedWidget
       return ()

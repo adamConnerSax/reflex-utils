@@ -69,12 +69,13 @@ import qualified DataBuilder                     as B
 import           DataBuilder.GenericSOP          as GSOP (Generic,
                                                           HasDatatypeInfo,
                                                           deriveGeneric)
-import           DataBuilder.TH                  (deriveBuilder)
+--import           DataBuilder.TH                  (deriveBuilder)
 
 import           Reflex                          as ReflexExport (PushM)
 import qualified Reflex                          as R
 import qualified Reflex.Dom                      as RD
 
+import           Control.Arrow                   ((&&&))
 import           Control.Monad                   (join)
 import           Control.Monad.Morph
 import           Control.Monad.Reader            (ReaderT, ask, runReaderT)
@@ -92,7 +93,7 @@ dynMaybeNothing::R.Reflex t => DynMaybe t a
 dynMaybeNothing = DynMaybe $ R.constDyn Nothing
 
 joinDynOfDynMaybe::R.Reflex t=>RD.Dynamic t (DynMaybe t a) -> DynMaybe t a
-joinDynOfDynMaybe = DynMaybe . join . (fmap unDynMaybe)
+joinDynOfDynMaybe = DynMaybe . join . fmap unDynMaybe
 
 instance R.Reflex t=>Functor (DynMaybe t) where
   fmap f dma = DynMaybe $ fmap (fmap f) (unDynMaybe dma)
@@ -242,8 +243,8 @@ textOnTop' labelLayout label ra = formCol $ do
   formItem ra
 
 legend::SimpleFormC e t m=>T.Text->SFLayoutF e m a
-legend legend ra = RD.el "fieldset" $ do
-    lift $ RD.el "legend" $ RD.text legend
+legend legendText ra = RD.el "fieldset" $ do
+    lift $ RD.el "legend" $ RD.text legendText
     ra
 
 {-
@@ -283,10 +284,10 @@ attrs0::R.Reflex t=>DynAttrs t
 attrs0 = R.constDyn mempty
 
 titleAttr::T.Text->M.Map T.Text T.Text
-titleAttr x = ("title" RD.=: x)
+titleAttr x = "title" RD.=: x
 
 cssClassAttr::CssClasses->M.Map T.Text T.Text
-cssClassAttr x = ("class" RD.=: toCssString x)
+cssClassAttr x = "class" RD.=: toCssString x
 
 sfAttrs::(RD.MonadHold t m, R.Reflex t, SimpleFormLayoutFunctions e m)
          =>DynMaybe t a->Maybe FieldName->Maybe T.Text->ReaderT e m (R.Dynamic t (M.Map T.Text T.Text))
@@ -311,15 +312,15 @@ sfAttrs' mDyn mFN mTypeS fixedCss = do
 componentTitle::Maybe FieldName->Maybe T.Text->T.Text
 componentTitle mFN mType =
   let fnS = maybe "" T.pack  mFN
-      tnS = maybe "" id  mType
-  in if (isJust mFN && isJust mType) then (fnS <> "::" <> tnS) else (fnS <> tnS)
+      tnS = fromMaybe "" mType
+  in if isJust mFN && isJust mType then fnS <> "::" <> tnS else fnS <> tnS
 
 
 instance SimpleFormC e t m => B.Buildable (SimpleFormR e t m) where
   -- the rest of the instances are handled by defaults since SimpleFormR is Applicative
   bFail = failureF . T.pack
   bSum mwWidgets = SimpleFormR $ do
-    let constrList = map (\mdw -> (fst . B.metadata $ mdw, B.value mdw)) mwWidgets
+    let constrList = map ((fst . B.metadata) &&& B.value) mwWidgets
         defCon = case filter B.hasDefault mwWidgets of
           [] -> Nothing
           (x:_) -> Just . fst $ B.metadata x
@@ -327,14 +328,14 @@ instance SimpleFormC e t m => B.Buildable (SimpleFormR e t m) where
 
 
 deriveSFRowBuilder::Name -> Q [Dec]
-deriveSFRowBuilder typeName = do
+deriveSFRowBuilder typeName =
   [d|instance SimpleFormC e t m=>Builder (SimpleFormR e t m) $(conT typeName) where
        buildA md Nothing  = liftF (itemL . layoutHoriz) ($(B.handleNothingL typeName) md)
        buildA md (Just x) = liftF (itemL . layoutHoriz) ($(B.handleJustL typeName) md x)|]
 
 
 deriveSFColBuilder::Name -> Q [Dec]
-deriveSFColBuilder typeName = do
+deriveSFColBuilder typeName =
   [d|instance SimpleFormC e t m=>Builder (SimpleFormR e t m) $(conT typeName) where
        buildA md Nothing  = liftF (itemL . layoutVert) ($(B.handleNothingL typeName) md)
        buildA md (Just x) = liftF (itemL . layoutVert) ($(B.handleJustL typeName) md x)|]

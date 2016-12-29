@@ -21,16 +21,10 @@ module Reflex.Dom.Contrib.Layout.FlexLayout
        , flexSizedItem
        ) where
 
---import Reflex.Dom.Contrib.StackedMonadWidget
-
 import qualified Reflex as R
 import qualified Reflex.Dom as RD
 
 import Control.Monad.IO.Class (MonadIO)
-
-import qualified Data.Map as M
-import qualified Data.Sequence as S
-import Data.Foldable (mapM_,foldl')
 
 import Clay hiding (id)
 import Data.Text.Lazy.Encoding (encodeUtf8)
@@ -38,15 +32,15 @@ import qualified Data.Text as T
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.String (fromString)
-import Data.Monoid ((<>))
 
 
+flexFillStyles :: Css
 flexFillStyles = do
   ".flexFillH" ? do
     ("display" -: "flex")
     ("display" -: "-webkit-flex")
     ("flex-direction" -: "row")
-    ("-webkit-flex-direction" -: "row")	
+    ("-webkit-flex-direction" -: "row")
     ("align-items" -: "stretch")
     ("-webkit-align-items" -: "stretch")    
     ("flex" -: "1 0 auto")
@@ -67,10 +61,12 @@ flexFillStyles = do
       ("flex" -: "1")
       ("-webkit-flex" -: "1")
 
-numberFlexGrowOptions = 12::Int
+numberFlexGrowOptions :: Int
+numberFlexGrowOptions = 12
 
 -- I would prefer all these "auto"s to be "0%" but that is buggy in safari.  
 
+flexContainerStyle :: Css
 flexContainerStyle = do
   "display" -: "flex"
   "display" -: "-webkit-flex"
@@ -79,6 +75,7 @@ flexContainerStyle = do
   "flex" -: "1 0 auto"
   "-webkit-flex" -: "1 0 auto"  
 
+flexGridStyles :: Css
 flexGridStyles = do
   ".gl-flex-row" ? do
     "flex-direction" -: "row"
@@ -94,6 +91,7 @@ flexGridStyles = do
       flexJustifyStyles = ["flex-start","flex-end","center","space-between","space-around"]
   mapM_ flexJustifyStyle flexJustifyStyles
 
+flexCss :: Css
 flexCss = do
   flexFillStyles
   flexGridStyles
@@ -120,9 +118,9 @@ wrapWidget = RD.divClass ""
 flexFillR::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexFillR w = 
   RD.divClass "flexFillH" $ do
-    a <- wrapWidget w
+    x <- wrapWidget w
     RD.divClass "fill" RD.blank
-    return a
+    return x
 
 flexFillL::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexFillL w = 
@@ -134,32 +132,30 @@ flexHCenter::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexHCenter w = 
   RD.divClass "flexFillH" $ do
     RD.divClass "fill" RD.blank
-    a <- wrapWidget w
+    x <- wrapWidget w
     RD.divClass "fill" RD.blank
-    return a
+    return x
 
 flexVCenter::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexVCenter w = 
   RD.divClass "flexFillV" $ do
     RD.divClass "fill" RD.blank
-    a <- wrapWidget w
+    x <- wrapWidget w
     RD.divClass "fill" RD.blank
-    return a
+    return x
 
 flexFillD::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexFillD w = 
   RD.divClass "flexFillV" $ do
-    a <- wrapWidget w
+    x <- wrapWidget w
     RD.divClass "fill" RD.blank
-    return a
+    return x
 
 flexFillU::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
 flexFillU w = 
   RD.divClass "flexFillV" $ do  
     RD.divClass "fill" RD.blank
     wrapWidget w
-
-
 
 infixl 2 ##
 (##)::(RD.DomBuilder t m,MonadIO (R.PushM t))=>(m a->m a)->m a->m a

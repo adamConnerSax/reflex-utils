@@ -91,6 +91,7 @@ buildAdjustableContainer sfAdj mFN mfa = SimpleFormR  $ do
     else buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
 --    else buildSFContainer (sfAI sfAdj) (buildTraversableSFA idRep) mFN mfa
 
+{-
 -- default behavior of button in a form is to submit the form
 -- This creates a button but without that default
 buttonNoSubmit :: forall t m .RD.DomBuilder t m => T.Text -> m (RD.Event t ())
@@ -102,12 +103,6 @@ buttonNoSubmit t = do
   (e, _) <- RD.element "button" (pdCfg def) $ RD.text t
   return $ RD.domEvent RD.Click e
 
-buttonNoSubmit'::(RD.PostBuild t m,RD.DomBuilder t m)=>T.Text -> m (RD.Event t ())
-buttonNoSubmit' t = do
-  let attrs = M.fromList [("type","button")]
-  (e,_) <- RD.elDynAttr' "button" (RD.constDyn attrs) $ RD.text t
-  return $ RD.domEvent RD.Click e
-  
 clickableLabel::RD.DomBuilder t m=>T.Text -> m (RD.Event t ())
 clickableLabel t = do
   (e,_) <- RD.element "label" def $ RD.text t
@@ -115,6 +110,11 @@ clickableLabel t = do
 
 checkBoxClicker::(RD.PostBuild t m, RD.DomBuilder t m) => T.Text -> m (RD.Event t ())
 checkBoxClicker _ = fmap void (RD._checkbox_change <$> RD.checkbox False def)
+-}
+
+buttonNoSubmit'::RD.DomBuilder t m=>T.Text -> m (RD.Event t ())
+buttonNoSubmit' t = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "button" ("type" RD.=: "button") (RD.text t)
+  
   
 containerActionButton::(RD.PostBuild t m, RD.DomBuilder t m)=>T.Text -> m (RD.Event t ())
 containerActionButton = buttonNoSubmit'

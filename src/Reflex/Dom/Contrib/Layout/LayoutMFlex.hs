@@ -20,7 +20,7 @@ import Reflex.Dom.Contrib.Layout.FlexLayout (numberFlexGrowOptions) -- for re-ex
 import qualified Reflex as R
 import qualified Reflex.Dom as RD
 
-import qualified Data.Map as M
+--import qualified Data.Map as M
 import qualified Data.Text as T
 import Data.Monoid ((<>))
 
@@ -38,7 +38,7 @@ lmFlexLayoutRow' tags = addNewLayoutNode $ flexLayoutRowD tags
 flexColD::R.Reflex t=>[T.Text]->Int->LayoutDescription t
 flexColD tags w =
   let n = Prelude.max 1 $ Prelude.min w numberFlexGrowOptions
-      flexColClasses = CssClasses [CssClass ("gl-flex-item-" <> (T.pack $ show n))]
+      flexColClasses = CssClasses [CssClass ("gl-flex-item-" <> T.pack (show n))]
   in LayoutDescription flexColClasses (["all","col","flexItem"]++tags)
 
 lmFlexCol::(RD.PostBuild t m ,SupportsLayoutM t m)=>Int->LayoutM t m a->LayoutM t m a
