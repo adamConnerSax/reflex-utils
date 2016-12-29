@@ -12,22 +12,21 @@
 
 module Reflex.Dom.Contrib.Layout.Types where
 
-import Control.Lens (makeLenses,makeClassy,use)
+import Control.Lens (makeClassy,use)
 import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
-import Control.Monad.State  (MonadState)
-import Control.Monad.Reader (ask,lift)
+--import Control.Monad.State  (MonadState)
+import Control.Monad.Reader (ReaderT,ask,lift)
 
-import qualified Control.Category as C
+--import qualified Control.Category as C
 import qualified Reflex as R
 import Reflex.Dom ((=:))
 import qualified Reflex.Dom as RD 
 import qualified Data.Map as M
 import qualified Data.Text as T
-import qualified GHCJS.DOM.Element as E
+--import qualified GHCJS.DOM.Element as E
 import Control.Monad.State (StateT)
-import Control.Monad.Reader (ReaderT)
 import Data.Monoid ((<>))
 import qualified Data.Sequence as S
 --import Data.Default (Default(..))
@@ -36,7 +35,7 @@ class IsCssClass a where
   toCssString::a->T.Text
   
 toStaticAttributes::IsCssClass a=>a->M.Map T.Text T.Text
-toStaticAttributes x = ("class" =: toCssString x)
+toStaticAttributes x = "class" =: toCssString x
 
 data CssClass = CssClass T.Text deriving (Show,Ord,Eq)
 instance IsCssClass CssClass where
@@ -125,7 +124,7 @@ newtype LayoutM t m a = LayoutM { unLayoutM::StateT (LayoutS t) (ReaderT (Layout
 askLayoutConfig::Monad m=>LayoutM t m (LayoutConfig t)
 askLayoutConfig = LayoutM $ lift ask
 
-askClassMap::Monad m=>LayoutM t m (LayoutClassMap)
+askClassMap::Monad m=>LayoutM t m LayoutClassMap
 askClassMap = LayoutM $ use lsClassMap
 
 askDynamicCssMap::(R.Reflex t, Monad m)=>LayoutM t m (LayoutClassDynamicMap t)
