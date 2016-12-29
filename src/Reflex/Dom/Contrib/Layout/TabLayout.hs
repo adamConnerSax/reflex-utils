@@ -39,8 +39,11 @@ tabCss :: Css
 tabCss = do
   ".tabbed-area" ? do
     "display" -: "flex"
+    "display" -: "-webkit-flex"
     "flex-direction" -: "column"
+    "-webkit-flex-direction" -: "column"
     "flex-wrap" -: "wrap"
+    "-webkit-flex-wrap" -: "wrap"
     label ? do
       border solid (px 1) (grayish 211)
       padding nil (em 0.7) nil (em 0.7)
