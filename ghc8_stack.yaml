@@ -1,7 +1,7 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: lts-6.27
+resolver: lts-7.15
 
 # Local packages, usually specified by relative directory name
 packages:
@@ -44,23 +44,15 @@ packages:
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
-  - jsaddle-dom-0.7.1.0
-  - ghcjs-dom-0.7.0.4
-  - ghcjs-dom-jsaddle-0.7.0.3
-  - jsaddle-0.8.0.1
-  - jsaddle-wkwebview-0.8.1.0
-  - prim-uniq-0.1.0.1
-  - ref-tf-0.4.0.1
-  - zenc-0.1.1
-  - cabal-macosx-0.2.3.4
-  - Cabal-1.24.2.0
-  - aeson-1.0.2.1
-  - bifunctors-5.4.1
-  - dependent-map-0.2.4.0
-  - mmorph-1.0.9
-  - semigroupoids-5.1
-  - these-0.7.3
-  - transformers-compat-0.5.1.4  
+ - cabal-macosx-0.2.3.5
+ - ghcjs-dom-0.7.0.4
+ - ghcjs-dom-jsaddle-0.7.0.3
+ - jsaddle-0.8.0.1
+ - jsaddle-dom-0.7.1.0
+ - jsaddle-wkwebview-0.8.2.0
+ - prim-uniq-0.1.0.1
+ - ref-tf-0.4.0.1
+ - zenc-0.1.1
    
 # Override default flag values for local packages and extra-deps
 flags:
