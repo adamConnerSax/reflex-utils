@@ -29,7 +29,7 @@ import           Data.Time.Clock                       (UTCTime (..))
 import           Reflex
 import qualified Reflex.Dom.Contrib.Widgets.Common     as RDC
 import           Reflex.Dom.Core
-import           Reflex.Dynamic.TH
+--import           Reflex.Dynamic.TH
 
 import           GHCJS.DOM.Types                       (JSM)
 import           Reflex.Dom.Contrib.Layout.ClayUtils   (cssToBS)
