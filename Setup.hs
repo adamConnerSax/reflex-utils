@@ -1,6 +1,8 @@
 import           Distribution.MacOSX
 import           Distribution.Simple
 
+
+
 main :: IO ()
 main = defaultMainWithHooks $ simpleUserHooks {
          postBuild = appBundleBuildHook guiApps -- no-op if not MacOS X
@@ -21,6 +23,3 @@ guiApps = [
       [] -- No other binaries.
       DoNotChase -- Try changing to ChaseWithDefaults
     ]
-
-
-

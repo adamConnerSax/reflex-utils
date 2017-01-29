@@ -16,12 +16,11 @@ cabal-version:       >=1.10
 flag wkwebview
   description: Use wkWebview control rather than ghcjs
   default: True
-
+  
 custom-setup
   setup-depends: base >= 4.6,
                  cabal-macosx >= 0.2.3.4 && < 0.3,
                  Cabal >= 1.24.2 && < 1.25
-
                      
 library
   hs-source-dirs: src
@@ -48,6 +47,7 @@ library
                 Reflex.Dom.Contrib.SimpleForm.Instances.Extras
   if flag(wkwebview)
    build-depends: ghcjs-dom == 0.7.*
+                , jsaddle
   else
    build-depends: ghcjs-dom
   build-depends:       base >= 4.7 && < 5
