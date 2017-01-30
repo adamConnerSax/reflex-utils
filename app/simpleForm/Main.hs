@@ -42,6 +42,10 @@ import           Reflex.Dom.Contrib.Layout.Types       (CssClass (..),
 import           Language.Javascript.JSaddle.WKWebView (run)
 #endif
 
+#ifdef USE_WARP
+import           Language.Javascript.JSaddle.Warp (run)
+#endif
+
 --import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
 import           Reflex.Dom.Contrib.SimpleForm
 --import DataBuilder
@@ -170,7 +174,14 @@ simpleFormMain  = mainWidgetWithCss (flexCssBS
 #ifdef USE_WKWEBVIEW
 main::IO ()
 main = run simpleFormMain
-#else
+#endif
+
+#ifdef USE_WARP
+main::IO ()
+main = run 3702 simpleFormMain
+#endif
+
+#ifdef USE_GHCJS
 main :: IO ()
 main = simpleFormMain
 #endif

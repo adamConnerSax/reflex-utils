@@ -47,6 +47,10 @@ import Data.Proxy (Proxy(Proxy))
 import Language.Javascript.JSaddle.WKWebView (run)
 #endif
 
+#ifdef USE_WARP
+import Language.Javascript.JSaddle.Warp (run)
+#endif
+
 {-
 -- This is what the GridConfig looks like for a particular Css Grid Framework
 
@@ -265,7 +269,14 @@ layoutMain = do
 #ifdef USE_WKWEBVIEW
 main::IO ()
 main = run layoutMain
-#else
+#endif
+
+#ifdef USE_WARP
+main::IO ()
+main = run 3709 layoutMain
+#endif
+
+#ifdef USE_GHCJS
 main :: IO ()
 main = layoutMain
 #endif

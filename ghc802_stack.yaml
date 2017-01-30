@@ -54,6 +54,7 @@ extra-deps:
  - jsaddle-0.8.0.1
  - jsaddle-dom-0.7.1.0
  - jsaddle-wkwebview-0.8.2.0
+ - jsaddle-warp-0.8.2.0
  - prim-uniq-0.1.0.1
  - ref-tf-0.4.0.1
  - zenc-0.1.1
@@ -64,7 +65,8 @@ flags:
   reflex:
    use-template-haskell: false 
   reflex-utils:
-   wkwebview: true
+   wkwebview: false
+   warp: true
    
 # Extra package databases containing global packages
 extra-package-dbs: []

@@ -49,6 +49,7 @@ extra-deps:
   - ghcjs-dom-jsaddle-0.7.0.3
   - jsaddle-0.8.0.1
   - jsaddle-wkwebview-0.8.1.0
+  - jsaddle-warp-0.8.2.0
   - prim-uniq-0.1.0.1
   - ref-tf-0.4.0.1
   - zenc-0.1.1
