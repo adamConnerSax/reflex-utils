@@ -16,6 +16,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , dynMaybeNothing
        , joinDynOfDynMaybe
        , makeSimpleForm
+       , makeSimpleForm'
        , observeDynamic
        , observeDynMaybe
        , observeWidget
@@ -147,6 +148,20 @@ asSimpleObserver observerClass = RD.divClass (toCssString observerClass)
 makeSimpleForm::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->Maybe a->m (DynMaybe t a)
 makeSimpleForm cfg formClass ma =
   asSimpleForm formClass $ runSimpleFormR cfg $ B.buildA Nothing ma
+
+
+makeSimpleForm'::(SimpleFormC e t m,
+                  B.Builder (SimpleFormR e t m) a)=>
+                 e-> -- form config
+                 CssClass-> -- css class for form
+                 Maybe a-> -- initial values
+                 m (RD.Event t ())-> -- submit control
+                 m (RD.Event t a)
+makeSimpleForm' cfg formClass ma submitWidget = do
+  dma <- unDynMaybe <$> makeSimpleForm cfg formClass ma
+  submitEv <- submitWidget
+  return $ RD.attachPromptlyDynWithMaybe const dma submitEv -- fires when control does but only if form entries are valid
+
 
 observeDynamic::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->R.Dynamic t a->m (DynMaybe t a)
 observeDynamic cfg observerClass aDyn = observeDynMaybe cfg observerClass $ DynMaybe $ fmap Just aDyn

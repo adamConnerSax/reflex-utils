@@ -11,9 +11,7 @@ module Main where
 
 import           Control.Monad                         (foldM)
 import           Control.Monad.IO.Class                as IOC (MonadIO)
-import           Control.Monad.Ref                     (Ref)
-import           Control.Monad.Trans                   (MonadTrans)
-import           Data.FileEmbed
+--import           Data.FileEmbed
 import           Data.Monoid                           ((<>))
 import qualified GHC.Generics                          as GHC
 import           Prelude                               hiding (div, rem, span)
@@ -43,12 +41,31 @@ import           Language.Javascript.JSaddle.WKWebView (run)
 #endif
 
 #ifdef USE_WARP
-import           Language.Javascript.JSaddle.Warp (run)
+import           Language.Javascript.JSaddle.Warp      (run)
 #endif
 
 --import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
 import           Reflex.Dom.Contrib.SimpleForm
 --import DataBuilder
+
+
+-- a simple structure
+data User = User { name::String, email::String, age::Int } deriving (GHC.Generic,Show)
+instance Generic User
+instance HasDatatypeInfo User
+instance SimpleFormC e t m=>Builder (SimpleFormR e t m) User where
+  buildA mFN = liftF formRow . gBuildA mFN
+
+
+buttonNoSubmit'::DomBuilder t m=>T.Text -> m (Event t ())
+buttonNoSubmit' t = (domEvent Click . fst) <$> elAttr' "button" ("type" =: "button") (text t)
+
+testUserForm::(SimpleFormC e t m, MonadIO (PushM t))=>e->m ()
+testUserForm cfg = do
+  newUserEv <- flexFillR $ makeSimpleForm' cfg (CssClass "sf-form") Nothing (buttonNoSubmit' "submit")
+  curUserDyn <- (fmap (T.pack . show)) <$> foldDyn const (User "" "" 0) newUserEv
+  dynText curUserDyn
+
 
 -- Some types to demonstrate what we can make into a form
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
@@ -136,6 +153,8 @@ flowTestWidget n = do
 
 test::(SimpleFormC e t m, MonadIO (PushM t))=>e->m ()
 test cfg = do
+  testUserForm cfg
+  el "p" blank
   cDynM<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynMaybe cDynM)
@@ -146,6 +165,9 @@ test cfg = do
   el "p" blank
   _ <- observeFlow cfg (CssClass "sf-form") (CssClass "sf-observer") flowTestWidget 2
   return ()
+
+
+
 
 {-
    NB: AllDefault module exports DefSFCfg which is an instance of SimpleFormConfiguration with all the specific failure, sum and styling.

@@ -1,7 +1,7 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: nightly-2017-01-27
+resolver: lts-6.27
 
 # Local packages, usually specified by relative directory name
 packages:
@@ -27,13 +27,11 @@ packages:
 #  extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex
-    commit: "daec2bbc6e098ce9c2056cfeea286de67135d85f"
-#    commit: "4eb436e0d94418c11e4c06be7fa982d59629c9a9"
+    commit: "4eb436e0d94418c11e4c06be7fa982d59629c9a9"
   extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex-dom
-    commit: "402ad561d30fb1daa291e7284d4ee05d825883a2"
-#    commit: "7f92ddfebf9a090e204edfd2749a512162d4e3c6"
+    commit: "7f92ddfebf9a090e204edfd2749a512162d4e3c6"
   extra-dep: true
   subdirs:
   - reflex-dom-core
@@ -44,29 +42,31 @@ packages:
   extra-dep: true
 - '.'
 
-allow-newer: true
-
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
- - cabal-macosx-0.2.3.5
- - ghcjs-dom-0.7.0.4
- - ghcjs-dom-jsaddle-0.7.0.3
- - jsaddle-0.8.0.1
- - jsaddle-dom-0.7.1.0
- - jsaddle-wkwebview-0.8.2.0
- - jsaddle-warp-0.8.2.0
- - prim-uniq-0.1.0.1
- - ref-tf-0.4.0.1
- - zenc-0.1.1
- - dependent-sum-template-0.0.0.5
- 
+  - jsaddle-dom-0.7.1.0
+  - ghcjs-dom-0.7.0.4
+  - ghcjs-dom-jsaddle-0.7.0.3
+  - jsaddle-0.8.0.1
+  - jsaddle-wkwebview-0.8.1.0
+  - jsaddle-warp-0.8.2.0
+  - prim-uniq-0.1.0.1
+  - ref-tf-0.4.0.1
+  - zenc-0.1.1
+  - cabal-macosx-0.2.3.4
+  - Cabal-1.24.2.0
+  - aeson-1.0.2.1
+  - bifunctors-5.4.1
+  - dependent-map-0.2.4.0
+  - mmorph-1.0.9
+  - semigroupoids-5.1
+  - these-0.7.3
+  - transformers-compat-0.5.1.4  
+   
 # Override default flag values for local packages and extra-deps
 flags:
-  reflex:
-   use-template-haskell: false 
-  reflex-utils:
-   wkwebview: false
-   warp: true
+ reflex-utils:
+   wkwebview: true
    
 # Extra package databases containing global packages
 extra-package-dbs: []
