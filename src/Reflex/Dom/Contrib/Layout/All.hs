@@ -68,8 +68,8 @@ import           Reflex.Dom.Contrib.Layout.Events      (addKeyedClassesBelow, ad
 
 
 import           Reflex.Dom.Contrib.Layout.TabLayout   (TabInfo (..),
-                                                        dynamicTabbedLayout,
-                                                        staticTabbedLayout,
-                                                        tabCssBS)
+                                                         dynamicTabbedLayout,
+                                                         staticTabbedLayout,
+                                                         tabCssBS)
 
 import           Reflex.Dom.Contrib.Layout.ClayUtils   (cssToBS)

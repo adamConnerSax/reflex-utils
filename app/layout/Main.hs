@@ -11,7 +11,6 @@ module Main where
 
 import Reflex.Dom.Contrib.Layout.All
 import Reflex.Dom.Contrib.Layout.LayoutM (SupportsLayoutM,runLayoutM)
---import Reflex.Dom.Contrib.Layout.GridConfigs
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexSizedItem,flexRow,flexCol,flexItem,flexCssBS)
 import qualified Reflex.Dom.Contrib.Layout.OptimizedFlexLayout as OF
 import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$))
@@ -246,11 +245,12 @@ laidOut w = mainWidgetWithCss allCss $
 
 tabbedWidget::(SupportsLayoutM t m, PostBuild t m, HasWebView m,
                {- MonadAsyncException m,-} MonadIO (PushM t),
-               MonadJSM m, MonadJSM (Performable m),MonadJSM (LayoutM t m))=>m (Dynamic t [()])
+               MonadJSM m, MonadJSM (Performable m),MonadJSM (LayoutM t m))=>m ([()])
 tabbedWidget = do
   el "p" $ text ""
   el "br" $ blank
-  dynamicTabbedLayout sfTab (constDyn [sfTab,optFlexTab,boxesTab]) 
+--  dynamicTabbedLayout sfTab (constDyn [sfTab,optFlexTab,boxesTab])
+  staticTabbedLayout sfTab [sfTab,optFlexTab,boxesTab]
 
 allCss = tabCssBS
          <> flexCssBS

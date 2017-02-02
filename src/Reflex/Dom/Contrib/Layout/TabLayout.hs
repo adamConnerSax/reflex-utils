@@ -1,4 +1,3 @@
-{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -88,17 +87,19 @@ data TabInfo t m a = TabInfo { tabID::T.Text,
                                tabName::T.Text,
                                tabWidget::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a }
 
-
-staticTabbedLayout::(MonadIO (R.PushM t),RD.MonadWidget t m)=>TabInfo t m a->[TabInfo t m a]->m [a]
+staticTabbedLayout::(MonadIO (R.PushM t),RD.MonadWidget t m,Traversable f)=>TabInfo t m a->f (TabInfo t m a)->m (f a)
 staticTabbedLayout curTab tabs = RD.divClass "tabbed-area" $ do
   let curTabchecked tab = if tab==curTab then "checked" RD.=: "" else M.empty
       tabInput t@(TabInfo tabId _ _ )= RD.elAttr "input" (("id" RD.=: tabId)
                                                         <> ("type" RD.=: "radio")
                                                         <> ("name" RD.=: "grp")
                                                         <> curTabchecked t) RD.blank
-      tabLabel (TabInfo tabId tabName _) = RD.elAttr "label" ("for" RD.=: tabId) $ RD.text tabName 
+--      tabLabelClickedEv (TabInfo tabId tabName _) = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "label" ("for" RD.=: tabId) $ RD.text tabName
+      tabLabel (TabInfo tabId tabName _) = RD.elAttr "label" ("for" RD.=: tabId) $ RD.text tabName
+      tabEv ti = tabInput ti >> tabLabel ti
       contentDiv (TabInfo _ _ w) = RD.divClass "tab-div" w
-  mapM (\t -> tabInput t >> tabLabel t >> contentDiv t) tabs
+--  (traverse tabEv tabs) >> traverse contentDiv tabs
+  traverse (\t -> tabEv t >> contentDiv t) tabs
 --  return ()
 
 
