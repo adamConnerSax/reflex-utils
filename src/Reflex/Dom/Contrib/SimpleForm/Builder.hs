@@ -12,13 +12,23 @@
 {-# LANGUAGE TypeFamilies           #-}
 module Reflex.Dom.Contrib.SimpleForm.Builder
        (
+         {-
          DynMaybe(..)
        , dynMaybeNothing
        , joinDynOfDynMaybe
+-}
+         SimpleFormError(..)
+       , SimpleFormErrors
+       , DynValidation(..)
+       , accValidation
+       , avToMaybe
+       , maybeToAV
+       , dynValidationNothing
+       , joinDynOfDynValidation
        , makeSimpleForm
        , makeSimpleForm'
        , observeDynamic
-       , observeDynMaybe
+       , observeDynValidation
        , observeWidget
        , observeFlow
        , deriveSFRowBuilder
@@ -83,11 +93,13 @@ import           Control.Monad.Reader            (ReaderT, ask, runReaderT)
 import qualified Data.Map                        as M
 import           Data.Maybe                      (fromMaybe, isJust)
 import           Data.Monoid                     ((<>))
+import           Data.Semigroup                  (Semigroup)
 import qualified Data.Text                       as T
+import           Data.Validation                 (AccValidation (..))
 import           Language.Haskell.TH
 
 
-
+{-
 newtype DynMaybe t a = DynMaybe { unDynMaybe::R.Dynamic t (Maybe a) }
 
 dynMaybeNothing::R.Reflex t => DynMaybe t a
@@ -100,16 +112,54 @@ instance R.Reflex t=>Functor (DynMaybe t) where
   fmap f dma = DynMaybe $ fmap (fmap f) (unDynMaybe dma)
 
 instance R.Reflex t =>Applicative (DynMaybe t) where
-  pure x = DynMaybe $ R.constDyn (Just x)
+  pure = DynMaybe . R.constDyn . Just
   dmf <*> dma = DynMaybe $ R.zipDynWith (<*>) (unDynMaybe dmf) (unDynMaybe dma)
 
+-- This monad instance isn't necessary.  And we don't have it for DynValidation because the Applicative and Monad instances would fail to satisfy <*> = `ap`
 instance R.Reflex t=>Monad (DynMaybe t) where
   return = pure
   dma >>= f =  DynMaybe $ do
     ma <- unDynMaybe dma
     unDynMaybe $ maybe dynMaybeNothing f ma
 
-type SFRW e t m a = ReaderT e m (DynMaybe t a)
+-}
+data SimpleFormError  = SFNothing | SFNoParse T.Text | SFInvalid T.Text deriving (Show,Eq)
+
+type SimpleFormErrors = [SimpleFormError]
+
+accValidation::(err->b)->(a->b)->AccValidation err a->b
+accValidation f _ (AccFailure e) = f e
+accValidation _ f (AccSuccess a) = f a
+
+avToMaybe::AccValidation e a->Maybe a
+avToMaybe (AccFailure _) = Nothing
+avToMaybe (AccSuccess a) = Just a
+
+maybeToAV::Maybe a->AccValidation SimpleFormErrors a
+maybeToAV Nothing = AccFailure [SFNothing]
+maybeToAV (Just a) = AccSuccess a
+
+newtype DynValidation t a = DynValidation { unDynValidation::R.Dynamic t (AccValidation SimpleFormErrors a) }
+
+dynValidationNothing::R.Reflex t=>DynValidation t a
+dynValidationNothing = DynValidation $ R.constDyn (AccFailure [SFNothing])
+
+dynValidationErr::R.Reflex t=>SimpleFormErrors->DynValidation t a
+dynValidationErr = DynValidation . R.constDyn . AccFailure
+
+joinDynOfDynValidation::R.Reflex t =>R.Dynamic t (DynValidation t a) -> DynValidation t a
+joinDynOfDynValidation = DynValidation . join . (fmap unDynValidation)
+
+instance R.Reflex t=>Functor (DynValidation t) where
+  fmap f dva = DynValidation $ fmap (fmap f) (unDynValidation dva)
+
+instance R.Reflex t=>Applicative (DynValidation t) where
+  pure = DynValidation . R.constDyn . AccSuccess
+  dvf <*> dva = DynValidation $ R.zipDynWith (<*>) (unDynValidation dvf) (unDynValidation dva)
+
+-- no Monad instance because it would fail to satisfy <*> = `ap' due to that being impossible for AccValidation
+
+type SFRW e t m a = ReaderT e m (DynValidation t a)
 
 -- This is necessary because this functor and applicative are different from that of SFRW
 newtype SimpleFormR e t m a = SimpleFormR { unSF::SFRW e t m a }
@@ -124,19 +174,18 @@ instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR e t m) where
     dmA <- unSF sfrA
     return $ dmF <*> dmA
 
-runSimpleFormR::Monad m=>e->SimpleFormR e t m a->m (DynMaybe t a)
+runSimpleFormR::Monad m=>e->SimpleFormR e t m a->m (DynValidation t a)
 runSimpleFormR cfg sfra = runReaderT (unSF sfra) cfg
 
 type SimpleFormC e t m = (RD.MonadWidget t m,
                           SimpleFormBuilderFunctions e t m,
                           SimpleFormLayoutFunctions e m)
 
-
 switchingSFR::SimpleFormC e t m=>(a->SimpleFormR e t m b)->a->R.Event t a->SimpleFormR e t m b
 switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
   cfg <- ask
   let f = runSimpleFormR cfg . widgetGetter
-  lift $ joinDynOfDynMaybe <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)
+  lift $ joinDynOfDynValidation <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)
 
 asSimpleForm::RD.MonadWidget t m=>CssClass->m a->m a
 asSimpleForm formClass = RD.elClass "form" (toCssString formClass)
@@ -145,10 +194,9 @@ asSimpleObserver::RD.MonadWidget t m=>CssClass->m a->m a
 asSimpleObserver observerClass = RD.divClass (toCssString observerClass)
 
 
-makeSimpleForm::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->Maybe a->m (DynMaybe t a)
+makeSimpleForm::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->Maybe a->m (DynValidation t a)
 makeSimpleForm cfg formClass ma =
   asSimpleForm formClass $ runSimpleFormR cfg $ B.buildA Nothing ma
-
 
 makeSimpleForm'::(SimpleFormC e t m,
                   B.Builder (SimpleFormR e t m) a)=>
@@ -158,37 +206,39 @@ makeSimpleForm'::(SimpleFormC e t m,
                  m (RD.Event t ())-> -- submit control
                  m (RD.Event t a)
 makeSimpleForm' cfg formClass ma submitWidget = do
-  dma <- unDynMaybe <$> makeSimpleForm cfg formClass ma
+  dva <- unDynValidation <$> makeSimpleForm cfg formClass ma
   submitEv <- submitWidget
-  return $ RD.attachPromptlyDynWithMaybe const dma submitEv -- fires when control does but only if form entries are valid
+  return $ RD.attachPromptlyDynWithMaybe const (avToMaybe <$> dva) submitEv -- fires when control does but only if form entries are valid
 
 
-observeDynamic::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->R.Dynamic t a->m (DynMaybe t a)
-observeDynamic cfg observerClass aDyn = observeDynMaybe cfg observerClass $ DynMaybe $ fmap Just aDyn
+observeDynamic::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->R.Dynamic t a->m (DynValidation t a)
+observeDynamic cfg observerClass aDyn = observeDynValidation cfg observerClass $ DynValidation $ fmap AccSuccess aDyn
 
-observeDynMaybe::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->DynMaybe t a->m (DynMaybe t a)
-observeDynMaybe cfg observerClass aDynM =
+observeDynValidation::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->DynValidation t a->m (DynValidation t a)
+observeDynValidation cfg observerClass aDynM =
   asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
-    let makeForm = maybe (return dynMaybeNothing) (unSF . buildA Nothing . Just)
-        builtDyn = fmap makeForm (unDynMaybe aDynM)  -- Dynamic t (ReaderT e m (DynMaybe t a))
-    newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
-    lift $ joinDynOfDynMaybe <$> R.holdDyn aDynM newDynEv --R.foldDyn (\_ x-> x) aDynM newDynEv -- DynMaybe t a
+    let makeForm = accValidation (return . dynValidationErr) (unSF . buildA Nothing . Just)
+        builtDyn = fmap makeForm (unDynValidation aDynM)  -- Dynamic t (ReaderT e m (DynValidation t a))
+    newDynEv <- RD.dyn builtDyn -- Event t (DynValidation t a)
+    lift $ joinDynOfDynValidation <$> R.holdDyn aDynM newDynEv --R.foldDyn (\_ x-> x) aDynM newDynEv -- DynValidation t a
 
 
-observeWidget::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->m a->m (DynMaybe t a)
+observeWidget::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>e->CssClass->m a->m (DynValidation t a)
 observeWidget cfg observerClass wa =
   asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
   a <- lift wa
   unSF . buildA Nothing . Just $ a
 
 
-observeFlow::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) a,B.Builder (SimpleFormR e t m) b)=>e->CssClass->CssClass->(a->m b)->a->m (DynMaybe t b)
-observeFlow cfg formClass observerClass f a = runSimpleFormR cfg . SimpleFormR  $ do
-  let initialWidget = f a
+observeFlow::(SimpleFormC e t m
+             , B.Builder (SimpleFormR e t m) a
+             , B.Builder (SimpleFormR e t m) b)=>e->CssClass->CssClass->(a->m b)->a->m (DynValidation t b)
+observeFlow cfg formClass observerClass flow initialA = runSimpleFormR cfg . SimpleFormR  $ do
+  let initialWidget = flow initialA
       obF = observeWidget cfg observerClass
-  dma <- liftLF (asSimpleForm formClass) (unSF $ buildA Nothing (Just a)) -- DynMaybe t a
-  dwb <- lift $ R.foldDynMaybe (\ma _ -> f <$> ma) initialWidget (R.updated $ unDynMaybe dma) -- Dynamic t (m b)
-  lift $ joinDynOfDynMaybe <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
+  dva <- liftLF (asSimpleForm formClass) (unSF $ buildA Nothing (Just initialA)) -- DynValidation t a
+  dwb <- lift $ R.foldDynMaybe (\ma _ -> flow <$> ma) initialWidget (avToMaybe <$> (R.updated $ unDynValidation dva)) -- Dynamic t (m b)
+  lift $ joinDynOfDynValidation <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
 
 
 type SFLayoutF e m a = ReaderT e m a -> ReaderT e m a
@@ -305,11 +355,12 @@ cssClassAttr::CssClasses->M.Map T.Text T.Text
 cssClassAttr x = "class" RD.=: toCssString x
 
 sfAttrs::(RD.MonadHold t m, R.Reflex t, SimpleFormLayoutFunctions e m)
-         =>DynMaybe t a->Maybe FieldName->Maybe T.Text->ReaderT e m (R.Dynamic t (M.Map T.Text T.Text))
+         =>DynValidation t a->Maybe FieldName->Maybe T.Text->ReaderT e m (R.Dynamic t (M.Map T.Text T.Text))
 sfAttrs mDyn mFN mTypeS = sfAttrs' mDyn mFN mTypeS (CssClasses [])
 
 sfAttrs'::(RD.MonadHold t m, R.Reflex t, SimpleFormLayoutFunctions e m)
-         =>DynMaybe t a->Maybe FieldName->Maybe T.Text->CssClasses->ReaderT e m (R.Dynamic t (M.Map T.Text T.Text))
+         =>DynValidation t a->Maybe FieldName->Maybe T.Text->CssClasses->ReaderT e m (R.Dynamic t (M.Map T.Text T.Text))
+
 sfAttrs' mDyn mFN mTypeS fixedCss = do
   validClasses <- validItemStyle
   invalidClasses <- invalidItemStyle
@@ -321,7 +372,9 @@ sfAttrs' mDyn mFN mTypeS fixedCss = do
       observerAttr = titleAttr title <> cssClassAttr (observerClasses <> fixedCss)
   lift $ if isObserver
          then return $ R.constDyn observerAttr
-         else return $ fmap (maybe invalidAttrs (const validAttrs)) (unDynMaybe mDyn)
+         else R.forDyn (unDynValidation mDyn) $ \x -> case x of
+                                                        (AccSuccess _)-> validAttrs
+                                                        (AccFailure _)->invalidAttrs
 
 
 componentTitle::Maybe FieldName->Maybe T.Text->T.Text

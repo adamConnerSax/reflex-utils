@@ -51,6 +51,36 @@ import qualified Data.Map                        as M
 import           Data.Maybe                      (catMaybes, fromMaybe)
 import           Data.Monoid                     ((<>))
 import qualified Data.Text                       as T
+import qualified GHCJS.DOM.Element               as E
+import           GHCJS.DOM.Types                 (IsElement)
+import qualified Reflex                          as R
+import qualified Reflex.Class                    as RC
+import qualified Reflex.Dom                      as RD
+import qualified Reflex.Dom.Builder.Class        as RDB
+import           Reflex.Dom.Contrib.Layout.Types
+import qualified Reflex.Dom.Old                  as RD
+
+
+import           Control.Lens                    (makeClassy, makeLenses, set,
+                                                  use, view, (%=), (.=), (.~),
+                                                  (<>=), (<>~), (^.))
+import           Control.Monad                   (forM, forM_, mapM_, sequence)
+import           Control.Monad.Fix               (MonadFix)
+import           Control.Monad.IO.Class          (MonadIO, liftIO)
+import           Control.Monad.Reader            (MonadReader, ReaderT, ask,
+                                                  runReaderT)
+import           Control.Monad.State             (MonadState, StateT, get, lift,
+                                                  put, runStateT)
+import           Control.Monad.Trans             (MonadTrans)
+import           Data.List                       (foldl')
+import qualified Data.List.NonEmpty              as NE
+import qualified Data.Map                        as M
+import           Data.Maybe                      (catMaybes, fromJust)
+import           Data.Monoid                     ((<>))
+import           Data.String                     (unwords, words)
+import           Data.Traversable                (sequenceA)
+
+
 import           Reflex.Dom.Contrib.Layout.Types
 
 data LayoutNodeCss = LayoutNodeCss { _lncStatic::CssClasses, _lncDynamic::CssClasses }
@@ -165,6 +195,7 @@ instance MonadTransControl (LayoutM t) where
 
 --type SupportsImmediateDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref IO)
 
+
 --TriggerEvent makes me nervous
 type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, RC.MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref IO, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, RD.TriggerEvent t m, Ref (R.Performable m) ~ Ref IO, RD.HasWebView (R.Performable m), MonadAsyncException (R.Performable m), MonadRef (R.Performable m), R.MonadSample t (R.Performable m))
 
@@ -236,6 +267,7 @@ instance RD.HasWebView m => RD.HasWebView (LayoutM t m) where
 
 instance MonadJSM m => MonadJSM (LayoutM t m) where
   liftJSM' = liftLM . liftJSM'
+
 
 instance RD.HasJSContext m => RD.HasJSContext (LayoutM t m) where
   type JSContextPhantom (LayoutM t m) = RD.JSContextPhantom m

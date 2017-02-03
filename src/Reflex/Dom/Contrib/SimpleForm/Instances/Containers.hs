@@ -27,7 +27,7 @@ import Control.Lens ((%~))
 import Data.Proxy (Proxy(..))
 import Data.Default (def)
 import qualified Data.Text as T
-
+import Data.Validation (AccValidation(..))
 
 -- imports only to make instances
 import qualified Data.List as L
@@ -214,7 +214,7 @@ instance (SimpleFormC e t m,
 type BuildF e t m a = Maybe FieldName->Maybe a->SFRW e t m a
 
 -- This feels like a lot of machinery just to get removables...but it does work...
-newtype SSFR s e t m a = SSFR { unSSFR::StateT s (ReaderT e m) (DynMaybe t a) }
+newtype SSFR s e t m a = SSFR { unSSFR::StateT s (ReaderT e m) (DynValidation t a) }
 
 instance (R.Reflex t, R.MonadHold t m)=>Functor (SSFR s e t m) where
 --  fmap f ssfra = SSFR $ unSSFR ssfra >>= lift . lift . R.mapDyn (fmap f)
@@ -245,7 +245,7 @@ buildTraversableSFA'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Travers
 buildTraversableSFA' crI buildOne _ mfa =
   case mfa of
     Just fa -> unSF $ fromRep crI <$> traverse (liftF formRow . SimpleFormR . buildOne Nothing . Just) (toRep crI fa)
-    Nothing -> return dynMaybeNothing
+    Nothing -> return $ dynValidationNothing
 
 -- styled, in case we ever want an editable container without add/remove
 
@@ -264,20 +264,20 @@ buildSFContainer aI buildTr mFN mfa = mdo
   attrsDyn <- sfAttrs dmfa mFN Nothing
   let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
   dmfa <- formCol' attrsDyn $ layoutCollapsible "" CollapsibleStartsOpen $ mdo
-    dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) newSFREv)
-    let udmfa' = unDynMaybe dmfa'
+    dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynValidation <$> RD.widgetHold (buildTr mFN initial) newSFREv)
+    let udmfa' = unDynValidation dmfa'
         sizeDM = fmap (sizeFa aI) dmfa'
-        newSizeEv = R.updated . R.uniqDyn $ unDynMaybe sizeDM
-        resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> maybe Nothing (const mFa) ms) udmfa' newSizeEv
+        newSizeEv = R.updated . R.uniqDyn $ unDynValidation sizeDM
+        resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> accValidation (const Nothing) (const $ avToMaybe mFa) ms) udmfa' newSizeEv
           
     addEv <- formRow $  do
       let emptyB = unSF $ B.buildA Nothing Nothing
       -- we have to clear it once it's used. For now we replace it with a new one.
-      dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-      clickEv <-  layoutVC . itemR . lift $ containerActionButton "+" 
-      return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb)  clickEv -- only fires if button is clicked when mb is a Just.
+      dmb <- itemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
+      clickEv <-  layoutVC . itemR . lift $ buttonNoSubmit' "+" 
+      return $ R.attachPromptlyDynWithMaybe (\a b -> avToMaybe a) (unDynValidation dmb) clickEv -- only fires if button is clicked when mb is a Just.
         
-    let insert mfa' b = insertB aI <$> Just b <*> mfa'  
+    let insert vfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> vfa'  
         newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
         newSFREv = fmap (buildTr mFN . Just . toT aI) (R.leftmost [newFaEv,resizedFaEv]) -- Event t (SFRW e t m (g b))
     return dmfa'
@@ -289,32 +289,32 @@ buildSFContainer' aI buildTr mFN mfa = mdo
   attrsDyn <- sfAttrs dmfa mFN Nothing
   let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
   dmfa <- formCol' attrsDyn $ mdo
-    dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynMaybe <$> RD.widgetHold (buildTr mFN initial) newSFREv)
-    let udmfa' = unDynMaybe dmfa'
+    dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynValidation <$> RD.widgetHold (buildTr mFN initial) newSFREv)
+    let udmfa' = unDynValidation dmfa'
         sizeDM = fmap (sizeFa aI) dmfa'
-        newSizeEv = R.updated . R.uniqDyn $ unDynMaybe sizeDM
-        resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> maybe Nothing (const mFa) ms) udmfa' newSizeEv
+        newSizeEv = R.updated . R.uniqDyn $ unDynValidation sizeDM
+        resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> accValidation (const Nothing) (const $ avToMaybe mFa) ms) udmfa' newSizeEv
           
     addEv <- formRow $  do
       let emptyB = unSF $ B.buildA Nothing Nothing
       -- we have to clear it once it's used. For now we replace it with a new one.
-      dmb <- itemL $ joinDynOfDynMaybe <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-      clickEv <-  layoutVC . itemR . lift $ containerActionButton "+" 
-      return $ R.attachPromptlyDynWithMaybe const (unDynMaybe dmb)  clickEv -- only fires if button is clicked when mb is a Just.
+      dmb <- itemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
+      clickEv <-  layoutVC . itemR . lift $ buttonNoSubmit' "+" 
+      return $ R.attachPromptlyDynWithMaybe (\a b -> avToMaybe a) (unDynValidation dmb)  clickEv -- only fires if button is clicked when mb is a Just.
         
-    let insert mfa' b = insertB aI <$> Just b <*> mfa'  
+    let insert mfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> mfa'  
         newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
         newSFREv = fmap (buildTr mFN . Just . toT aI) (R.leftmost [newFaEv,resizedFaEv]) -- Event t (SFRW e t m (g b))
     return dmfa'
   return dmfa
 
 buildOneDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b)
-                   =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (ReaderT e m) (DynMaybe t b)
+                   =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (ReaderT e m) (DynValidation t b)
 buildOneDeletable dI mFN ma = liftLF' formRow $ do     
     (evs,curS) <- get
     dma <- lift . itemL . unSF $ B.buildA mFN ma
-    ev  <- lift . layoutVC . itemR . lift $ containerActionButton "-" 
-    let ev' = R.attachPromptlyDynWithMaybe (\ma' _ -> getKey dI <$> ma' <*> Just curS) (unDynMaybe dma) ev
+    ev  <- lift . layoutVC . itemR . lift $ buttonNoSubmit' "-" 
+    let ev' = R.attachPromptlyDynWithMaybe (\va' _ -> getKey dI <$> (avToMaybe va') <*> Just curS) (unDynValidation dma) ev
     put (ev':evs,updateS dI curS)
     return dma
 
@@ -322,16 +322,16 @@ buildOneDeletable dI mFN ma = liftLF' formRow $ do
 buildDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b, Traversable g)=>SFDeletableI g b k s->BuildF e t m (g b)
 buildDeletable dI _ mgb = 
   case mgb of
-    Nothing -> return dynMaybeNothing
+    Nothing -> return dynValidationNothing
     Just gb -> mdo
       let f gb' = do
             (dmgb',(evs,_)) <- runStateT (unSSFR $ traverse (SSFR . liftLF' formRow  . buildOneDeletable dI Nothing . Just) gb') ([],initialS dI)
             return  (dmgb',R.leftmost evs)
 --      (ddmgb,dEv) <- join $ R.splitDyn <$> RD.widgetHold (f gb) (f <$> newgbEv)
       (ddmgb,dEv) <- R.splitDynPure <$> RD.widgetHold (f gb) (f <$> newgbEv)
-      let dmgb = join (unDynMaybe <$> ddmgb)
-          newgbEv = R.attachPromptlyDynWithMaybe (\mgb' key-> delete dI key <$> mgb') dmgb (R.switchPromptlyDyn dEv)
-      return $ DynMaybe dmgb
+      let dmgb = join (unDynValidation <$> ddmgb)
+          newgbEv = R.attachPromptlyDynWithMaybe (\mgb' key-> delete dI key <$> (avToMaybe mgb')) dmgb (R.switchPromptlyDyn dEv)
+      return $ DynValidation dmgb
 
 {- This fails with ambiguous types, because TR and E are not injective.  Why doesn't ScopedTypeVariables help?
 class SFAppendable fa where

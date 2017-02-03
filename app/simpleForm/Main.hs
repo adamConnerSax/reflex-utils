@@ -7,11 +7,13 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
+
 module Main where
 
 import           Control.Monad                         (foldM)
 import           Control.Monad.IO.Class                as IOC (MonadIO)
 --import           Data.FileEmbed
+import           Control.Lens.Iso                      (iso)
 import           Data.Monoid                           ((<>))
 import qualified GHC.Generics                          as GHC
 import           Prelude                               hiding (div, rem, span)
@@ -23,6 +25,8 @@ import qualified Data.Sequence                         as Seq
 import qualified Data.Text                             as T
 import           Data.Time.Calendar                    (Day (..), fromGregorian)
 import           Data.Time.Clock                       (UTCTime (..))
+import           Data.Validation                       (AccValidation (..))
+
 
 import           Reflex
 import qualified Reflex.Dom.Contrib.Widgets.Common     as RDC
@@ -69,12 +73,37 @@ testUserForm cfg = do
 
 -- Some types to demonstrate what we can make into a form
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
+
 data Shape = Square | Circle | Triangle deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
+
 data DateOrDateTime = D Day | DT UTCTime deriving (Show)
-data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) deriving (Show,GHC.Generic)
+
+-- Anything with a Read instance can be built using buildReadMaybe
+data ReadableType = RTI Int | RTS String deriving (Show,Read)
+instance SimpleFormC e t m=>Builder (SimpleFormR e t m) ReadableType where
+  buildA = buildReadMaybe
+
+--It's easy to add validation (via newtype wrapepr) for things isomorphic to already buildable things
+newtype Age = Age { unAge::Int }
+instance Show Age where
+  show = show . unAge
+
+validAge::Age->Either T.Text Age
+validAge a@(Age x) = if (x >= 0) then Right a else Left "Age must be > 0"
+
+instance SimpleFormC e t m => Builder (SimpleFormR e t m) Age where
+  buildA = buildValidated validAge unAge Age
+
+--We'll put these all in a Sum type to show how the form building handles that
+data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType | AA Age deriving (Show,GHC.Generic)
+
+--And then put those sum types in some other containerized contexts
 data B = B { int::Int, listOfA::[A] } deriving (Show,GHC.Generic)
+
 newtype MyMap = MyMap { map_String_B::M.Map String B } deriving (Show,GHC.Generic)
+
 data BRec = BRec { oneB::B, seqOfA::Seq.Seq A, hashSetOfString::HS.HashSet String } deriving (Show)
+
 data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Generic)
 
 
@@ -147,8 +176,9 @@ c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.emp
 flowTestWidget::MonadWidget t m=>Int->m (Dynamic t String)
 flowTestWidget n = do
   text "Are all these checked?"
-  boolDyns <- sequence $ take n $ Prelude.repeat (RDC._hwidget_value <$> RDC.htmlCheckbox (RDC.WidgetConfig never False (constDyn mempty)))
+  boolDyns <- sequence $ take n $ Prelude.repeat (RDC._hwidget_value <$> RDC.htmlCheckbox (RDC.WidgetConfig never True (constDyn mempty)))
   allTrueDyn <- foldM (\x bDyn -> combineDyn (&&) x bDyn) (constDyn True) boolDyns
+--  let allTrueDyn = foldl' (\x bDyn -> zipDynWith (&&) x bDyn) (constDyn True) boolDyns
   forDyn allTrueDyn $ \b -> if b then "All Checked!" else "Some Unchecked."
 
 test::(SimpleFormC e t m, MonadIO (PushM t))=>e->m ()
@@ -157,11 +187,10 @@ test cfg = do
   el "p" blank
   cDynM<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
   el "p" $ text "C from form:"
-  dynText ((T.pack . ppShow) <$> unDynMaybe cDynM)
---  mapDyn ppShow cDynM >>= dynText
+  dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed C:"
   el "p" blank
-  _ <- flexFillR $ observeDynMaybe cfg (CssClass "sf-observer") cDynM
+  _ <- flexFillR $ observeDynValidation cfg (CssClass "sf-observer") cDynM
   el "p" blank
   _ <- observeFlow cfg (CssClass "sf-form") (CssClass "sf-observer") flowTestWidget 2
   return ()
