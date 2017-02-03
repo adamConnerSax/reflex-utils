@@ -216,7 +216,7 @@ optFlexWidget = do
       r "Row 3"
 -}
 
-optFlexTab::(SupportsLayoutM t m{-, MonadAsyncException m -})=>TabInfo t m ()
+optFlexTab::(SupportsLayoutM t m,MonadJSM (Performable m),MonadJSM m,HasJSContext m,PostBuild t m{-, MonadAsyncException m -})=>TabInfo t m ()
 optFlexTab = TabInfo "optFlex" "optFlex" optFlexWidget
 
 
@@ -235,7 +235,7 @@ boxesWidget = do
       return ()
     return ()
 
-boxesTab::(SupportsLayoutM t m, {- MonadAsyncException m,-} MonadJSM (LayoutM t m))=>TabInfo t m ()
+boxesTab::(SupportsLayoutM t m, PostBuild t m,HasJSContext m,MonadJSM (Performable m),{- MonadAsyncException m,-} MonadJSM (LayoutM t m))=>TabInfo t m ()
 boxesTab = TabInfo "boxes" "Dynamic/Events" $ runLayoutMain (LayoutConfig emptyClassMap emptyDynamicCssMap) boxesWidget
 {-
 laidOut::(MonadWidget t m, MonadIO (PushM t))=>LayoutM t m () -> IO ()

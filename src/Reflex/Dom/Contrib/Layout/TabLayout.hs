@@ -85,9 +85,9 @@ tabCssBS = cssToBS tabCss
 
 data TabInfo t m a = TabInfo { tabID::T.Text,
                                tabName::T.Text,
-                               tabWidget::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a }
+                               tabWidget::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a }
 
-staticTabbedLayout::(MonadIO (R.PushM t),RD.MonadWidget t m,Traversable f)=>TabInfo t m a->f (TabInfo t m a)->m (f a)
+staticTabbedLayout::(MonadIO (R.PushM t),RD.DomBuilder t m,Traversable f)=>TabInfo t m a->f (TabInfo t m a)->m (f a)
 staticTabbedLayout curTab tabs = RD.divClass "tabbed-area" $ do
   let curTabchecked tab = if tab==curTab then "checked" RD.=: "" else M.empty
       tabInput t@(TabInfo tabId _ _ )= RD.elAttr "input" (("id" RD.=: tabId)
@@ -110,7 +110,7 @@ instance Eq (TabInfo t m a) where
 instance Ord (TabInfo t m a) where
   compare (TabInfo _ x _) (TabInfo _ y _) = compare x y
 
-instance RD.MonadWidget t m=>Tab t m (TabInfo t m a) where
+instance (RD.DomBuilder t m, RD.PostBuild t m)=>Tab t m (TabInfo t m a) where
   tabIndicator (TabInfo tabId tabLabel _) boolDyn = do
     let labelAttrs = M.fromList [("for",tabId)]
         radioAttrs = M.fromList [("id",tabId),("type","radio"),("style","display: none")]
@@ -123,6 +123,7 @@ instance RD.MonadWidget t m=>Tab t m (TabInfo t m a) where
 --    RD.button tabLabel
 --    RD.el "span" $ RD.text label 
 
+-- this use of MonadWIdget should be fixed but it's tricky when calling into Reflex.Dom.Contrib functions that use MOnadWidget
 dynamicTabbedLayout::(MonadIO (R.PushM t), R.MonadSample t m, RD.MonadWidget t m)=>
                      TabInfo t m a->R.Dynamic t [TabInfo t m a]->m (R.Dynamic t [a])
 dynamicTabbedLayout cur allDyn = RD.divClass "tabbed-area" $ do

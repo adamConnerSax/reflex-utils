@@ -31,6 +31,8 @@ custom-setup
                  Cabal >= 1.24.2 && < 1.25
                      
 library
+  if flag(wkwebview) || flag(warp)
+   cpp-options: -DUSE_WKWEBVIEW -DUSE_JSADDLE
   hs-source-dirs: src
   exposed-modules:
                   Reflex.Dom.Contrib.Layout.All
@@ -99,7 +101,7 @@ executable reflex-utils-simpleForm
   main-is:             Main.hs
   ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
   if flag(wkwebview)
-   cpp-options: -DUSE_WKWEBVIEW
+   cpp-options: -DUSE_WKWEBVIEW -DUSE_JSADDLE
    build-depends: jsaddle-wkwebview
   if flag(ghcjs)
    cpp-options: -DUSE_GHCJS
@@ -134,7 +136,7 @@ executable reflex-utils-layout
   main-is:             Main.hs
   ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
   if flag(wkwebview)
-   cpp-options: -DUSE_WKWEBVIEW
+   cpp-options: -DUSE_WKWEBVIEW -DUSE_JSADDLE
    build-depends: jsaddle-wkwebview
   if flag(ghcjs)
     cpp-options: -DUSE_GHCJS
@@ -165,7 +167,7 @@ executable reflex-utils-simpleForm-warp
   main-is:             Main.hs
   ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
   if flag(warp)
-   cpp-options: -DUSE_WARP
+   cpp-options: -DUSE_WARP -DUSE_JSADDLE
    build-depends: jsaddle-warp
   if flag(ghcjs)
    cpp-options: -DUSE_GHCJS 
@@ -200,7 +202,7 @@ executable reflex-utils-layout-warp
   main-is:             Main.hs
   ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
   if flag(warp)
-   cpp-options: -DUSE_WARP
+   cpp-options: -DUSE_WARP -DUSE_JSADDLE
    build-depends: jsaddle-warp
                 , cabal-macosx >= 0.2.3.4 && < 0.3
   if flag(ghcjs)

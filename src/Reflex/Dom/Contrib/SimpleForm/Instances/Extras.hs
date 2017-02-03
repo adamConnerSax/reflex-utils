@@ -16,6 +16,7 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Extras
 import           Control.Lens                          (view)
 import           Control.Lens.Iso                      (Iso', from, iso)
 import           Control.Monad.Reader                  (lift)
+import           Control.Monad.Fix                     (MonadFix)
 import qualified Data.Text                             as T
 import           Data.Validation                       (AccValidation (..))
 
@@ -38,7 +39,8 @@ instance (SimpleFormC e t m,EquivRep a b, B.Builder (SimpleFormR e t m) b)=>Buil
   buildA mFN ma = from <$> buildA mFN (to <$> ma)
 -}
 
-instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFormR e t m) (R.Dynamic t a) where
+instance (SimpleFormC e t m, RD.PostBuild t m, MonadFix m
+         , B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFormR e t m) (R.Dynamic t a) where
   buildA mFN mda = SimpleFormR $
     case mda of
       Nothing -> return dynValidationNothing

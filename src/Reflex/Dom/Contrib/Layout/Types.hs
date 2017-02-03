@@ -16,20 +16,16 @@ import Control.Lens (makeClassy,use)
 import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
---import Control.Monad.State  (MonadState)
 import Control.Monad.Reader (ReaderT,ask,lift)
 
---import qualified Control.Category as C
 import qualified Reflex as R
 import Reflex.Dom ((=:))
 import qualified Reflex.Dom as RD 
 import qualified Data.Map as M
 import qualified Data.Text as T
---import qualified GHCJS.DOM.Element as E
 import Control.Monad.State (StateT)
 import Data.Monoid ((<>))
 import qualified Data.Sequence as S
---import Data.Default (Default(..))
 
 class IsCssClass a where
   toCssString::a->T.Text
@@ -61,7 +57,7 @@ nodeTypeTag LDiv = "div"
 
 data LNode = LNode LNodeType CssClasses deriving (Show)
 
-lNodeToFunction::RD.MonadWidget t m=> LNode -> m a -> m a
+lNodeToFunction::RD.DomBuilder t m=> LNode -> m a -> m a
 lNodeToFunction (LNode LDiv css) = RD.divClass (toCssString css)
 
 data OpenLNode = OpenLNode { olnType::LNodeType, olnCss::CssClasses } deriving (Show)

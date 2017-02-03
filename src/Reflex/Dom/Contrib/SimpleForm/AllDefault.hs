@@ -87,18 +87,18 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
 {-
-instance (MonadIO (PushM t),RD.MonadWidget t m,
+instance (MonadIO (PushM t),RD.DomBuilder t m,
           MonadAsyncException (l m),
           MonadTrans l, MFunctor l, Monad (l m),MonadLayout (StackedMW l) m,
           MonadFix (l m), MonadIO (l m), MonadRef (l m),MonadException (l m),
           Ref (StackedMW l m) ~ Ref IO)=>SimpleFormConfiguration DefSFCfg t (StackedMW l m) where
 -}
-instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormBuilderFunctions DefSFCfg t m where
+instance (MonadIO (PushM t),RD.DomBuilder t m, RD.PostBuild t m)=>SimpleFormBuilderFunctions DefSFCfg t m where
   failureF = defFailureF
   sumF = defSumF
   dynamicDiv  attrsDyn = liftLF $ RD.elDynAttr "div" attrsDyn
   
-instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormLayoutFunctions DefSFCfg m where
+instance (MonadIO (PushM t),RD.DomBuilder t m)=>SimpleFormLayoutFunctions DefSFCfg m where
 
   formItem    = liftLF flexItem 
   layoutVert  = liftLF flexCol 
@@ -121,7 +121,7 @@ instance (MonadIO (PushM t),RD.MonadWidget t m)=>SimpleFormLayoutFunctions DefSF
     return $ mf >>= (\f -> Just $ textAtLeft . f)
 
 
-collapsibleWidget::(MonadIO (PushM t),RD.MonadWidget t m)=>T.Text->CollapsibleInitialState->m a->m a
+collapsibleWidget::(MonadIO (PushM t),RD.DomBuilder t m)=>T.Text->CollapsibleInitialState->m a->m a
 collapsibleWidget summary cis w = 
   RD.elAttr "details" (if cis == CollapsibleStartsOpen then "open" RD.=: "" else mempty) $ do
     RD.el "summary" $ RD.text summary

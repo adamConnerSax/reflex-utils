@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ConstraintKinds #-}
 module Reflex.Dom.Contrib.Layout.OptimizedFlexLayout
   (
     (##)
@@ -43,9 +44,11 @@ class AddLayout a where
 instance AddLayout LISeq where
   addLayout lis lis' = lis S.>< lis'
 
-instance RD.MonadWidget t m=>AddLayout (m a) where
+instance RD.DomBuilder t m=>AddLayout (m a) where
   addLayout = performLayouts
 -}
+
+type OFLC t m = (RD.DomBuilder t m, MonadIO (R.PushM t))
 
 flexSimple::LNodeConstraint->T.Text->LISeq
 flexSimple lc css = singleton $ LayoutInstruction lc (OpenLNode LDiv (CssClasses [CssClass css]))
@@ -68,23 +71,23 @@ flexFillH = flexSimple ClosesLNode "flexFillH"
 flexFillV::LISeq
 flexFillV = flexSimple ClosesLNode "flexFillV"
 
-wrapWidget::RD.MonadWidget t m=>m a->m a
+wrapWidget::RD.DomBuilder t m=>m a->m a
 wrapWidget = RD.divClass "" 
 
-flexFillR::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexFillR::OFLC t m=>m a->m a
 flexFillR w = 
   flexFillH #$ do
     a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
-flexFillL::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexFillL::OFLC t m=>m a->m a
 flexFillL w = 
   flexFillH #$ do  
     RD.divClass "fill" RD.blank
     wrapWidget w
 
-flexHCenter::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexHCenter::OFLC t m=>m a->m a
 flexHCenter w = 
   flexFillH #$ do
     RD.divClass "fill" RD.blank
@@ -92,7 +95,7 @@ flexHCenter w =
     RD.divClass "fill" RD.blank
     return a
 
-flexVCenter::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexVCenter::OFLC t m=>m a->m a
 flexVCenter w = 
   flexFillV #$ do
     RD.divClass "fill" RD.blank
@@ -100,14 +103,14 @@ flexVCenter w =
     RD.divClass "fill" RD.blank
     return a
 
-flexFillD::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexFillD::OFLC t m=>m a->m a
 flexFillD w = 
   flexFillV #$ do
     a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
-flexFillU::(RD.MonadWidget t m,MonadIO (R.PushM t))=>m a->m a
+flexFillU::OFLC t m=>m a->m a
 flexFillU w = 
   flexFillV #$ do  
     RD.divClass "fill" RD.blank
@@ -119,10 +122,10 @@ infixl 2 ##
 (##) = (><)
 
 infix 1 #$
-(#$)::RD.MonadWidget t m=>LISeq->m a->m a
+(#$)::RD.DomBuilder t m=>LISeq->m a->m a
 (#$) = performLayout
   
-performLayout::RD.MonadWidget t m=>LISeq->m a->m a
+performLayout::RD.DomBuilder t m=>LISeq->m a->m a
 performLayout lis w = do
   let nodes = instructionsToNodes lis
       layoutF = foldl' (\f node -> f . lNodeToFunction node) id nodes
