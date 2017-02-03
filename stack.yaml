@@ -7,8 +7,8 @@ resolver: nightly-2017-01-27
 packages:
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
-#    commit: "18f65388a3cad7e3687cc59e112402767a1942bd"
-    commit: "ff9ebdc8a3e5da070544219e3ec30f86dddaab64"
+    commit: "549f639aa4f090e44724e40195e31b031dd0fa4d"
+#    commit: "ff9ebdc8a3e5da070544219e3ec30f86dddaab64"
   extra-dep: true
 #- location:
 #    git: https://github.com/hamishmack/reflex/
