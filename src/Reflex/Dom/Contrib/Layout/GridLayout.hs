@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs            #-}
 module Reflex.Dom.Contrib.Layout.GridLayout
        (
          newRow
@@ -6,9 +7,12 @@ module Reflex.Dom.Contrib.Layout.GridLayout
        , newCol
        ) where
 
+import Reflex.Dom.Contrib.Layout.Types
+import Reflex.Dom.Contrib.Layout.LayoutM
+
 import qualified Reflex as R
 import qualified Reflex.Dom as RD
-import Reflex.Dom.Contrib.Layout.Core
+
 import qualified Data.Map as M
 import Control.Lens (set,(.~),(^.),(<>~),(<>=),(%=),(.=),use)
 import Data.Monoid (mappend)
@@ -17,7 +21,7 @@ import Data.List (foldl')
 import Control.Monad (foldM)
 import Control.Monad.Fix (MonadFix)
 
-import Reflex.Dom.Contrib.Layout.Types
+
 
 
 -- this uses internal structure of CssClasses which is likely a mistake. Though a very small one.
@@ -51,12 +55,12 @@ colF _ lTree = lTree
 colD::R.Reflex t=>GridColWidth->LayoutDescription t
 colD w = LayoutDescription colF (LPK_Width RD.=: (LP_Width w)) ["all","col"]
 
-newRow::RD.MonadWidget t m=>LayoutM t m a -> LayoutM t m a
+newRow::(RD.PostBuild t m ,SupportsLayoutM t m)=>LayoutM t m a -> LayoutM t m a
 newRow = addNewLayoutNode rowD
 
-newCol::RD.MonadWidget t m=>GridColWidth->LayoutM t m a->LayoutM t m a
+newCol::(RD.PostBuild t m ,SupportsLayoutM t m)=>GridColWidth->LayoutM t m a->LayoutM t m a
 newCol w = addNewLayoutNode (colD w)
 
 
-newRow'::RD.MonadWidget t m=>LayoutM t m a -> LayoutM t m a
+newRow'::(RD.PostBuild t m ,SupportsLayoutM t m)=>LayoutM t m a -> LayoutM t m a
 newRow' x = newRow $ newCol 1 x

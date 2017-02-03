@@ -1,36 +1,31 @@
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE UndecidableInstances  #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Extras
        (
          MWidget(..)
+       , buildValidated
+       , buildValidatedIso
        ) where
 
-import Control.Applicative (liftA2)
-import Control.Monad.Reader (ReaderT, runReaderT, ask, lift)
-import Control.Monad.Morph (hoist)
-import qualified Data.Map as M
-import Data.Monoid ((<>))
-import Data.Maybe (isJust)
-
--- for using the generic builder
-import qualified GHC.Generics as GHCG
+import           Control.Lens                          (view)
+import           Control.Lens.Iso                      (Iso', from, iso)
+import           Control.Monad.Reader                  (lift)
+import qualified Data.Text                             as T
+import           Data.Validation                       (AccValidation (..))
 
 -- reflex imports
-import qualified Reflex as R 
-import qualified Reflex.Dom as RD
-import Reflex.Dynamic.TH (mkDyn)
-import Reflex.Dom.Contrib.Widgets.Common --(HtmlWidget,combineWidgets)
+import qualified Reflex                                as R
+import qualified Reflex.Dom                            as RD
 
--- From this lib
-import Reflex.Dom.Contrib.Layout.Types (CssClasses,IsCssClass(..))
+import qualified DataBuilder                           as B
 
-import qualified DataBuilder as B
-
-import Reflex.Dom.Contrib.SimpleForm.Builder
+import           Reflex.Dom.Contrib.SimpleForm.Builder
 
 
 {-
@@ -44,30 +39,52 @@ instance (SimpleFormC e t m,EquivRep a b, B.Builder (SimpleFormR e t m) b)=>Buil
 -}
 
 instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFormR e t m) (R.Dynamic t a) where
-  buildA mFN mda = SimpleFormR $ 
+  buildA mFN mda = SimpleFormR $
     case mda of
-      Nothing -> return $ R.constDyn Nothing 
+      Nothing -> return dynValidationNothing
       Just aDyn -> do
         let builder::Maybe a->SimpleFormR e t m a
             builder = buildA mFN
-        startDyn <- R.mapDyn Just aDyn -- DynMaybe t a
-        builtDyn <- R.mapDyn (unSF . builder) startDyn -- Dynamic t (SimpleFormR e t m (DynMaybe t a))
-        newDynEv <- RD.dyn builtDyn -- Event t (DynMaybe t a)
-        dMaybe <- R.joinDyn <$> R.foldDyn (\_ x-> x) startDyn newDynEv -- DynMaybe t a
-        lift $ R.mapDyn (maybe Nothing (Just . R.constDyn)) dMaybe
+            startDynM = DynValidation $ AccSuccess <$> aDyn
+            builtDynM = (unSF . builder . Just) <$> aDyn -- Dynamic t (ReaderT e m (DynValidation t a))
+        newDynEv <- RD.dyn builtDynM -- Event t (DynValidation a)
+        dValidation <- joinDynOfDynValidation <$> R.foldDyn (\_ x-> x) startDynM newDynEv -- DynMaybe t a
+        return $ fmap R.constDyn dValidation
 
 
 newtype MWidget m a = MWidget { unMW::m a }
 
 instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFormR e t m) (MWidget m a) where
-  buildA mFN mwa = SimpleFormR $ 
+  buildA mFN mwa = SimpleFormR $
     case mwa of
-      Nothing -> return $ R.constDyn Nothing 
+      Nothing -> return dynValidationNothing
       Just wa -> do
         a <- lift $ unMW wa
         let builder::Maybe a->SimpleFormR e t m a
             builder = buildA mFN
-        dma <- unSF $ builder (Just a)
-        lift $ R.mapDyn (maybe Nothing (Just . MWidget . return)) dma 
+        dva <- unSF $ builder (Just a)
+        return $ fmap (MWidget . return) dva --R.mapDyn (maybe Nothing (Just . MWidget . return)) dma
 
+buildValidatedIso::forall e t m a b.(SimpleFormC e t m,
+                                  Builder (SimpleFormR e t m) b)=>
+                (a->Either T.Text a)->
+                Iso' a b->
+                Maybe FieldName->
+                Maybe a->
+                SimpleFormR e t m a
+buildValidatedIso vf isoAB mFN ma =
+  let mInitial = ma >>= either (const Nothing) (Just . view isoAB) . vf
+      validatedX = either (\x->AccFailure [SFInvalid x]) AccSuccess . vf
+      validatedAVX = accValidation AccFailure validatedX
+      validatedDVX = DynValidation . fmap validatedAVX . unDynValidation
+  in SimpleFormR $ validatedDVX <$> unSF (view (from isoAB) <$> buildA mFN mInitial)
 
+buildValidated::forall e t m a b.(SimpleFormC e t m,
+                                  Builder (SimpleFormR e t m) b)=>
+                (a->Either T.Text a)->
+                (a->b)->
+                (b->a)->
+                Maybe FieldName->
+                Maybe a->
+                SimpleFormR e t m a
+buildValidated vf a2b b2a = buildValidatedIso vf (iso a2b b2a)

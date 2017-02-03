@@ -9,22 +9,42 @@ author:              Adam Conner-Sax
 maintainer:          adam_conner_sax@yahoo.com
 copyright:           2015 Adam Conner-Sax
 category:            Web
-build-type:          Simple
+build-type:          Custom
 -- extra-source-files:
 cabal-version:       >=1.10
 
+flag wkwebview
+  description: Use wkWebview control rather than ghcjs
+  default: False
+
+flag warp
+  description: Use warp rather than ghcjs
+  default: True
+
+flag ghcjs
+  description: Use GHCJS
+  default: False
+  
+custom-setup
+  setup-depends: base >= 4.6,
+                 cabal-macosx >= 0.2.3.4 && < 0.3,
+                 Cabal >= 1.24.2 && < 1.25
+                     
 library
-  hs-source-dirs:      src
+  hs-source-dirs: src
   exposed-modules:
                   Reflex.Dom.Contrib.Layout.All
-                  Reflex.Dom.Contrib.Layout.GridConfigs
                   Reflex.Dom.Contrib.Layout.Types
-                  Reflex.Dom.Contrib.Layout.Core
-                  Reflex.Dom.Contrib.Layout.GridLayout
+                  Reflex.Dom.Contrib.Layout.ClayUtils
                   Reflex.Dom.Contrib.Layout.FlexLayout
+                  Reflex.Dom.Contrib.Layout.OptimizedFlexLayout
                   Reflex.Dom.Contrib.Layout.TabLayout
+                  Reflex.Dom.Contrib.Layout.LayoutM
+                  Reflex.Dom.Contrib.Layout.LayoutMFlex
                   Reflex.Dom.Contrib.Layout.Events
-                  Reflex.Dom.Contrib.Layout.ClayUtils             
+--                  Reflex.Dom.Contrib.Layout.GridConfigs
+--                  Reflex.Dom.Contrib.Layout.GridLayout                    
+--                  Reflex.Dom.Contrib.StackedMonadWidget             
                   Reflex.Dom.Contrib.SimpleForm
                   Reflex.Dom.Contrib.SimpleForm.Builder
                   Reflex.Dom.Contrib.SimpleForm.Instances
@@ -33,16 +53,23 @@ library
                 Reflex.Dom.Contrib.SimpleForm.Instances.Basic
                 Reflex.Dom.Contrib.SimpleForm.Instances.Containers
                 Reflex.Dom.Contrib.SimpleForm.Instances.Extras
-
+  if flag(wkwebview) || flag(warp)
+   build-depends: ghcjs-dom == 0.7.*
+                , jsaddle
+  else
+   build-depends: ghcjs-dom
   build-depends:       base >= 4.7 && < 5
+                     , dependent-map
                      , reflex
                      , reflex-dom
                      , reflex-dom-contrib
-                     , ghcjs-base
-                     , ghcjs-dom
                      , transformers
+                     , exception-transformers
                      , mtl
+                     , monad-control
                      , lens
+                     , data-default
+                     , ref-tf
                      , containers
                      , semigroups
                      , clay
@@ -56,22 +83,37 @@ library
                      , time
                      , hashable
                      , unordered-containers
---                     , reflex-orphans
+                     , validation
 
+  if impl(ghcjs)
+    build-depends:     ghcjs-base
 
   default-language:    Haskell2010
+  ghc-prof-options: -fprof-auto
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2       
 
-executable reflex-utils-simpleForm-exe
+executable reflex-utils-simpleForm
+  if flag(warp)
+    buildable: False
   hs-source-dirs:      app/simpleForm
   main-is:             Main.hs
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
+  if flag(wkwebview)
+   cpp-options: -DUSE_WKWEBVIEW
+   build-depends: jsaddle-wkwebview
+  if flag(ghcjs)
+   cpp-options: -DUSE_GHCJS
+                , cabal-macosx >= 0.2.3.4 && < 0.3
   build-depends:       base
                      , reflex
                      , reflex-dom
                      , reflex-dom-contrib
                      , reflex-utils
+                     , ghcjs-dom
                      , transformers
+                     , lens
                      , mtl
+                     , ref-tf
                      , file-embed
                      , clay
                      , text
@@ -81,18 +123,97 @@ executable reflex-utils-simpleForm-exe
                      , time
                      , hashable
                      , unordered-containers
+                     , validation
   default-language:    Haskell2010
 
 
-executable reflex-utils-layout-exe
+executable reflex-utils-layout
+  if flag(warp)
+    buildable: False
   hs-source-dirs:      app/layout
   main-is:             Main.hs
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
+  if flag(wkwebview)
+   cpp-options: -DUSE_WKWEBVIEW
+   build-depends: jsaddle-wkwebview
+  if flag(ghcjs)
+    cpp-options: -DUSE_GHCJS
+                , cabal-macosx >= 0.2.3.4 && < 0.3
   build-depends:       base
                      , reflex
                      , reflex-dom
                      , reflex-dom-contrib
                      , reflex-utils
+                     , ghcjs-dom
+                     , exception-transformers
+                     , ref-tf
+                     , lens
+                     , transformers
+                     , mtl
+                     , file-embed
+                     , clay
+                     , text
+                     , bytestring
+                     , containers
+  default-language:    Haskell2010
+
+
+executable reflex-utils-simpleForm-warp
+  if flag(wkwebview)
+    buildable: False
+  hs-source-dirs:      app/simpleForm
+  main-is:             Main.hs
+  ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
+  if flag(warp)
+   cpp-options: -DUSE_WARP
+   build-depends: jsaddle-warp
+  if flag(ghcjs)
+   cpp-options: -DUSE_GHCJS 
+                , cabal-macosx >= 0.2.3.4 && < 0.3
+  build-depends:       base
+                     , reflex
+                     , reflex-dom
+                     , reflex-dom-contrib
+                     , reflex-utils
+                     , ghcjs-dom
+                     , transformers
+                     , mtl
+                     , lens
+                     , ref-tf
+                     , file-embed
+                     , clay
+                     , text
+                     , bytestring
+                     , containers
+                     , pretty-show
+                     , time
+                     , hashable
+                     , unordered-containers
+                     , validation
+  default-language:    Haskell2010
+
+
+executable reflex-utils-layout-warp
+  if flag(wkwebview)
+    buildable: False
+  hs-source-dirs:      app/layout
+  main-is:             Main.hs
+  ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
+  if flag(warp)
+   cpp-options: -DUSE_WARP
+   build-depends: jsaddle-warp
+                , cabal-macosx >= 0.2.3.4 && < 0.3
+  if flag(ghcjs)
+   cpp-options: -DUSE_GHCJS
+  build-depends:       base
+                     , reflex
+                     , reflex-dom
+                     , reflex-dom-contrib
+                     , reflex-utils
+                     , ghcjs-dom
+                     , exception-transformers
+                     , ref-tf
+                     , lens
                      , transformers
                      , mtl
                      , file-embed
