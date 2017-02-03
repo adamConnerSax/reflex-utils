@@ -1,39 +1,21 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: nightly-2017-01-27
+resolver: nightly-2017-02-03
 
 # Local packages, usually specified by relative directory name
 packages:
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
     commit: "549f639aa4f090e44724e40195e31b031dd0fa4d"
-#    commit: "ff9ebdc8a3e5da070544219e3ec30f86dddaab64"
   extra-dep: true
-#- location:
-#    git: https://github.com/hamishmack/reflex/
-#    commit: "6e7834eb306ce8351f0c9dd836cde9f2070c5f6f"
-#  extra-dep: true
-#- location:
-#    git: https://github.com/hamishmack/reflex-dom
-#    commit: "68150eb7b879e7aa67c02858f71d7e97f8e4f852"
-#  extra-dep: true
-#  subdirs:
-#  - reflex-dom-core
-#  - reflex-dom
-#- location:
-#    git: https://github.com/adamConnerSax/reflex-dom-contrib
-#    commit: "48c1d64d1888849bca5c1ce271b4d96bd3a0b168"
-#  extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex
     commit: "daec2bbc6e098ce9c2056cfeea286de67135d85f"
-#    commit: "4eb436e0d94418c11e4c06be7fa982d59629c9a9"
   extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex-dom
     commit: "402ad561d30fb1daa291e7284d4ee05d825883a2"
-#    commit: "7f92ddfebf9a090e204edfd2749a512162d4e3c6"
   extra-dep: true
   subdirs:
   - reflex-dom-core
