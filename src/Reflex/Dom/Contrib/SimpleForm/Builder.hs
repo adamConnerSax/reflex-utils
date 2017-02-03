@@ -93,7 +93,6 @@ import           Control.Monad.Reader            (ReaderT, ask, runReaderT)
 import qualified Data.Map                        as M
 import           Data.Maybe                      (fromMaybe, isJust)
 import           Data.Monoid                     ((<>))
-import           Data.Semigroup                  (Semigroup)
 import qualified Data.Text                       as T
 import           Data.Validation                 (AccValidation (..))
 import           Language.Haskell.TH
@@ -148,7 +147,7 @@ dynValidationErr::R.Reflex t=>SimpleFormErrors->DynValidation t a
 dynValidationErr = DynValidation . R.constDyn . AccFailure
 
 joinDynOfDynValidation::R.Reflex t =>R.Dynamic t (DynValidation t a) -> DynValidation t a
-joinDynOfDynValidation = DynValidation . join . (fmap unDynValidation)
+joinDynOfDynValidation = DynValidation . join . fmap unDynValidation
 
 instance R.Reflex t=>Functor (DynValidation t) where
   fmap f dva = DynValidation $ fmap (fmap f) (unDynValidation dva)
@@ -237,7 +236,7 @@ observeFlow cfg formClass observerClass flow initialA = runSimpleFormR cfg . Sim
   let initialWidget = flow initialA
       obF = observeWidget cfg observerClass
   dva <- liftLF (asSimpleForm formClass) (unSF $ buildA Nothing (Just initialA)) -- DynValidation t a
-  dwb <- lift $ R.foldDynMaybe (\ma _ -> flow <$> ma) initialWidget (avToMaybe <$> (R.updated $ unDynValidation dva)) -- Dynamic t (m b)
+  dwb <- lift $ R.foldDynMaybe (\ma _ -> flow <$> ma) initialWidget (avToMaybe <$> R.updated (unDynValidation dva)) -- Dynamic t (m b)
   lift $ joinDynOfDynValidation <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
 
 
@@ -372,9 +371,9 @@ sfAttrs' mDyn mFN mTypeS fixedCss = do
       observerAttr = titleAttr title <> cssClassAttr (observerClasses <> fixedCss)
   lift $ if isObserver
          then return $ R.constDyn observerAttr
-         else R.forDyn (unDynValidation mDyn) $ \x -> case x of
-                                                        (AccSuccess _)-> validAttrs
-                                                        (AccFailure _)->invalidAttrs
+         else return . RD.ffor (unDynValidation mDyn) $ \x -> case x of
+                                                             (AccSuccess _)-> validAttrs
+                                                             (AccFailure _)->invalidAttrs
 
 
 componentTitle::Maybe FieldName->Maybe T.Text->T.Text

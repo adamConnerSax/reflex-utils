@@ -13,29 +13,15 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Extras
        , buildValidatedIso
        ) where
 
-import           Control.Applicative                   (liftA2)
 import           Control.Lens                          (view)
 import           Control.Lens.Iso                      (Iso', from, iso)
-import           Control.Monad.Morph                   (hoist)
-import           Control.Monad.Reader                  (ReaderT, ask, lift,
-                                                        runReaderT)
-import qualified Data.Map                              as M
-import           Data.Maybe                            (isJust)
-import           Data.Monoid                           ((<>))
+import           Control.Monad.Reader                  (lift)
 import qualified Data.Text                             as T
 import           Data.Validation                       (AccValidation (..))
--- for using the generic builder
-import qualified GHC.Generics                          as GHCG
 
 -- reflex imports
 import qualified Reflex                                as R
 import qualified Reflex.Dom                            as RD
-import           Reflex.Dom.Contrib.Widgets.Common
---import           Reflex.Dynamic.TH                     (mkDyn)
-
--- From this lib
-import           Reflex.Dom.Contrib.Layout.Types       (CssClasses,
-                                                        IsCssClass (..))
 
 import qualified DataBuilder                           as B
 

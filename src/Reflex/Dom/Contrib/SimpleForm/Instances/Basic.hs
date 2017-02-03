@@ -4,7 +4,6 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE QuasiQuotes           #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
@@ -16,15 +15,8 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        , buildReadable
        ) where
 
-import           Control.Applicative                   (liftA2)
-import           Control.Lens                          (over)
-import           Control.Monad.Fix                     (MonadFix)
-import           Control.Monad.Morph                   (hoist)
-import           Control.Monad.Reader                  (ReaderT, ask, lift,
-                                                        runReaderT)
-import qualified Data.Map                              as M
-import           Data.Maybe                            (fromJust, fromMaybe,
-                                                        isJust)
+import           Control.Monad.Reader                  (ReaderT, lift)
+import           Data.Maybe                            (fromMaybe)
 import           Data.Monoid                           ((<>))
 import           Data.Readable                         (Readable)
 import qualified Data.Text                             as T
@@ -38,11 +30,6 @@ import           Data.Time.Calendar                    (Day)
 import           Data.Time.Clock                       (UTCTime)
 import           Data.Word                             (Word16, Word32, Word64,
                                                         Word8)
-import           GHC.Tuple
-
--- for using the generic builder
-import qualified GHC.Generics                          as GHCG
-
 -- reflex imports
 import qualified Reflex                                as R
 import qualified Reflex.Dom                            as RD
@@ -50,8 +37,6 @@ import qualified Reflex.Dom                            as RD
 import           Reflex.Dom.Contrib.Widgets.Common
 
 -- From this lib
-import           Reflex.Dom.Contrib.Layout.Types       (CssClasses,
-                                                        IsCssClass (..))
 
 import qualified DataBuilder                           as B
 import           Reflex.Dom.Contrib.SimpleForm.Builder
@@ -101,7 +86,7 @@ buildReadable mFN ma = SimpleFormR $ mdo
 
 readMaybeAV::Read a=>Maybe FieldName->T.Text->AccValidation SimpleFormErrors a
 readMaybeAV mFN t =
-  let prefix = T.pack (maybe "N/A" id mFN) <> ": "  in
+  let prefix = T.pack (fromMaybe "N/A" mFN) <> ": "  in
     case (readMaybe $ T.unpack t) of
       Nothing -> AccFailure [SFNoParse (prefix <> t)]
       Just a -> AccSuccess a

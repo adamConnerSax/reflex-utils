@@ -19,13 +19,10 @@ import qualified Reflex as R
 import qualified Reflex.Dom as RD
 
 
-import Control.Monad (join,void)
+import Control.Monad (join)
 import Control.Monad.Reader (ReaderT, lift)
 import Control.Monad.State (StateT, runStateT, get, put)
 import Control.Monad.Morph (hoist)
-import Control.Lens ((%~))
-import Data.Proxy (Proxy(..))
-import Data.Default (def)
 import qualified Data.Text as T
 import Data.Validation (AccValidation(..))
 
@@ -274,7 +271,7 @@ buildSFContainer aI buildTr mFN mfa = mdo
       let emptyB = unSF $ B.buildA Nothing Nothing
       -- we have to clear it once it's used. For now we replace it with a new one.
       dmb <- itemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-      clickEv <-  layoutVC . itemR . lift $ buttonNoSubmit' "+" 
+      clickEv <-  layoutVC . itemR . lift $ containerActionButton "+" 
       return $ R.attachPromptlyDynWithMaybe (\a b -> avToMaybe a) (unDynValidation dmb) clickEv -- only fires if button is clicked when mb is a Just.
         
     let insert vfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> vfa'  
@@ -299,7 +296,7 @@ buildSFContainer' aI buildTr mFN mfa = mdo
       let emptyB = unSF $ B.buildA Nothing Nothing
       -- we have to clear it once it's used. For now we replace it with a new one.
       dmb <- itemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-      clickEv <-  layoutVC . itemR . lift $ buttonNoSubmit' "+" 
+      clickEv <-  layoutVC . itemR . lift $ containerActionButton "+" 
       return $ R.attachPromptlyDynWithMaybe (\a b -> avToMaybe a) (unDynValidation dmb)  clickEv -- only fires if button is clicked when mb is a Just.
         
     let insert mfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> mfa'  
@@ -313,7 +310,7 @@ buildOneDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b)
 buildOneDeletable dI mFN ma = liftLF' formRow $ do     
     (evs,curS) <- get
     dma <- lift . itemL . unSF $ B.buildA mFN ma
-    ev  <- lift . layoutVC . itemR . lift $ buttonNoSubmit' "-" 
+    ev  <- lift . layoutVC . itemR . lift $ containerActionButton "-" 
     let ev' = R.attachPromptlyDynWithMaybe (\va' _ -> getKey dI <$> (avToMaybe va') <*> Just curS) (unDynValidation dma) ev
     put (ev':evs,updateS dI curS)
     return dma

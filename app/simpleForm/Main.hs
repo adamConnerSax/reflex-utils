@@ -13,7 +13,7 @@ module Main where
 import           Control.Monad                         (foldM)
 import           Control.Monad.IO.Class                as IOC (MonadIO)
 --import           Data.FileEmbed
-import           Control.Lens.Iso                      (iso)
+
 import           Data.Monoid                           ((<>))
 import qualified GHC.Generics                          as GHC
 import           Prelude                               hiding (div, rem, span)
@@ -25,8 +25,9 @@ import qualified Data.Sequence                         as Seq
 import qualified Data.Text                             as T
 import           Data.Time.Calendar                    (Day (..), fromGregorian)
 import           Data.Time.Clock                       (UTCTime (..))
+-- for a validation example...
+import           Control.Lens.Iso                      (iso)
 import           Data.Validation                       (AccValidation (..))
-
 
 import           Reflex
 import qualified Reflex.Dom.Contrib.Widgets.Common     as RDC

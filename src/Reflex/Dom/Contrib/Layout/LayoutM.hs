@@ -1,15 +1,11 @@
-{-# LANGUAGE AllowAmbiguousTypes        #-}
-{-# LANGUAGE ConstraintKinds            #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE FunctionalDependencies     #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE AllowAmbiguousTypes   #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 module Reflex.Dom.Contrib.Layout.LayoutM
        (
@@ -32,10 +28,10 @@ import qualified Reflex                          as R
 import qualified Reflex.Dom                      as RD
 import qualified Reflex.Host.Class               as RC
 
-import           Control.Lens                    ((^.))
+
+import           Control.Monad                   (sequence)
 import           Control.Monad.Exception         (MonadAsyncException)
 import           Control.Monad.Fix               (MonadFix)
-
 import           Control.Monad.IO.Class          (MonadIO)
 import           Control.Monad.Reader            (ask, runReaderT)
 import           Control.Monad.Ref               (MonadRef (..), Ref)
@@ -49,39 +45,16 @@ import           Data.List                       (foldl')
 import qualified Data.List.NonEmpty              as NE
 import qualified Data.Map                        as M
 import           Data.Maybe                      (catMaybes, fromMaybe)
-import           Data.Monoid                     ((<>))
 import qualified Data.Text                       as T
-import qualified GHCJS.DOM.Element               as E
-import           GHCJS.DOM.Types                 (IsElement)
-import qualified Reflex                          as R
-import qualified Reflex.Class                    as RC
-import qualified Reflex.Dom                      as RD
-import qualified Reflex.Dom.Builder.Class        as RDB
 import           Reflex.Dom.Contrib.Layout.Types
-import qualified Reflex.Dom.Old                  as RD
+--import qualified Reflex.Dom.Old                  as RD
 
 
-import           Control.Lens                    (makeClassy, makeLenses, set,
-                                                  use, view, (%=), (.=), (.~),
-                                                  (<>=), (<>~), (^.))
-import           Control.Monad                   (forM, forM_, mapM_, sequence)
-import           Control.Monad.Fix               (MonadFix)
-import           Control.Monad.IO.Class          (MonadIO, liftIO)
-import           Control.Monad.Reader            (MonadReader, ReaderT, ask,
-                                                  runReaderT)
-import           Control.Monad.State             (MonadState, StateT, get, lift,
-                                                  put, runStateT)
-import           Control.Monad.Trans             (MonadTrans)
-import           Data.List                       (foldl')
-import qualified Data.List.NonEmpty              as NE
-import qualified Data.Map                        as M
-import           Data.Maybe                      (catMaybes, fromJust)
+import           Control.Lens                    ((^.))
+
 import           Data.Monoid                     ((<>))
-import           Data.String                     (unwords, words)
 import           Data.Traversable                (sequenceA)
 
-
-import           Reflex.Dom.Contrib.Layout.Types
 
 data LayoutNodeCss = LayoutNodeCss { _lncStatic::CssClasses, _lncDynamic::CssClasses }
 instance IsCssClass LayoutNodeCss where
