@@ -5,10 +5,11 @@ module Reflex.Dom.Contrib.SimpleForm.Instances
        , buildReadable
        , buildValidated
        , buildValidatedIso
+       , SimpleFormInstanceC
        ) where
 
 import           Reflex.Dom.Contrib.SimpleForm.Instances.Basic      (buildReadMaybe,
                                                                      buildReadable,
-                                                                     sfWidget)
+                                                                     sfWidget,SimpleFormInstanceC)
 import           Reflex.Dom.Contrib.SimpleForm.Instances.Containers
 import           Reflex.Dom.Contrib.SimpleForm.Instances.Extras

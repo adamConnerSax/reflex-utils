@@ -22,7 +22,7 @@ module Reflex.Dom.Contrib.SimpleForm.AllDefault
 -- | A useful default config for quick form building
 -- | Also serves as an example for building others
 -- | and defFailureF and defSumF can be re-used for other implementations
-
+import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
 import Reflex.Dom.Contrib.Layout.Types (CssClasses(..))
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexCol,flexRow,flexItem,
                                              flexFillR,flexFillL,flexHCenter,
@@ -30,6 +30,7 @@ import Reflex.Dom.Contrib.Layout.FlexLayout (flexCol,flexRow,flexItem,
 
 import Reflex.Dom.Contrib.SimpleForm.Builder
 import Reflex.Dom.Contrib.SimpleForm.Instances(sfWidget)
+import Reflex.Dom.Contrib.SimpleForm.Instances.Basic(SimpleFormInstanceC)
 
 import qualified DataBuilder as B
 
@@ -41,6 +42,7 @@ import Clay ((?),(@=),(#))
 import qualified Clay as C
 
 import Control.Monad.Reader (ask, asks,local)
+import Control.Monad.Fix (MonadFix)
 import Control.Monad.IO.Class (MonadIO)
 import Data.Maybe (fromJust)
 import qualified Data.Map as M
@@ -69,7 +71,7 @@ data SFRPair e t m a = SFRPair { sfrpCN::B.ConName, sfrpV::SimpleFormR e t m a }
 instance Eq (SFRPair e t m a) where
   (SFRPair a _) == (SFRPair b _) = a == b
 
-defSumF::SimpleFormC e t m=>[(B.ConName,SimpleFormR e t m a)]->Maybe B.ConName->SimpleFormR e t m a
+defSumF::SimpleFormInstanceC e t m=>[(B.ConName,SimpleFormR e t m a)]->Maybe B.ConName->SimpleFormR e t m a
 defSumF conWidgets mDefCon = SimpleFormR $ do
   let conNames = fst . unzip $ conWidgets
       getSFRP::B.ConName->[(B.ConName,SimpleFormR e t m a)]->SFRPair e t m a
@@ -93,13 +95,13 @@ instance (MonadIO (PushM t),RD.DomBuilder t m,
           MonadFix (l m), MonadIO (l m), MonadRef (l m),MonadException (l m),
           Ref (StackedMW l m) ~ Ref IO)=>SimpleFormConfiguration DefSFCfg t (StackedMW l m) where
 -}
-instance (MonadIO (PushM t),RD.DomBuilder t m, RD.PostBuild t m)=>SimpleFormBuilderFunctions DefSFCfg t m where
+instance (MonadWidgetExtraC t m, MonadIO (PushM t),RD.DomBuilder t m, R.MonadHold t m, MonadFix m, RD.PostBuild t m)=>SimpleFormBuilderFunctions DefSFCfg t m where
   failureF = defFailureF
   sumF = defSumF
   dynamicDiv  attrsDyn = liftLF $ RD.elDynAttr "div" attrsDyn
   
-instance (MonadIO (PushM t),RD.DomBuilder t m)=>SimpleFormLayoutFunctions DefSFCfg m where
-
+instance (MonadIO (PushM t),RD.DomBuilder t m,MonadWidgetExtraC t m
+         , RD.MonadHold t m, MonadFix m, RD.PostBuild t m)=>SimpleFormLayoutFunctions DefSFCfg m where
   formItem    = liftLF flexItem 
   layoutVert  = liftLF flexCol 
   layoutHoriz = liftLF flexRow

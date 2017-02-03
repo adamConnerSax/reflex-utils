@@ -11,8 +11,9 @@
 module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
 -- All the basic (primitive types, tuples, etc.) are in here
-import Reflex.Dom.Contrib.SimpleForm.Instances.Basic()
+import Reflex.Dom.Contrib.SimpleForm.Instances.Basic (SimpleFormInstanceC)
 import Reflex.Dom.Contrib.SimpleForm.Builder
+import Reflex.Dom.Contrib.ReflexConstraints
 
 -- reflex imports
 import qualified Reflex as R 
@@ -79,7 +80,7 @@ data SFDeletableI (g :: * -> *) (b :: *) (k :: *) (s :: *) = SFDeletableI
 data SFAdjustableI fa g b k s= SFAdjustableI { sfAI::SFAppendableI fa g b, sfDI::SFDeletableI g b k s }
 
 
-buildAdjustableContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
+buildAdjustableContainer::(SimpleFormInstanceC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
                           =>SFAdjustableI fa g b k s->Maybe FieldName->Maybe fa->SimpleFormR e t m fa
 buildAdjustableContainer sfAdj mFN mfa = SimpleFormR  $ do
   isObserver <- observer
@@ -116,7 +117,7 @@ buttonNoSubmit' t = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "button" ("type"
 containerActionButton::(RD.PostBuild t m, RD.DomBuilder t m)=>T.Text -> m (RD.Event t ())
 containerActionButton = buttonNoSubmit'
 
-buildReadOnlyContainer::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
+buildReadOnlyContainer::(SimpleFormInstanceC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
                         =>CRepI fa (g b)->BuildF e t m fa
 buildReadOnlyContainer = buildTraversableSFA  
 
@@ -133,7 +134,7 @@ listSFA = SFAppendableI idRep [] listAppend L.length
 listSFD::SFDeletableI [] a Int Int
 listSFD = SFDeletableI (\_ n->n) 0 (+1) listDeleteAt
 
-instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>B.Builder (SimpleFormR e t m) [a] where
+instance (SimpleFormInstanceC e t m,B.Builder (SimpleFormR e t m) a)=>B.Builder (SimpleFormR e t m) [a] where
   buildA = buildAdjustableContainer (SFAdjustableI listSFA listSFD)
 
 
@@ -143,7 +144,7 @@ mapSFA = SFAppendableI (CRepI (M.mapWithKey (\k v->(k,v))) (\m->M.fromList $ snd
 mapSFD::Ord k=>SFDeletableI (M.Map k) (k,v) k ()
 mapSFD = SFDeletableI (\(k,_) _ ->k) () id M.delete
 
-instance (SimpleFormC e t m,
+instance (SimpleFormInstanceC e t m,
           B.Builder  (SimpleFormR e t m)  k, Ord k,
           B.Builder  (SimpleFormR e t m)  a)
          =>B.Builder (SimpleFormR e t m) (M.Map k a) where
@@ -155,7 +156,7 @@ intMapSFA = SFAppendableI (CRepI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList 
 intMapSFD::SFDeletableI IM.IntMap (IM.Key,v) IM.Key ()
 intMapSFD = SFDeletableI (\(k,_) _ ->k) () id IM.delete
 
-instance (SimpleFormC e t m,
+instance (SimpleFormInstanceC e t m,
           B.Builder  (SimpleFormR e t m)  IM.Key,
           B.Builder  (SimpleFormR e t m)  a)
          =>B.Builder (SimpleFormR e t m) (IM.IntMap a) where
@@ -167,7 +168,7 @@ seqSFA = SFAppendableI idRep Seq.empty (flip (Seq.|>)) Seq.length
 seqSFD::SFDeletableI Seq.Seq a Int Int
 seqSFD = SFDeletableI (\_ index->index) 0 (+1) (\n bs -> Seq.take n bs Seq.>< Seq.drop (n+1) bs)
 
-instance (SimpleFormC e t m,B.Builder (SimpleFormR e t m) a)=>B.Builder (SimpleFormR e t m) (Seq.Seq a) where
+instance (SimpleFormInstanceC e t m,B.Builder (SimpleFormR e t m) a)=>B.Builder (SimpleFormR e t m) (Seq.Seq a) where
   buildA = buildAdjustableContainer (SFAdjustableI seqSFA seqSFD)
 
 -- we transform to a map since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
@@ -177,7 +178,7 @@ setSFA = SFAppendableI (CRepI (\s ->M.fromList $ (\x->(x,x)) <$> S.toList s) (\m
 setSFD::Ord a=>SFDeletableI (M.Map a) a a ()
 setSFD = SFDeletableI const () id M.delete
 
-instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a,Ord a)=>B.Builder (SimpleFormR e t m) (S.Set a) where
+instance (SimpleFormInstanceC e t m, B.Builder (SimpleFormR e t m) a,Ord a)=>B.Builder (SimpleFormR e t m) (S.Set a) where
   buildA = buildAdjustableContainer (SFAdjustableI setSFA setSFD)
 
 hashMapSFA::(Eq k,Hashable k)=>SFAppendableI (HML.HashMap k v) (HML.HashMap k) (k,v)
@@ -187,7 +188,7 @@ hashMapSFD::(Eq k, Hashable k)=>SFDeletableI (HML.HashMap k) (k,v) k ()
 hashMapSFD = SFDeletableI (\(k,_) _ ->k) () id HML.delete
 
 
-instance (SimpleFormC e t m,
+instance (SimpleFormInstanceC e t m,
           B.Builder  (SimpleFormR e t m)  k, Eq k, Hashable k,
           B.Builder  (SimpleFormR e t m)  v)
          =>B.Builder (SimpleFormR e t m) (HML.HashMap k v) where
@@ -201,7 +202,7 @@ hashSetSFA = SFAppendableI (CRepI (\hs ->HML.fromList $ (\x->(x,x)) <$> HS.toLis
 hashSetSFD::(Eq a, Hashable a)=>SFDeletableI (HML.HashMap a) a a ()
 hashSetSFD = SFDeletableI const () id HML.delete
 
-instance (SimpleFormC e t m,
+instance (SimpleFormInstanceC e t m,
           B.Builder  (SimpleFormR e t m)  a, Eq a, Hashable a)
          =>B.Builder (SimpleFormR e t m) (HS.HashSet a) where
   buildA = buildAdjustableContainer (SFAdjustableI hashSetSFA hashSetSFD)
@@ -229,16 +230,16 @@ liftLF' = hoist
 
 
 -- utilities for collapsing
-widgetToggle::RD.MonadWidget t m=>Bool->R.Event t Bool -> m a -> m a -> m (R.Dynamic t a)
+widgetToggle::(RD.DomBuilder t m, R.MonadHold t m)=>Bool->R.Event t Bool -> m a -> m a -> m (R.Dynamic t a)
 widgetToggle startCond condEv trueW falseW = do
   let condW b = if b then trueW else falseW
   RD.widgetHold (condW startCond) (condW <$> condEv)
 
-widgetToggleDyn::RD.MonadWidget t m=>Bool->R.Event t Bool -> m (R.Dynamic t a) -> m (R.Dynamic t a) -> m (R.Dynamic t a)
+widgetToggleDyn::(RD.DomBuilder t m, R.MonadHold t m)=>Bool->R.Event t Bool -> m (R.Dynamic t a) -> m (R.Dynamic t a) -> m (R.Dynamic t a)
 widgetToggleDyn startCond condEv trueW falseW = join <$> widgetToggle startCond condEv trueW falseW
 
 -- unstyled, for use within other instances which will deal with the styling.
-buildTraversableSFA'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m b->BuildF e t m fa
+buildTraversableSFA'::(SimpleFormInstanceC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m b->BuildF e t m fa
 buildTraversableSFA' crI buildOne _ mfa =
   case mfa of
     Just fa -> unSF $ fromRep crI <$> traverse (liftF formRow . SimpleFormR . buildOne Nothing . Just) (toRep crI fa)
@@ -246,7 +247,7 @@ buildTraversableSFA' crI buildOne _ mfa =
 
 -- styled, in case we ever want an editable container without add/remove
 
-buildTraversableSFA::forall e t m b g fa.(SimpleFormC e t m,
+buildTraversableSFA::forall e t m b g fa.(SimpleFormInstanceC e t m,
                       B.Builder (SimpleFormR e t m) b,Traversable g)=>CRepI fa (g b)->BuildF e t m fa 
 buildTraversableSFA crI md mfa = do
   validClasses <- validItemStyle
@@ -254,7 +255,7 @@ buildTraversableSFA crI md mfa = do
   formCol' attrsDyn $ layoutCollapsible "" CollapsibleStartsOpen $ buildTraversableSFA' crI (\x -> itemL . unSF . B.buildA x) md mfa
 
 -- TODO: need a new version to do widgetHold over whole thing if collapsible depends on size
-buildSFContainer::(SimpleFormC e t m,
+buildSFContainer::(SimpleFormInstanceC e t m,
                    B.Builder (SimpleFormR e t m) b,
                    Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
 buildSFContainer aI buildTr mFN mfa = mdo
@@ -281,7 +282,7 @@ buildSFContainer aI buildTr mFN mfa = mdo
   return dmfa
 
 
-buildSFContainer'::(SimpleFormC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
+buildSFContainer'::(SimpleFormInstanceC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)=>SFAppendableI fa g b->BuildF e t m (g b)->BuildF e t m fa
 buildSFContainer' aI buildTr mFN mfa = mdo
   attrsDyn <- sfAttrs dmfa mFN Nothing
   let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
@@ -305,7 +306,7 @@ buildSFContainer' aI buildTr mFN mfa = mdo
     return dmfa'
   return dmfa
 
-buildOneDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b)
+buildOneDeletable::(SimpleFormInstanceC e t m, B.Builder (SimpleFormR e t m) b)
                    =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (ReaderT e m) (DynValidation t b)
 buildOneDeletable dI mFN ma = liftLF' formRow $ do     
     (evs,curS) <- get
@@ -316,7 +317,7 @@ buildOneDeletable dI mFN ma = liftLF' formRow $ do
     return dma
 
 
-buildDeletable::(SimpleFormC e t m, B.Builder (SimpleFormR e t m) b, Traversable g)=>SFDeletableI g b k s->BuildF e t m (g b)
+buildDeletable::(SimpleFormInstanceC e t m, B.Builder (SimpleFormR e t m) b, Traversable g)=>SFDeletableI g b k s->BuildF e t m (g b)
 buildDeletable dI _ mgb = 
   case mgb of
     Nothing -> return dynValidationNothing

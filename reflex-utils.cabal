@@ -36,6 +36,7 @@ library
   hs-source-dirs: src
   exposed-modules:
                   Reflex.Dom.Contrib.Layout.All
+                  Reflex.Dom.Contrib.ReflexConstraints
                   Reflex.Dom.Contrib.Layout.Types
                   Reflex.Dom.Contrib.Layout.ClayUtils
                   Reflex.Dom.Contrib.Layout.FlexLayout
