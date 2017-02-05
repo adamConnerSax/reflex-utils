@@ -41,6 +41,7 @@ import qualified Data.Map as M
 import qualified Data.List as L
 import qualified Data.Text as T
 import Data.Proxy (Proxy(Proxy))
+import Data.Default (def)
 
 #ifdef USE_WKWEBVIEW
 import Language.Javascript.JSaddle.WKWebView (run)
@@ -250,7 +251,7 @@ tabbedWidget = do
   el "p" $ text ""
   el "br" $ blank
 --  dynamicTabbedLayout sfTab (constDyn [sfTab,optFlexTab,boxesTab])
-  staticTabbedLayout sfTab [sfTab,optFlexTab,boxesTab]
+  staticTabbedLayout def sfTab [sfTab,optFlexTab,boxesTab]
 
 allCss = tabCssBS
          <> flexCssBS

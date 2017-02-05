@@ -27,7 +27,7 @@ import Control.Monad.IO.Class (MonadIO)
 import qualified Data.ByteString as B
 import qualified Data.Map as M
 import qualified Data.Foldable as F
-
+import Data.Default (Default(..)) 
 
 import Prelude hiding (div)
 import Clay
@@ -49,16 +49,22 @@ tabCss = do
     "-webkit-flex-direction" -: "column"
     "flex-wrap" -: "wrap"
     "-webkit-flex-wrap" -: "wrap"
+    ".tab-row" ? position relative
+    ".tab-row" # after ? do -- I don't think this is working
+      position absolute
+      "content" -: ""
+      width (pct 100)
+      bottom nil
+      left nil
+      "border-bottom" -: "1px solid #AAA"
+      zIndex 1
     label ? do
       border solid (px 1) (grayish 211)
       padding nil (em 0.7) nil (em 0.7)
+      margin nil (em 0.2) nil (em 0.2) 
       cursor pointer
       zIndex 1
       marginLeft (px (-1))
-      ".selected" ? do
-        background (grayish 200)
-      ".unselected" ?
-        background white
     label # firstOfType ? do
       marginLeft (px 0)
     ".tab-div" ? do
@@ -68,11 +74,11 @@ tabCss = do
       border solid (px 1) (grayish 211)
       display none
       "order" -: "1"
+    label # ".unselected" ? background (grayish 200)
+    label # ".selected" ? background white
     input # ("type" @= "radio") ? display none
-    input # ("type" @= "radio") # checked |+ label |+ div ? do
-      display block
   ".tab-div2" ? do
-    width (pct 100)
+    width (pct 96)
     marginTop (px (-1))
     sym padding (em 1)
     border solid (px 1) (grayish 211)
@@ -103,6 +109,45 @@ data TabInfo t m a = TabInfo { tabID::T.Text,
                                tabWidget::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a }
 
 
+
+instance Eq (TabInfo t m a) where
+  (TabInfo _ x _) == (TabInfo _ y _) = x == y
+
+instance Ord (TabInfo t m a) where
+  compare (TabInfo _ x _) (TabInfo _ y _) = compare x y
+
+
+
+data StaticTabConfig = StaticTabConfig
+                       {
+                         tabControlClass::T.Text, -- surrounds the entire control.  Allows styling and provides scope                         
+                         tabPaneClass::T.Text, -- for the div around each pane
+                         tabRowClass::T.Text,
+                         indicatorOnClass::T.Text, -- for the tab indicator when the tab is selected
+                         indicatorOffClass::T.Text -- for the tab indicator when the tab is un-selected
+                       }
+
+instance Default StaticTabConfig where
+  def = StaticTabConfig "tabbed-area" "tab-pane" "tab-row" "selected" "unselected"
+                       
+staticTabbedLayout::(MonadIO (R.PushM t),RD.DomBuilder t m, RD.PostBuild t m, MonadFix m,
+                      RD.MonadHold t m,Traversable f)=>StaticTabConfig->TabInfo t m a->f (TabInfo t m a)->m (f a)
+staticTabbedLayout config curTab tabs = RD.divClass (tabControlClass config) $ mdo
+  let curTabchecked tab = if tab==curTab then "checked" RD.=: "" else M.empty
+      tabInput tab = RD.elAttr "input" (("id" RD.=: (tabID tab))
+                                         <> ("type" RD.=: "radio")
+                                         <> ("name" RD.=: "grp")
+                                         <> curTabchecked tab) RD.blank 
+      makeLabelAttrs tab ct = attrsIf ("for" RD.=: (tabID tab)) ("class" RD.=: indicatorOnClass config) ("class" RD.=: indicatorOffClass config) ((==tab) <$> ct)
+      makeTabAttrs tab ct = attrsIf ("class" RD.=: tabPaneClass config) ("style" RD.=: "display: block") ("style" RD.=: "display: none") ((==tab) <$> ct)
+      tabLabelEv tab ct = fmap (const tab) . (RD.domEvent RD.Click . fst) <$> (RD.elDynAttr' "label" (makeLabelAttrs tab ct) $ RD.text (tabName tab))
+      tabEv tab ct = flexItem (tabInput tab >> tabLabelEv tab ct)
+      contentDiv ctDyn tab = RD.elDynAttr "div" (makeTabAttrs tab ctDyn) (tabWidget tab)
+  curTabEv <- RD.leftmost . F.toList <$> (RD.divClass (tabRowClass config) $ flexRow (traverse (`tabEv` curTabDyn) tabs)) -- make the tab bar
+  curTabDyn <- R.foldDyn const curTab curTabEv 
+  traverse (contentDiv curTabDyn) tabs -- and now the tabs
+
+
 attrsIf::R.Reflex t=>M.Map T.Text T.Text->M.Map T.Text T.Text -> M.Map T.Text T.Text -> R.Dynamic t Bool -> R.Dynamic t (M.Map T.Text T.Text)
 attrsIf alwaysAttrs trueAttrs falseAttrs ifDyn = f <$> ifDyn where
   f True = alwaysAttrs <> trueAttrs
@@ -121,31 +166,7 @@ staticTabbedLayout' curTab tabs = RD.divClass "tabbed-area" $ do
       contentDiv tab = RD.divClass "tab-div" (tabWidget tab)
   traverse (\t -> tabEv t >> contentDiv t) tabs
 
-staticTabbedLayout::(MonadIO (R.PushM t),RD.DomBuilder t m, RD.PostBuild t m, MonadFix m,
-                      RD.MonadHold t m,Traversable f)=>TabInfo t m a->f (TabInfo t m a)->m (f a)
-staticTabbedLayout curTab tabs = RD.divClass "tabbed-area" $ mdo
-  let curTabchecked tab = if tab==curTab then "checked" RD.=: "" else M.empty
-      tabInput tab = RD.elAttr "input" (("id" RD.=: (tabID tab))
-                                         <> ("type" RD.=: "radio")
-                                         <> ("name" RD.=: "grp")
-                                         <> curTabchecked tab) RD.blank -- TabInfo m t () -> m ()
-      makeLabelAttrs tab ct = attrsIf ("for" RD.=: (tabID tab)) ("class" RD.=: "selected") ("class" RD.=: "unselected") ((==tab) <$> ct)
-      tabLabelEv tab ct = fmap (const tab) . (RD.domEvent RD.Click . fst) <$> (RD.elDynAttr' "label" (makeLabelAttrs tab ct) $ RD.text (tabName tab))
-      tabEv tab ct = flexItem (tabInput tab >> tabLabelEv tab ct)
-      makeTabAttrs tab ct = attrsIf ("class" RD.=: "tab-div2") ("style" RD.=: "display: block") ("style" RD.=: "display: none") ((==tab) <$> ct)
-      contentDiv ctDyn tab = RD.elDynAttr "div" (makeTabAttrs tab ctDyn) (tabWidget tab)
-  curTabEv <- RD.leftmost . F.toList <$> flexRow (traverse (`tabEv` curTabEv) tabs) -- Event t (TabInfo t m a)
-  curTabDyn <- R.foldDyn const curTab curTabEv
-  traverse (contentDiv curTabDyn) tabs
-
-
 --dynamic 
-instance Eq (TabInfo t m a) where
-  (TabInfo _ x _) == (TabInfo _ y _) = x == y
-
-instance Ord (TabInfo t m a) where
-  compare (TabInfo _ x _) (TabInfo _ y _) = compare x y
-
 instance (RD.DomBuilder t m, RD.PostBuild t m)=>Tab t m (TabInfo t m a) where
   tabIndicator (TabInfo tabId tabLabel _) boolDyn = do
     let labelAttrs = M.fromList [("for",tabId)]

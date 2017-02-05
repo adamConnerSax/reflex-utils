@@ -150,6 +150,7 @@ executable reflex-utils-layout
                      , ghcjs-dom
                      , exception-transformers
                      , ref-tf
+                     , data-default
                      , lens
                      , transformers
                      , mtl
@@ -216,6 +217,7 @@ executable reflex-utils-layout-warp
                      , ghcjs-dom
                      , exception-transformers
                      , ref-tf
+                     , data-default
                      , lens
                      , transformers
                      , mtl
