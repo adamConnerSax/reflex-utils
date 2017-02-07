@@ -30,7 +30,8 @@ import qualified Data.Foldable as F
 import Data.Default (Default(..)) 
 
 import Prelude hiding (div)
-import Clay
+import Clay hiding (wrap)
+import Clay.Flexbox (wrap)
 import Data.Monoid ((<>))
 import qualified Data.Text as T
 
@@ -42,46 +43,45 @@ selTabColor = white
 
 tabCss :: Css
 tabCss = do
+  let tabAreaWidth = pct 96
   ".tabbed-area" ? do
-    "display" -: "flex"
+    display flex
+    flexDirection column
+    flexWrap Clay.Flexbox.wrap
     "display" -: "-webkit-flex"
-    "flex-direction" -: "column"
     "-webkit-flex-direction" -: "column"
-    "flex-wrap" -: "wrap"
     "-webkit-flex-wrap" -: "wrap"
-    ".tab-row" ? position relative
-    ".tab-row" # after ? do -- I don't think this is working
+    ".tab-row" ? do
+      position relative
+      width tabAreaWidth
+    ".tab-row" # after ? do 
       position absolute
-      "content" -: ""
-      width (pct 100)
+      "content" -: quote " "
+      width tabAreaWidth
       bottom nil
       left nil
-      "border-bottom" -: "1px solid #AAA"
-      zIndex 1
+      borderBottom solid (px 1) black
+      zIndex (-1)
     label ? do
       border solid (px 1) (grayish 211)
       padding nil (em 0.7) nil (em 0.7)
-      margin nil (em 0.2) nil (em 0.2) 
+      margin nil (em 0.1) (em 0.1) (em 0.1) 
       cursor pointer
-      zIndex 1
-      marginLeft (px (-1))
-    label # firstOfType ? do
-      marginLeft (px 0)
-    ".tab-div" ? do
-      width (pct 100)
-      marginTop (px (-1))
-      sym padding (em 1)
-      border solid (px 1) (grayish 211)
-      display none
-      "order" -: "1"
-    label # ".unselected" ? background (grayish 200)
-    label # ".selected" ? background white
+    label # ".unselected" ? do
+      position relative
+      background (grayish 200)
+      zIndex 0
+    label # ".selected" ? do      
+      background white
+      borderBottomColor white
+      zIndex 2
     input # ("type" @= "radio") ? display none
-  ".tab-div2" ? do
-    width (pct 96)
-    marginTop (px (-1))
-    sym padding (em 1)
-    border solid (px 1) (grayish 211)
+    ".tab-pane" ? do
+      zIndex 1
+      width tabAreaWidth
+--      marginTop (px (-1))
+--      sym padding (em 1)
+--      border solid (px 1) (grayish 211)
   ".dyn-tab-bar" ? do
     ul ? do
       listStyle none none none
@@ -132,20 +132,21 @@ instance Default StaticTabConfig where
                        
 staticTabbedLayout::(MonadIO (R.PushM t),RD.DomBuilder t m, RD.PostBuild t m, MonadFix m,
                       RD.MonadHold t m,Traversable f)=>StaticTabConfig->TabInfo t m a->f (TabInfo t m a)->m (f a)
-staticTabbedLayout config curTab tabs = RD.divClass (tabControlClass config) $ mdo
+staticTabbedLayout config curTab tabs = do
   let curTabchecked tab = if tab==curTab then "checked" RD.=: "" else M.empty
       tabInput tab = RD.elAttr "input" (("id" RD.=: (tabID tab))
-                                         <> ("type" RD.=: "radio")
-                                         <> ("name" RD.=: "grp")
-                                         <> curTabchecked tab) RD.blank 
+                                        <> ("type" RD.=: "radio")
+                                        <> ("name" RD.=: "grp")
+                                        <> curTabchecked tab) RD.blank 
       makeLabelAttrs tab ct = attrsIf ("for" RD.=: (tabID tab)) ("class" RD.=: indicatorOnClass config) ("class" RD.=: indicatorOffClass config) ((==tab) <$> ct)
       makeTabAttrs tab ct = attrsIf ("class" RD.=: tabPaneClass config) ("style" RD.=: "display: block") ("style" RD.=: "display: none") ((==tab) <$> ct)
       tabLabelEv tab ct = fmap (const tab) . (RD.domEvent RD.Click . fst) <$> (RD.elDynAttr' "label" (makeLabelAttrs tab ct) $ RD.text (tabName tab))
       tabEv tab ct = flexItem (tabInput tab >> tabLabelEv tab ct)
       contentDiv ctDyn tab = RD.elDynAttr "div" (makeTabAttrs tab ctDyn) (tabWidget tab)
-  curTabEv <- RD.leftmost . F.toList <$> (RD.divClass (tabRowClass config) $ flexRow (traverse (`tabEv` curTabDyn) tabs)) -- make the tab bar
-  curTabDyn <- R.foldDyn const curTab curTabEv 
-  traverse (contentDiv curTabDyn) tabs -- and now the tabs
+  RD.divClass (tabControlClass config) $ flexCol $ mdo
+    curTabEv <- RD.leftmost . F.toList <$> (RD.divClass (tabRowClass config) $ flexRow (traverse (`tabEv` curTabDyn) tabs)) -- make the tab bar
+    curTabDyn <- R.foldDyn const curTab curTabEv 
+    flexRow $ traverse (contentDiv curTabDyn) tabs -- and now the tabs
 
 
 attrsIf::R.Reflex t=>M.Map T.Text T.Text->M.Map T.Text T.Text -> M.Map T.Text T.Text -> R.Dynamic t Bool -> R.Dynamic t (M.Map T.Text T.Text)
@@ -163,7 +164,7 @@ staticTabbedLayout' curTab tabs = RD.divClass "tabbed-area" $ do
                                          <> curTabchecked tab) RD.blank
       tabLabel tab = RD.elAttr "label" ("for" RD.=: (tabID tab)) $ RD.text (tabName tab)
       tabEv ti = tabInput ti >> tabLabel ti
-      contentDiv tab = RD.divClass "tab-div" (tabWidget tab)
+      contentDiv tab = flexItem $ RD.divClass "tab-div" (tabWidget tab)
   traverse (\t -> tabEv t >> contentDiv t) tabs
 
 --dynamic 

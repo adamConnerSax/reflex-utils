@@ -10,45 +10,46 @@
 
 module Main where
 
-import           Control.Monad                         (foldM)
-import           Control.Monad.IO.Class                as IOC (MonadIO)
-import           Control.Monad.Fix                     (MonadFix)
+import           Control.Monad                           (foldM)
+import           Control.Monad.Fix                       (MonadFix)
+import           Control.Monad.IO.Class                  as IOC (MonadIO)
 --import           Data.FileEmbed
 
-import           Data.Monoid                           ((<>))
-import qualified GHC.Generics                          as GHC
-import           Prelude                               hiding (div, rem, span)
-import           Text.Show.Pretty                      (ppShow)
+import           Data.Monoid                             ((<>))
+import qualified GHC.Generics                            as GHC
+import           Prelude                                 hiding (div, rem, span)
+import           Text.Show.Pretty                        (ppShow)
 --import Clay hiding (button,col,Color)
-import qualified Data.HashSet                          as HS
-import qualified Data.Map                              as M
-import qualified Data.Sequence                         as Seq
-import qualified Data.Text                             as T
-import           Data.Time.Calendar                    (Day (..), fromGregorian)
-import           Data.Time.Clock                       (UTCTime (..))
+import qualified Data.HashSet                            as HS
+import qualified Data.Map                                as M
+import qualified Data.Sequence                           as Seq
+import qualified Data.Text                               as T
+import           Data.Time.Calendar                      (Day (..),
+                                                          fromGregorian)
+import           Data.Time.Clock                         (UTCTime (..))
 -- for a validation example...
-import           Control.Lens.Iso                      (iso)
-import           Data.Validation                       (AccValidation (..))
+import           Control.Lens.Iso                        (iso)
+import           Data.Validation                         (AccValidation (..))
 
 import           Reflex
-import qualified Reflex.Dom.Contrib.Widgets.Common     as RDC
+import qualified Reflex.Dom.Contrib.Widgets.Common       as RDC
 import           Reflex.Dom.Core
 --import           Reflex.Dynamic.TH
 
-import           GHCJS.DOM.Types                       (JSM)
-import           Reflex.Dom.Contrib.ReflexConstraints  (MonadWidgetExtraC)
-import           Reflex.Dom.Contrib.Layout.ClayUtils   (cssToBS)
-import           Reflex.Dom.Contrib.Layout.FlexLayout  (flexCssBS, flexFillR)
-import           Reflex.Dom.Contrib.Layout.Types       (CssClass (..),
-                                                        CssClasses (..),
-                                                        emptyCss)
-
+import           GHCJS.DOM.Types                         (JSM)
+import           Reflex.Dom.Contrib.CssUtils
+import           Reflex.Dom.Contrib.Layout.ClayUtils     (cssToBS)
+import           Reflex.Dom.Contrib.Layout.FlexLayout    (flexCssBS, flexFillR)
+import           Reflex.Dom.Contrib.Layout.Types         (CssClass (..),
+                                                          CssClasses (..),
+                                                          emptyCss)
+import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
 #ifdef USE_WKWEBVIEW
-import           Language.Javascript.JSaddle.WKWebView (run)
+import           Language.Javascript.JSaddle.WKWebView   (run)
 #endif
 
 #ifdef USE_WARP
-import           Language.Javascript.JSaddle.Warp      (run)
+import           Language.Javascript.JSaddle.Warp        (run)
 #endif
 
 --import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
@@ -57,12 +58,14 @@ import           Reflex.Dom.Contrib.SimpleForm.Instances (SimpleFormInstanceC)
 --import DataBuilder
 
 
+import           Css
+
 -- a simple structure
 data User = User { name::String, email::String, age::Int } deriving (GHC.Generic,Show)
 instance Generic User
 instance HasDatatypeInfo User
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) User where
-  buildA mFN = liftF formRow . gBuildA mFN
+  buildA mFN = liftF formCol . gBuildA mFN
 
 
 buttonNoSubmit'::DomBuilder t m=>T.Text -> m (Event t ())
@@ -217,13 +220,17 @@ demoCfg = DefSFCfg {
   , cfgObserver = False
   }
 
+cssToEmbed = flexCssBS <> cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss
+cssToLink = []
+
+
 simpleFormMain  :: JSM ()
 simpleFormMain  = mainWidgetWithCss (flexCssBS
-                           <> cssToBS simpleFormDefaultCss
-                           <> cssToBS simpleObserverDefaultCss) $  test demoCfg
+                                     <> cssToBS simpleFormDefaultCss
+                                     <> cssToBS simpleObserverDefaultCss) $  test demoCfg
 
-
-
+simpleFormMain'  :: JSM ()
+simpleFormMain'  = mainWidgetWithHead (headElt "simpleForm demo" cssToLink cssToEmbed) $ test demoCfg
 
 
 #ifdef USE_WKWEBVIEW
@@ -233,7 +240,7 @@ main = run simpleFormMain
 
 #ifdef USE_WARP
 main::IO ()
-main = run 3702 simpleFormMain
+main = run 3702 simpleFormMain'
 #endif
 
 #ifdef USE_GHCJS
