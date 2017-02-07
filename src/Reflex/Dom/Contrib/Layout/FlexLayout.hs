@@ -19,6 +19,10 @@ module Reflex.Dom.Contrib.Layout.FlexLayout
        , flexCol
        , flexItem
        , flexSizedItem
+       , flexRow'
+       , flexCol'
+       , flexItem'
+       , flexSizedItem'
        ) where
 
 import qualified Reflex as R
@@ -32,7 +36,8 @@ import qualified Data.Text as T
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.String (fromString)
-
+import Data.Monoid ((<>))
+import Reflex.Dom.Contrib.Layout.Types (toCssString,CssClasses,emptyCss)
 
 flexFillStyles :: Css
 flexFillStyles = do
@@ -99,17 +104,30 @@ flexCss = do
 flexCssBS::B.ByteString
 flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty []  flexCss
 
+flexRow'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->m a->m a
+flexRow' classes = RD.divClass ("gl-flex-row" <> toCssString classes) 
+
+flexCol'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->m a->m a
+flexCol' classes = RD.divClass ("gl-flex-col"  <> toCssString classes)
+
+flexItem'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->m a->m a
+flexItem' classes = RD.divClass ("gl-flex-item" <> toCssString classes)
+
+flexSizedItem'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->Int->m a->m a
+flexSizedItem' classes n = let n' = Prelude.min n numberFlexGrowOptions in RD.divClass $ T.pack ("gl-flex-item-" ++ show n')  <> toCssString classes
+
 flexRow::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
-flexRow = RD.divClass "gl-flex-row" 
+flexRow = flexRow' emptyCss 
 
 flexCol::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
-flexCol = RD.divClass "gl-flex-col" 
+flexCol = flexCol' emptyCss
 
 flexItem::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
-flexItem = RD.divClass "gl-flex-item" 
+flexItem = flexItem' emptyCss
 
 flexSizedItem::(RD.DomBuilder t m,MonadIO (R.PushM t))=>Int->m a->m a
-flexSizedItem n = let n' = Prelude.min n numberFlexGrowOptions in RD.divClass $ T.pack ("gl-flex-item-" ++ show n') 
+flexSizedItem = flexSizedItem' emptyCss
+
 
 wrapWidget::RD.DomBuilder t m=>m a->m a
 wrapWidget = RD.divClass "" 

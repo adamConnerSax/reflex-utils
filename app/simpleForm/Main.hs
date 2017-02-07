@@ -39,11 +39,13 @@ import           Reflex.Dom.Core
 import           GHCJS.DOM.Types                         (JSM)
 import           Reflex.Dom.Contrib.CssUtils
 import           Reflex.Dom.Contrib.Layout.ClayUtils     (cssToBS)
-import           Reflex.Dom.Contrib.Layout.FlexLayout    (flexCssBS, flexFillR)
+import           Reflex.Dom.Contrib.Layout.FlexLayout    (flexCssBS, flexFillR, flexRow', flexCol', flexItem')
 import           Reflex.Dom.Contrib.Layout.Types         (CssClass (..),
                                                           CssClasses (..),
                                                           emptyCss)
+import           Reflex.Dom.Contrib.Layout.TabLayout                 
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
+
 #ifdef USE_WKWEBVIEW
 import           Language.Javascript.JSaddle.WKWebView   (run)
 #endif
@@ -57,26 +59,39 @@ import           Reflex.Dom.Contrib.SimpleForm
 import           Reflex.Dom.Contrib.SimpleForm.Instances (SimpleFormInstanceC)
 --import DataBuilder
 
-
 import           Css
 
+--It's easy to add validation (via newtype wrapper) for things isomorphic to already buildable things
+newtype Age = Age { unAge::Int }
+instance Show Age where
+  show = show . unAge
+
+validAge::Age->Either T.Text Age
+validAge a@(Age x) = if (x >= 0) then Right a else Left "Age must be > 0"
+
+instance SimpleFormInstanceC e t m => Builder (SimpleFormR e t m) Age where
+  buildA = buildValidated validAge unAge Age
+
 -- a simple structure
-data User = User { name::String, email::String, age::Int } deriving (GHC.Generic,Show)
+data User = User { name::String, email::String, age::Age } deriving (GHC.Generic,Show)
 instance Generic User
 instance HasDatatypeInfo User
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) User where
   buildA mFN = liftF formCol . gBuildA mFN
 
+testUserForm::(SimpleFormInstanceC e t m, MonadIO (PushM t))=>e->m ()
+testUserForm cfg = do
+  el "p" $ text ""
+  el "h2" $ text "From a simple data structure, Output is an event, fired when submit button is clicked but only if data is of right types and valid."
+  newUserEv <- flexFillR $ makeSimpleForm' cfg (CssClass "sf-form") Nothing (buttonNoSubmit' "submit")
+  curUserDyn <- (fmap (T.pack . show)) <$> foldDyn const (User "" "" (Age 0)) newUserEv
+  dynText curUserDyn
+
+userFormTab::SimpleFormInstanceC e t m=>e -> TabInfo t m ()
+userFormTab cfg = TabInfo "userFormTab" "Classic Form" $ testUserForm cfg
 
 buttonNoSubmit'::DomBuilder t m=>T.Text -> m (Event t ())
 buttonNoSubmit' t = (domEvent Click . fst) <$> elAttr' "button" ("type" =: "button") (text t)
-
-testUserForm::(SimpleFormInstanceC e t m, MonadIO (PushM t))=>e->m ()
-testUserForm cfg = do
-  newUserEv <- flexFillR $ makeSimpleForm' cfg (CssClass "sf-form") Nothing (buttonNoSubmit' "submit")
-  curUserDyn <- (fmap (T.pack . show)) <$> foldDyn const (User "" "" 0) newUserEv
-  dynText curUserDyn
-
 
 -- Some types to demonstrate what we can make into a form
 data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
@@ -90,16 +105,7 @@ data ReadableType = RTI Int | RTS String deriving (Show,Read)
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) ReadableType where
   buildA = buildReadMaybe
 
---It's easy to add validation (via newtype wrapepr) for things isomorphic to already buildable things
-newtype Age = Age { unAge::Int }
-instance Show Age where
-  show = show . unAge
 
-validAge::Age->Either T.Text Age
-validAge a@(Age x) = if (x >= 0) then Right a else Left "Age must be > 0"
-
-instance SimpleFormInstanceC e t m => Builder (SimpleFormR e t m) Age where
-  buildA = buildValidated validAge unAge Age
 
 --We'll put these all in a Sum type to show how the form building handles that
 data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType | AA Age deriving (Show,GHC.Generic)
@@ -112,7 +118,6 @@ newtype MyMap = MyMap { map_String_B::M.Map String B } deriving (Show,GHC.Generi
 data BRec = BRec { oneB::B, seqOfA::Seq.Seq A, hashSetOfString::HS.HashSet String } deriving (Show)
 
 data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Generic)
-
 
 
 -- generic instances
@@ -166,44 +171,58 @@ buildDateTime mFN ms = MDWrapped matched ("DT",mFN) bldr where
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) DateOrDateTime where
   buildA = buildAFromConList [buildDate,buildDateTime]
 
-
--- Equivalent TH-built instances
--- Can't do extra formatting.  Row and column templates are all you get.
-{-
--- template derivation is simpler but may be a compile time issues for ghcjs.  And some people don't like TH.
-deriveSFRowBuilder ''A
-deriveSFRowBuilder ''MyMap
--}
-
 -- put some data in for demo purposes
 b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
 b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
 
-flowTestWidget::(DomBuilder t m,MonadWidgetExtraC t m,MonadFix m,MonadHold t m,PostBuild t m)=>Int->m (Dynamic t String)
-flowTestWidget n = do
-  text "Are all these checked?"
-  boolDyns <- sequence $ take n $ Prelude.repeat (RDC._hwidget_value <$> RDC.htmlCheckbox (RDC.WidgetConfig never True (constDyn mempty)))
-  allTrueDyn <- foldM (\x bDyn -> combineDyn (&&) x bDyn) (constDyn True) boolDyns
---  let allTrueDyn = foldl' (\x bDyn -> zipDynWith (&&) x bDyn) (constDyn True) boolDyns
-  forDyn allTrueDyn $ \b -> if b then "All Checked!" else "Some Unchecked."
 
-test::(SimpleFormInstanceC e t m, MonadIO (PushM t))=>e->m ()
-test cfg = do
-  testUserForm cfg
-  el "p" blank
+testComplexForm::(SimpleFormInstanceC e t m, MonadIO (PushM t))=>e -> m ()
+testComplexForm cfg = do
+  el "p" $ text ""
+  el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
   cDynM<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed C:"
   el "p" blank
   _ <- flexFillR $ observeDynValidation cfg (CssClass "sf-observer") cDynM
-  el "p" blank
+  return ()
+
+complexFormTab::SimpleFormInstanceC e t m=>e -> TabInfo t m ()
+complexFormTab cfg = TabInfo "complexFormTab" "Complex Example" $ testComplexForm cfg
+
+
+flowTestWidget::(DomBuilder t m,MonadWidgetExtraC t m,MonadFix m,MonadHold t m,PostBuild t m)=>Int->m (Dynamic t String)
+flowTestWidget n = do
+  text "Are all these checked?"
+  boolDyns <- sequence $ take n $ Prelude.repeat (RDC._hwidget_value <$> RDC.htmlCheckbox (RDC.WidgetConfig never True (constDyn mempty)))
+  allTrueDyn <- foldM (\x bDyn -> combineDyn (&&) x bDyn) (constDyn True) boolDyns
+  forDyn allTrueDyn $ \b -> if b then "All Checked!" else "Some Unchecked."
+
+
+testFlow::(SimpleFormInstanceC e t m, MonadIO (PushM t))=>e->m ()
+testFlow cfg = do
+  el "p" $ text ""
+  el "h2" $ text "Observe a \"flow\", that is directly see input and output of a function of type WidgetMonad m=>a -> m b"
+  el "h2" $ text "In this case, WidgetMonad m=>Int -> Dynamic t (String)"
   _ <- observeFlow cfg (CssClass "sf-form") (CssClass "sf-observer") flowTestWidget 2
   return ()
 
+flowTestTab::SimpleFormInstanceC e t m=>e -> TabInfo t m ()
+flowTestTab cfg = TabInfo "flowTestTab" "Flow Example" $ testFlow cfg
 
-
+test::(SimpleFormInstanceC e t m, MonadIO (PushM t))=>e -> m ()
+test cfg = do
+  el "p" (text "")
+  el "br" blank
+  staticTabbedLayout def (userFormTab cfg)
+    [
+      userFormTab cfg
+    , complexFormTab cfg
+    , flowTestTab cfg
+    ]
+  return ()
 
 {-
    NB: AllDefault module exports DefSFCfg which is an instance of SimpleFormConfiguration with all the specific failure, sum and styling.
@@ -220,17 +239,11 @@ demoCfg = DefSFCfg {
   , cfgObserver = False
   }
 
-cssToEmbed = flexCssBS <> cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss
+cssToEmbed = flexCssBS <> tabCssBS <> cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss
 cssToLink = []
 
-
 simpleFormMain  :: JSM ()
-simpleFormMain  = mainWidgetWithCss (flexCssBS
-                                     <> cssToBS simpleFormDefaultCss
-                                     <> cssToBS simpleObserverDefaultCss) $  test demoCfg
-
-simpleFormMain'  :: JSM ()
-simpleFormMain'  = mainWidgetWithHead (headElt "simpleForm demo" cssToLink cssToEmbed) $ test demoCfg
+simpleFormMain  = mainWidgetWithHead (headElt "simpleForm demo" cssToLink cssToEmbed) $ test demoCfg
 
 
 #ifdef USE_WKWEBVIEW
@@ -240,7 +253,7 @@ main = run simpleFormMain
 
 #ifdef USE_WARP
 main::IO ()
-main = run 3702 simpleFormMain'
+main = run 3702 simpleFormMain
 #endif
 
 #ifdef USE_GHCJS

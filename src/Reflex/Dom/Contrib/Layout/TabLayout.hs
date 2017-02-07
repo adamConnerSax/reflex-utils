@@ -69,10 +69,10 @@ tabCss = do
       cursor pointer
     label # ".unselected" ? do
       position relative
-      background (grayish 200)
+      background unSelTabColor
       zIndex 0
     label # ".selected" ? do      
-      background white
+      background selTabColor
       borderBottomColor white
       zIndex 2
     input # ("type" @= "radio") ? display none
