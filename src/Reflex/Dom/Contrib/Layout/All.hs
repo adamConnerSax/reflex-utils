@@ -9,6 +9,9 @@ module Reflex.Dom.Contrib.Layout.All
        , flexRow
        , flexCol
        , flexItem
+       , flexRow'
+       , flexCol'
+       , flexItem'
        , flexFillL
        , flexFillR
        , flexHCenter
@@ -38,11 +41,14 @@ module Reflex.Dom.Contrib.Layout.All
 
 import           Reflex.Dom.Contrib.Layout.Types
 
-import           Reflex.Dom.Contrib.Layout.FlexLayout  (flexCol, flexCssBS,
+import           Reflex.Dom.Contrib.Layout.FlexLayout  (flexCol, flexCol',
+                                                        flexCssBS,
                                                         flexFillD, flexFillL,
                                                         flexFillR, flexFillU,
-                                                        flexHCenter, flexItem,
-                                                        flexRow, flexVCenter)
+                                                        flexHCenter,
+                                                        flexItem, flexItem',
+                                                        flexRow, flexRow',
+                                                        flexVCenter)
 
 
 
