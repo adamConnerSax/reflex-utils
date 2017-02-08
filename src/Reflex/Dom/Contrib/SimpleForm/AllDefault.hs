@@ -102,7 +102,7 @@ instance (MonadWidgetExtraC t m, MonadIO (PushM t),RD.DomBuilder t m, R.MonadHol
   
 instance (MonadIO (PushM t),RD.DomBuilder t m,MonadWidgetExtraC t m
          , RD.MonadHold t m, MonadFix m, RD.PostBuild t m)=>SimpleFormLayoutFunctions DefSFCfg m where
-  formItem    = liftLF flexItem 
+  formItem = liftLF flexItem 
   layoutVert  = liftLF flexCol 
   layoutHoriz = liftLF flexRow
   layoutL     = liftLF flexFillR 

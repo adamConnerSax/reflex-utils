@@ -64,7 +64,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
 
 
 import           Reflex.Dom.Contrib.Layout.Types (CssClass, CssClasses (..),
-                                                  IsCssClass (..))
+                                                  IsCssClass (..),emptyCss)
 
 import           DataBuilder                     as BExport (Builder (..),
                                                              FieldName,
@@ -243,6 +243,15 @@ class SimpleFormBuilderFunctions e t m where
   sumF::[(B.ConName,SimpleFormR e t m a)]->Maybe B.ConName->SimpleFormR e t m a
   dynamicDiv::DynAttrs t->SFLayoutF e m a
 
+type Placeholder = T.Text
+type Title = T.Text
+type InputID = T.Text
+
+data InputConfig = InputConfig { placeHolder::Maybe Placeholder, title::Maybe Title, inputId::Maybe InputID, inputClasses::CssClasses }
+
+noConfig::InputConfig
+noConfig = InputConfig Nothing Nothing Nothing emptyCss
+
 class SimpleFormLayoutFunctions e m where
   formItem::SFLayoutF e m a
   layoutVert::SFLayoutF e m a
@@ -256,20 +265,14 @@ class SimpleFormLayoutFunctions e m where
   layoutCollapsible::T.Text->CollapsibleInitialState->SFLayoutF e m a
   validItemStyle::ReaderT e m CssClasses
   invalidItemStyle::ReaderT e m CssClasses
-{-
-  buttonStyle::ReaderT e m CssClasses
-  dropdownStyle::ReaderT e m CssClasses
-  inputsDisabled::ReaderT e m Bool
-  disableInputs::ReaderT e m a -> ReaderT e m a
-
-
-itemL::SimpleFormConfiguration e t m=>SFLayoutF e m a
--}
   observerStyle::ReaderT e m CssClasses
   observer::ReaderT e m Bool
   setToObserve::SFLayoutF e m a
   setLayoutFieldName::Maybe (T.Text -> T.Text)->SFLayoutF e m a
   getLayoutFieldName::ReaderT e m (Maybe (T.Text -> SFLayoutF e m a)) -- Nothing is ignored, otherwise do the layout
+
+--formItem::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
+--formItem = formItem' noConfig
 
 layoutFieldNameHelper::SimpleFormC e t m=>Maybe FieldName->SFLayoutF e m a
 layoutFieldNameHelper mFN sfra = do
@@ -332,7 +335,7 @@ attrs0::R.Reflex t=>DynAttrs t
 attrs0 = R.constDyn mempty
 
 titleAttr::T.Text->M.Map T.Text T.Text
-titleAttr x = "title" RD.=: x
+titleAttr x = M.fromList [("title",x),("placeholder",x)]
 
 cssClassAttr::CssClasses->M.Map T.Text T.Text
 cssClassAttr x = "class" RD.=: toCssString x
