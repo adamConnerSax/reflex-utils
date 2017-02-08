@@ -42,7 +42,7 @@ import           Reflex.Dom.Contrib.Layout.ClayUtils     (cssToBS)
 import           Reflex.Dom.Contrib.Layout.FlexLayout    (flexCssBS, flexFill, flexRow', flexCol', flexItem')
 import           Reflex.Dom.Contrib.Layout.Types         (CssClass (..),
                                                           CssClasses (..),
-                                                          emptyCss,LayoutDirection(..))
+                                                          emptyCss,LayoutDirection(..),LayoutOrientation(..))
 import           Reflex.Dom.Contrib.Layout.TabLayout                 
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
 
@@ -149,8 +149,8 @@ instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) C where
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) BRec where
   buildA mFN mBRec= liftF (textOnTop "BRec" . formRow) $ BRec
                <$> buildA Nothing (oneB <$> mBRec)
-               <*> liftF (textOnTop' layoutHC "Seq A") (buildA Nothing (seqOfA <$> mBRec))
-               <*> liftF (textOnTop' layoutHC "HashSet String") (buildA Nothing (hashSetOfString <$> mBRec))
+               <*> liftF (textOnTop' (layoutCentered LayoutHorizontal) "Seq A") (buildA Nothing (seqOfA <$> mBRec))
+               <*> liftF (textOnTop' (layoutCentered LayoutHorizontal) "HashSet String") (buildA Nothing (hashSetOfString <$> mBRec))
 
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.

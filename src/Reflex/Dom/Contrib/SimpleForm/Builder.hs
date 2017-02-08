@@ -46,10 +46,22 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , liftAction
        , switchingSFR
        , layoutFieldNameHelper
-       , textAtLeft
-       , textOnTop
-       , textOnTop'
-       , legend
+       , validItemStyle
+       , invalidItemStyle
+       , observerOnlyStyle
+       , observer
+       , LabelText
+       , LabelPosition
+       , LabelConfig
+       , Placeholder
+       , Title
+       , InputConfig(..)
+       , FormStyles(..)
+       , FormConfig(..)
+--       , textAtLeft
+--       , textOnTop
+--       , textOnTop'
+       , fieldSet
        , itemL
        , itemR
        , formRow
@@ -64,7 +76,8 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
 
 
 import           Reflex.Dom.Contrib.Layout.Types (CssClass, CssClasses (..),
-                                                  IsCssClass (..),emptyCss)
+                                                  IsCssClass (..),emptyCss,
+                                                  LayoutDirection(..),LayoutOrientation(..))
 
 import           DataBuilder                     as BExport (Builder (..),
                                                              FieldName,
@@ -245,35 +258,57 @@ class SimpleFormBuilderFunctions e t m where
 
 type Placeholder = T.Text
 type Title = T.Text
-type InputID = T.Text
+type LabelText = T.Text
+data LabelPosition = LabelBefore | LabelAfter
+data LabelConfig = LabelConfig LabelPosition LabelText
+data FormType = Interactive | ObserveOnly
 
-data InputConfig = InputConfig { placeHolder::Maybe Placeholder, title::Maybe Title, inputId::Maybe InputID, inputClasses::CssClasses }
+data InputConfig = InputConfig { placeHolder::Maybe Placeholder, title::Maybe Title, labelConfig::Maybe LabelConfig }
+data FormStyles = FormStyles { valid::CssClasses, invalid::CssClasses, observeOnly::CssClasses }
+data FormConfig = FormConfig { styles::FormStyles, formType::FormType }
 
 noConfig::InputConfig
-noConfig = InputConfig Nothing Nothing Nothing emptyCss
+noConfig = InputConfig Nothing Nothing Nothing
+
+-- presumably, an instance of this will have fields for the configs and the sets will be done via Control.Monad.Reader.local
 
 class SimpleFormLayoutFunctions e m where
   formItem::SFLayoutF e m a
-  layoutVert::SFLayoutF e m a
-  layoutHoriz::SFLayoutF e m a
-  layoutL::SFLayoutF e m a
-  layoutR::SFLayoutF e m a
-  layoutHC::SFLayoutF e m a -- centered horizontally
-  layoutT::SFLayoutF e m a
-  layoutB::SFLayoutF e m a
-  layoutVC::SFLayoutF e m a -- centered vertically
+  layoutOrientation::LayoutOrientation->SFLayoutF e m a
+  layoutFill::LayoutDirection->SFLayoutF e m a
+  layoutCentered::LayoutOrientation->SFLayoutF e m a
   layoutCollapsible::T.Text->CollapsibleInitialState->SFLayoutF e m a
-  validItemStyle::ReaderT e m CssClasses
-  invalidItemStyle::ReaderT e m CssClasses
-  observerStyle::ReaderT e m CssClasses
-  observer::ReaderT e m Bool
-  setToObserve::SFLayoutF e m a
-  setLayoutFieldName::Maybe (T.Text -> T.Text)->SFLayoutF e m a
-  getLayoutFieldName::ReaderT e m (Maybe (T.Text -> SFLayoutF e m a)) -- Nothing is ignored, otherwise do the layout
+
+  getFormConfig::ReaderT e m FormConfig
+  setFormConfig::FormConfig->SFLayoutF e m a  
+
+  getInputConfig::ReaderT e m InputConfig
+  setInputConfig::InputConfig->SFLayoutF e m a
+  
+--  setLayoutFieldName::Maybe (T.Text -> T.Text)->SFLayoutF e m a
+--  getLayoutFieldName::ReaderT e m (Maybe (T.Text -> SFLayoutF e m a)) -- Nothing is ignored, otherwise do the layout
 
 --formItem::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
 --formItem = formItem' noConfig
 
+validItemStyle::ReaderT e m CssClasses
+validItemStyle = valid . styles <$> getFormConfig
+
+invalidItemStyle::ReaderT e m CssClasses
+invalidItemStyle = invalid . styles <$> getFormConfig
+
+observerOnlyStyle::ReaderT e m CssClasses
+observerOnlyStyle = observeOnly . styles <$> getFormConfig
+
+getFormType::ReaderT e m FormType
+getFormType = formType <$> getFormConfig
+
+setToObserve::SFLayoutF e m a
+setToObserve w = do
+  fc <- getFormConfig
+  setFormConfig fc{ formType = ObserveOnly }  w
+
+{-
 layoutFieldNameHelper::SimpleFormC e t m=>Maybe FieldName->SFLayoutF e m a
 layoutFieldNameHelper mFN sfra = do
   mf <- getLayoutFieldName
@@ -292,9 +327,10 @@ textOnTop'::SimpleFormC e t m=>SFLayoutF e m ()->T.Text->SFLayoutF e m a
 textOnTop' labelLayout label ra = formCol $ do
   labelLayout . formItem $ RD.el "span" $ RD.text label
   formItem ra
+-}
 
-legend::SimpleFormC e t m=>T.Text->SFLayoutF e m a
-legend legendText ra = RD.el "fieldset" $ do
+fieldSet::SimpleFormC e t m=>T.Text->SFLayoutF e m a
+fieldSet legendText ra = RD.el "fieldset" $ do
     lift $ RD.el "legend" $ RD.text legendText
     ra
 
@@ -308,22 +344,22 @@ labelTop label ra = do
 -}
 
 itemL::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
-itemL = layoutL . formItem
+itemL = layoutFill LayoutRight  . formItem
 
 itemR::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
-itemR = layoutR . formItem
+itemR = layoutFill LayoutLeft . formItem
 
 formRow::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
-formRow  = formItem . layoutHoriz
+formRow  = formItem . layoutOrientation LayoutHorizontal
 
 formCol::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
-formCol = formItem . layoutVert
+formCol = formItem . layoutOrientation LayoutVertical
 
 formRow'::(RD.Reflex t, SimpleFormLayoutFunctions e m,SimpleFormBuilderFunctions e t m)=>DynAttrs t->SFLayoutF e m a
-formRow' attrsDyn  = formItem . dynamicDiv attrsDyn . layoutHoriz
+formRow' attrsDyn  = formItem . dynamicDiv attrsDyn . layoutOrientation LayoutHorizontal
 
 formCol'::(RD.Reflex t,SimpleFormLayoutFunctions e m, SimpleFormBuilderFunctions e t m)=>DynAttrs t->SFLayoutF e m a
-formCol' attrsDyn = formItem . dynamicDiv attrsDyn .layoutVert
+formCol' attrsDyn = formItem . dynamicDiv attrsDyn .layoutOrientation LayoutVertical
 
 {-
 disabledAttr::(Monad m,SimpleFormConfiguration e t m)=>ReaderT e m (M.Map String String)

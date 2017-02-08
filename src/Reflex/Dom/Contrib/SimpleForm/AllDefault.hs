@@ -101,15 +101,11 @@ instance (MonadWidgetExtraC t m, MonadIO (PushM t),RD.DomBuilder t m, R.MonadHol
   
 instance (MonadIO (PushM t),RD.DomBuilder t m,MonadWidgetExtraC t m
          , RD.MonadHold t m, MonadFix m, RD.PostBuild t m)=>SimpleFormLayoutFunctions DefSFCfg m where
-  formItem = liftLF flexItem 
-  layoutVert  = liftLF flexCol 
-  layoutHoriz = liftLF flexRow
-  layoutL     = liftLF (flexFill LayoutRight)  
-  layoutR     = liftLF (flexFill LayoutLeft)
-  layoutHC    = liftLF (flexCenter LayoutHorizontal)
-  layoutT     = liftLF (flexFill LayoutBottom) 
-  layoutB     = liftLF (flexFill LayoutTop)
-  layoutVC    = liftLF (flexCenter LayoutVertical)
+  formItem = liftLF flexItem
+  layoutOrientation LayoutHorizontal = liftLF flexCol
+  layoutOrientation LayoutVertical = liftLF flexRow
+  layoutFill d = liftLF (flexFill d)
+  layoutCentered o = liftLF (flexCenter o)
   layoutCollapsible = collapsibleWidget 
   validItemStyle   = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask
