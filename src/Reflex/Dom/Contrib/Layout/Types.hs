@@ -48,6 +48,10 @@ instance Monoid CssClasses where
 emptyCss::CssClasses
 emptyCss = CssClasses []
 
+-- for Layout specification
+data LayoutDirection = LayoutLeft | LayoutRight | LayoutTop | LayoutBottom
+data LayoutOrientation = LayoutHorizontal | LayoutVertical
+
 -- For Layout optimization
 data LNodeConstraint = OpensLNode | InLNode | ClosesLNode deriving (Show)
 

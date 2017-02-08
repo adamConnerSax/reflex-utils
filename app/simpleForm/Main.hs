@@ -39,10 +39,10 @@ import           Reflex.Dom.Core
 import           GHCJS.DOM.Types                         (JSM)
 import           Reflex.Dom.Contrib.CssUtils
 import           Reflex.Dom.Contrib.Layout.ClayUtils     (cssToBS)
-import           Reflex.Dom.Contrib.Layout.FlexLayout    (flexCssBS, flexFillR, flexRow', flexCol', flexItem')
+import           Reflex.Dom.Contrib.Layout.FlexLayout    (flexCssBS, flexFill, flexRow', flexCol', flexItem')
 import           Reflex.Dom.Contrib.Layout.Types         (CssClass (..),
                                                           CssClasses (..),
-                                                          emptyCss)
+                                                          emptyCss,LayoutDirection(..))
 import           Reflex.Dom.Contrib.Layout.TabLayout                 
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
 
@@ -83,7 +83,7 @@ testUserForm::(SimpleFormInstanceC e t m, MonadIO (PushM t))=>e->m ()
 testUserForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a simple data structure, Output is an event, fired when submit button is clicked but only if data is of right types and valid."
-  newUserEv <- flexFillR $ makeSimpleForm' cfg (CssClass "sf-form") Nothing (buttonNoSubmit' "submit")
+  newUserEv <- flexFill LayoutRight $ makeSimpleForm' cfg (CssClass "sf-form") Nothing (buttonNoSubmit' "submit")
   curUserDyn <- (fmap (T.pack . show)) <$> foldDyn const (User "" "" (Age 0)) newUserEv
   dynText curUserDyn
 
@@ -181,12 +181,12 @@ testComplexForm::(SimpleFormInstanceC e t m, MonadIO (PushM t))=>e -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM<- flexFillR $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
+  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed C:"
   el "p" blank
-  _ <- flexFillR $ observeDynValidation cfg (CssClass "sf-observer") cDynM
+  _ <- flexFill LayoutRight $ observeDynValidation cfg (CssClass "sf-observer") cDynM
   return ()
 
 complexFormTab::SimpleFormInstanceC e t m=>e -> TabInfo t m ()

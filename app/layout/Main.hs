@@ -179,9 +179,9 @@ simpleFlexWidget = do
         flexSizedItem 2 $ divClass "demo-box-black" $ text  "A"
         flexSizedItem 1 $ divClass "demo-box-green" $ text  "B"
   w
-  flexFillR w
-  flexHCenter w
-  flexFillL w
+  flexFill LayoutRight w
+  flexCenter LayoutHorizontal w
+  flexFill LayoutLeft w
 
 sfTab::(SupportsLayoutM t m)=>TabInfo t m ()
 sfTab = TabInfo "sf" "Simple Flex" simpleFlexWidget
@@ -194,9 +194,9 @@ optFlexWidget = do
         OF.flexSizedItem 2 #$ (divClass "demo-box-black" $ text  "A")
         OF.flexSizedItem 1 #$ (divClass "demo-box-green" $ text  "B")
   OF.flexItem #$ w
-  OF.flexItem #$ OF.flexFillR w
-  OF.flexItem #$ OF.flexHCenter w
-  OF.flexItem #$ OF.flexFillL w
+  OF.flexItem #$ OF.flexFill LayoutRight w
+  OF.flexItem #$ OF.flexCenter LayoutHorizontal w
+  OF.flexItem #$ OF.flexFill LayoutLeft w
 
 {-
 optFlexWidget::(MonadWidget t m, MonadIO (PushM t))=>m ()

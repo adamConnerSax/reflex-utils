@@ -12,19 +12,16 @@ module Reflex.Dom.Contrib.Layout.OptimizedFlexLayout
   , flexSizedItem
   , flexFillH
   , flexFillV
-  , flexFillR
-  , flexFillL
-  , flexFillD
-  , flexFillU
-  , flexHCenter
-  , flexVCenter
+  , flexFill
+  , flexCenter
   , flexCssBS
   ) where
 
 import Reflex.Dom.Contrib.Layout.Types (LISeq,LNode,OpenLNode(..),LayoutInstruction(..),
                                         LNodeConstraint(..),CssClass(..),CssClasses(..),
                                         LNodeType(..),
-                                        lNodeToFunction,closeLNode,openNAddCss)
+                                        lNodeToFunction,closeLNode,openNAddCss,
+                                        LayoutOrientation(..),LayoutDirection(..))
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,numberFlexGrowOptions) -- just to re-export
 
 import qualified Reflex as R 
@@ -74,47 +71,44 @@ flexFillV = flexSimple ClosesLNode "flexFillV"
 wrapWidget::RD.DomBuilder t m=>m a->m a
 wrapWidget = RD.divClass "" 
 
-flexFillR::OFLC t m=>m a->m a
-flexFillR w = 
+flexFill::OFLC t m=>LayoutDirection->m a->m a
+flexFill LayoutRight w = 
   flexFillH #$ do
     a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
-flexFillL::OFLC t m=>m a->m a
-flexFillL w = 
+flexFill LayoutLeft w = 
   flexFillH #$ do  
     RD.divClass "fill" RD.blank
     wrapWidget w
 
-flexHCenter::OFLC t m=>m a->m a
-flexHCenter w = 
+flexFill LayoutBottom w = 
+  flexFillV #$ do
+    a <- wrapWidget w
+    RD.divClass "fill" RD.blank
+    return a
+
+flexFill LayoutTop w = 
+  flexFillV #$ do  
+    RD.divClass "fill" RD.blank
+    wrapWidget w
+
+
+flexCenter::OFLC t m=>LayoutOrientation->m a->m a
+flexCenter LayoutHorizontal w = 
   flexFillH #$ do
     RD.divClass "fill" RD.blank
     a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
 
-flexVCenter::OFLC t m=>m a->m a
-flexVCenter w = 
+flexCenter LayoutVertical w = 
   flexFillV #$ do
     RD.divClass "fill" RD.blank
     a <- wrapWidget w
     RD.divClass "fill" RD.blank
     return a
-
-flexFillD::OFLC t m=>m a->m a
-flexFillD w = 
-  flexFillV #$ do
-    a <- wrapWidget w
-    RD.divClass "fill" RD.blank
-    return a
-
-flexFillU::OFLC t m=>m a->m a
-flexFillU w = 
-  flexFillV #$ do  
-    RD.divClass "fill" RD.blank
-    wrapWidget w
 
 
 infixl 2 ##

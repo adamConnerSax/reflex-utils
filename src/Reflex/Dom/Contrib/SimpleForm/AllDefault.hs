@@ -23,10 +23,9 @@ module Reflex.Dom.Contrib.SimpleForm.AllDefault
 -- | Also serves as an example for building others
 -- | and defFailureF and defSumF can be re-used for other implementations
 import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
-import Reflex.Dom.Contrib.Layout.Types (CssClasses(..))
+import Reflex.Dom.Contrib.Layout.Types (CssClasses(..),LayoutDirection(..),LayoutOrientation(..))
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexCol,flexRow,flexItem,
-                                             flexFillR,flexFillL,flexHCenter,
-                                             flexFillU,flexFillD,flexVCenter)
+                                             flexFill,flexCenter)
 
 import Reflex.Dom.Contrib.SimpleForm.Builder
 import Reflex.Dom.Contrib.SimpleForm.Instances(sfWidget)
@@ -105,12 +104,12 @@ instance (MonadIO (PushM t),RD.DomBuilder t m,MonadWidgetExtraC t m
   formItem = liftLF flexItem 
   layoutVert  = liftLF flexCol 
   layoutHoriz = liftLF flexRow
-  layoutL     = liftLF flexFillR 
-  layoutR     = liftLF flexFillL
-  layoutHC    = liftLF flexHCenter
-  layoutT     = liftLF flexFillD 
-  layoutB     = liftLF flexFillU
-  layoutVC    = liftLF flexVCenter
+  layoutL     = liftLF (flexFill LayoutRight)  
+  layoutR     = liftLF (flexFill LayoutLeft)
+  layoutHC    = liftLF (flexCenter LayoutHorizontal)
+  layoutT     = liftLF (flexFill LayoutBottom) 
+  layoutB     = liftLF (flexFill LayoutTop)
+  layoutVC    = liftLF (flexCenter LayoutVertical)
   layoutCollapsible = collapsibleWidget 
   validItemStyle   = cfgValidStyle <$> ask 
   invalidItemStyle = cfgInvalidStyle <$> ask

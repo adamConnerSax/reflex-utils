@@ -9,12 +9,8 @@ module Reflex.Dom.Contrib.Layout.FlexLayout
        , numberFlexGrowOptions
        , (##)
        , (#$)
-       , flexFillR
-       , flexFillL
-       , flexHCenter
-       , flexVCenter
-       , flexFillD
-       , flexFillU
+       , flexFill
+       , flexCenter
        , flexRow
        , flexCol
        , flexItem
@@ -37,7 +33,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.String (fromString)
 import Data.Monoid ((<>))
-import Reflex.Dom.Contrib.Layout.Types (toCssString,CssClasses,emptyCss)
+import Reflex.Dom.Contrib.Layout.Types (toCssString,CssClasses,emptyCss,LayoutOrientation(..),LayoutDirection(..))
 
 flexFillStyles :: Css
 flexFillStyles = do
@@ -133,47 +129,45 @@ wrapWidget::RD.DomBuilder t m=>m a->m a
 wrapWidget = RD.divClass "" 
 
 
-flexFillR::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
-flexFillR w = 
+flexFill::(RD.DomBuilder t m,MonadIO (R.PushM t))=>LayoutDirection->m a->m a
+flexFill LayoutRight w =
   RD.divClass "flexFillH" $ do
     x <- wrapWidget w
     RD.divClass "fill" RD.blank
     return x
 
-flexFillL::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
-flexFillL w = 
+flexFill LayoutLeft w =
   RD.divClass "flexFillH" $ do  
     RD.divClass "fill" RD.blank
     wrapWidget w
 
-flexHCenter::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
-flexHCenter w = 
+
+flexFill LayoutBottom w = 
+  RD.divClass "flexFillV" $ do
+    x <- wrapWidget w
+    RD.divClass "fill" RD.blank
+    return x
+    
+flexFill LayoutTop w = 
+  RD.divClass "flexFillV" $ do  
+    RD.divClass "fill" RD.blank
+    wrapWidget w
+
+flexCenter::(RD.DomBuilder t m,MonadIO (R.PushM t))=>LayoutOrientation->m a->m a
+flexCenter LayoutHorizontal w = 
   RD.divClass "flexFillH" $ do
     RD.divClass "fill" RD.blank
     x <- wrapWidget w
     RD.divClass "fill" RD.blank
     return x
-
-flexVCenter::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
-flexVCenter w = 
+    
+flexCenter LayoutVertical w = 
   RD.divClass "flexFillV" $ do
     RD.divClass "fill" RD.blank
     x <- wrapWidget w
     RD.divClass "fill" RD.blank
     return x
 
-flexFillD::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
-flexFillD w = 
-  RD.divClass "flexFillV" $ do
-    x <- wrapWidget w
-    RD.divClass "fill" RD.blank
-    return x
-
-flexFillU::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
-flexFillU w = 
-  RD.divClass "flexFillV" $ do  
-    RD.divClass "fill" RD.blank
-    wrapWidget w
 
 infixl 2 ##
 (##)::(RD.DomBuilder t m,MonadIO (R.PushM t))=>(m a->m a)->m a->m a

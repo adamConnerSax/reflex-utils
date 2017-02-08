@@ -12,12 +12,8 @@ module Reflex.Dom.Contrib.Layout.All
        , flexRow'
        , flexCol'
        , flexItem'
-       , flexFillL
-       , flexFillR
-       , flexHCenter
-       , flexFillU
-       , flexFillD
-       , flexVCenter
+       , flexFill
+       , flexCenter
        , cssToBS
        , tabCssBS
          -- from here down we are using LayoutM machinery
@@ -43,12 +39,10 @@ import           Reflex.Dom.Contrib.Layout.Types
 
 import           Reflex.Dom.Contrib.Layout.FlexLayout  (flexCol, flexCol',
                                                         flexCssBS,
-                                                        flexFillD, flexFillL,
-                                                        flexFillR, flexFillU,
-                                                        flexHCenter,
+                                                        flexFill,
+                                                        flexCenter,
                                                         flexItem, flexItem',
-                                                        flexRow, flexRow',
-                                                        flexVCenter)
+                                                        flexRow, flexRow')
 
 
 
