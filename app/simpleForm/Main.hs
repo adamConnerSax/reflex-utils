@@ -62,30 +62,58 @@ import           Reflex.Dom.Contrib.SimpleForm.Instances (SimpleFormInstanceC)
 import           Css
 
 --It's easy to add validation (via newtype wrapper) for things isomorphic to already buildable things
-newtype Age = Age { unAge::Int }
-instance Show Age where
-  show = show . unAge
+newtype Age = Age { unAge::Int } deriving (Show)
 
 validAge::Age->Either T.Text Age
 validAge a@(Age x) = if (x >= 0) then Right a else Left "Age must be > 0"
 
 instance SimpleFormInstanceC e t m => Builder (SimpleFormR e t m) Age where
-  buildA = buildValidated validAge unAge Age
+  buildA mFn ma =
+    let labelCfg = LabelConfig LabelBefore "Age" M.empty
+        inputCfg = InputConfig (Just "35") (Just "Age") (Just labelCfg)
+    in liftF (setInputConfig inputCfg) $ buildValidated validAge unAge Age mFn ma 
 
+newtype EmailAddress = EmailAddress { unEmailAddress::T.Text } deriving (Show)
+
+validEmail::EmailAddress->Either T.Text EmailAddress
+validEmail ea@(EmailAddress address) = let
+  (userPart,domainPart) = T.breakOn "@" address
+  valid = (T.length userPart >= 1) && (T.length domainPart >= 2)  
+  in if valid then Right ea else Left "Email address must be of the form a@b"
+
+instance SimpleFormInstanceC e t m => Builder (SimpleFormR e t m) EmailAddress where
+  buildA mFn ma =
+    let labelCfg = LabelConfig LabelBefore "Email" M.empty
+        inputCfg = InputConfig (Just "yourname@emailprovider.com") (Just "Email") (Just labelCfg)
+    in liftF (setInputConfig inputCfg) $ buildValidated validEmail unEmailAddress EmailAddress mFn ma 
+
+newtype Name = Name { unName::T.Text } deriving (Show)
+instance SimpleFormInstanceC e t m => Builder (SimpleFormR e t m)  Name where
+  buildA mFn ma =
+    let labelCfg = LabelConfig LabelBefore "Name" M.empty
+        inputCfg = InputConfig (Just "John Doe") (Just "Name") (Just labelCfg)
+    in liftF (setInputConfig inputCfg) $ Name <$> buildA mFn (unName <$> ma) 
+  
 -- a simple structure
-data User = User { name::String, email::String, age::Age } deriving (GHC.Generic,Show)
+data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Generic,Show)
+
 instance Generic User
 instance HasDatatypeInfo User
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) User where
   buildA mFN = liftF formCol . gBuildA mFN
+
+
 
 testUserForm::(SimpleFormInstanceC e t m, MonadIO (PushM t))=>e->m ()
 testUserForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a simple data structure, Output is an event, fired when submit button is clicked but only if data is of right types and valid."
   newUserEv <- flexFill LayoutRight $ makeSimpleForm' cfg (CssClass "sf-form") Nothing (buttonNoSubmit' "submit")
-  curUserDyn <- (fmap (T.pack . show)) <$> foldDyn const (User "" "" (Age 0)) newUserEv
-  dynText curUserDyn
+  curUserDyn <- foldDyn const (User (Name "") (EmailAddress "") (Age 0)) newUserEv
+  dynText (printUser <$> curUserDyn)
+
+printUser::User->T.Text
+printUser (User (Name n) (EmailAddress ea) (Age a)) = "User with name " <> n <> " email " <> ea <> " and age " <> (T.pack $ show a)
 
 userFormTab::SimpleFormInstanceC e t m=>e -> TabInfo t m ()
 userFormTab cfg = TabInfo "userFormTab" "Classic Form" $ testUserForm cfg
@@ -155,20 +183,19 @@ instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) BRec where
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
 buildDate::SimpleFormInstanceC e t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SimpleFormR e t m) DateOrDateTime
-buildDate mFN ms = MDWrapped matched ("D",mFN) bldr where
-  labelCfg = LabelConfig LabelBefore "Date" M.empty
-  inputCfg = InputConfig (Just "1/1/2001") (Just "Date") (Just labelCfg)
+buildDate mFN ms = MDWrapped matched ("Date",mFN) bldr where
+  inputCfg = InputConfig (Just "1/1/2001") (Just "Date") Nothing
   (matched,mDay) = case ms of
     Just (D day) -> (True,Just day)
     _            -> (False, Nothing)
-  bldr = D <$> liftF (setInputConfig inputCfg) (buildA Nothing mDay) --add date label before
+  bldr = D <$> buildA Nothing mDay
 
 buildDateTime::SimpleFormInstanceC e t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SimpleFormR e t m) DateOrDateTime
-buildDateTime mFN ms = MDWrapped matched ("DT",mFN) bldr where
+buildDateTime mFN ms = MDWrapped matched ("DateTime",mFN) bldr where
   (matched,mDateTime) = case ms of
     Just (DT dt) -> (True,Just dt)
     _            -> (False, Nothing)
-  bldr = DT <$> buildA Nothing mDateTime --addDateTime label before
+  bldr = DT <$> buildA Nothing mDateTime
 
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) DateOrDateTime where
   buildA = buildAFromConList [buildDate,buildDateTime]
@@ -235,12 +262,15 @@ test cfg = do
 
 demoCfg = DefSFCfg
           {
-            formConfig = FormConfig (FormStyles emptyCss (CssClasses [CssClass "sf-invalid"]) (CssClasses [CssClass "sf-observer-item"])) Interactive
+            formConfig = FormConfig (FormStyles
+                                      (CssClasses [CssClass "sf-valid", CssClass ".form-control"])
+                                      (CssClasses [CssClass "sf-invalid", CssClass ".form-control"])
+                                      (CssClasses [CssClass "sf-observer-item"])) Interactive
           , inputConfig = nullInputConfig
           }
 
 cssToEmbed = flexCssBS <> tabCssBS <> cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss
-cssToLink = []
+cssToLink = ["https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"]
 
 simpleFormMain  :: JSM ()
 simpleFormMain  = mainWidgetWithHead (headElt "simpleForm demo" cssToLink cssToEmbed) $ test demoCfg

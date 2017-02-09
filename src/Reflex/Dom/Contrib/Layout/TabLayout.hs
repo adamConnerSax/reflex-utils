@@ -54,6 +54,20 @@ tabCss = do
     ".tab-row" ? do
       position relative
       width tabAreaWidth
+      label ? do
+        border solid (px 1) (grayish 211)
+        padding nil (em 0.7) nil (em 0.7)
+        margin nil (em 0.1) (em 0.1) (em 0.1) 
+        cursor pointer
+      label # ".unselected" ? do
+        position relative
+        background unSelTabColor
+        zIndex 0
+      label # ".selected" ? do      
+        background selTabColor
+        borderBottomColor white
+        zIndex 2
+      input # ("type" @= "radio") ? display none
     ".tab-row" # after ? do 
       position absolute
       "content" -: quote " "
@@ -62,20 +76,6 @@ tabCss = do
       left nil
       borderBottom solid (px 1) black
       zIndex (-1)
-    label ? do
-      border solid (px 1) (grayish 211)
-      padding nil (em 0.7) nil (em 0.7)
-      margin nil (em 0.1) (em 0.1) (em 0.1) 
-      cursor pointer
-    label # ".unselected" ? do
-      position relative
-      background unSelTabColor
-      zIndex 0
-    label # ".selected" ? do      
-      background selTabColor
-      borderBottomColor white
-      zIndex 2
-    input # ("type" @= "radio") ? display none
     ".tab-pane" ? do
       zIndex 1
       width tabAreaWidth

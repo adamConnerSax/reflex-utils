@@ -265,7 +265,7 @@ data FormType = Interactive | ObserveOnly deriving (Eq)
 
 data InputConfig = InputConfig { placeHolder::Maybe Placeholder, title::Maybe Title, labelConfig::Maybe LabelConfig }
 data FormStyles = FormStyles { valid::CssClasses, invalid::CssClasses, observeOnly::CssClasses }
-data FormConfig = FormConfig { styles::FormStyles, formType::FormType }
+data FormConfig = FormConfig { styles::FormStyles, formType::FormType } -- need a way to add a class to wrapping div
 
 nullInputConfig::InputConfig
 nullInputConfig = InputConfig Nothing Nothing Nothing
