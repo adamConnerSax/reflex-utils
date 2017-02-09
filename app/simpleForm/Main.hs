@@ -132,7 +132,7 @@ instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) A where
 instance Generic B
 instance HasDatatypeInfo B
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) B where
-  buildA mFN = liftF (legend "B" . formRow) . gBuildA mFN
+  buildA mFN = liftF (fieldSet "B" . formRow) . gBuildA mFN
 
 instance Generic MyMap
 instance HasDatatypeInfo MyMap
@@ -141,32 +141,34 @@ instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) MyMap
 instance Generic C
 instance HasDatatypeInfo C
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) C where
-  buildA mFN = liftF (legend "C" . formCol) . gBuildA mFN
+  buildA mFN = liftF (fieldSet "C" . formCol) . gBuildA mFN
 
 
 -- More layout options are available if you write custom instances.
 -- handwritten single constructor instance
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) BRec where
-  buildA mFN mBRec= liftF (textOnTop "BRec" . formRow) $ BRec
+  buildA mFN mBRec= liftF formRow $ BRec
                <$> buildA Nothing (oneB <$> mBRec)
-               <*> liftF (textOnTop' (layoutCentered LayoutHorizontal) "Seq A") (buildA Nothing (seqOfA <$> mBRec))
-               <*> liftF (textOnTop' (layoutCentered LayoutHorizontal) "HashSet String") (buildA Nothing (hashSetOfString <$> mBRec))
+               <*> liftF (layoutCentered LayoutHorizontal) (buildA Nothing (seqOfA <$> mBRec))
+               <*> liftF (layoutCentered LayoutHorizontal) (buildA Nothing (hashSetOfString <$> mBRec))
 
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
 buildDate::SimpleFormInstanceC e t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SimpleFormR e t m) DateOrDateTime
 buildDate mFN ms = MDWrapped matched ("D",mFN) bldr where
+  labelCfg = LabelConfig LabelBefore "Date" M.empty
+  inputCfg = InputConfig (Just "1/1/2001") (Just "Date") (Just labelCfg)
   (matched,mDay) = case ms of
     Just (D day) -> (True,Just day)
     _            -> (False, Nothing)
-  bldr = D <$> liftF (textAtLeft "Date") (buildA Nothing mDay)
+  bldr = D <$> liftF (setInputConfig inputCfg) (buildA Nothing mDay) --add date label before
 
 buildDateTime::SimpleFormInstanceC e t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SimpleFormR e t m) DateOrDateTime
 buildDateTime mFN ms = MDWrapped matched ("DT",mFN) bldr where
   (matched,mDateTime) = case ms of
     Just (DT dt) -> (True,Just dt)
     _            -> (False, Nothing)
-  bldr = DT <$> liftF (textAtLeft "DateTime") (buildA Nothing mDateTime)
+  bldr = DT <$> buildA Nothing mDateTime --addDateTime label before
 
 instance SimpleFormInstanceC e t m=>Builder (SimpleFormR e t m) DateOrDateTime where
   buildA = buildAFromConList [buildDate,buildDateTime]
@@ -231,13 +233,11 @@ test cfg = do
    implemented with here.
 -}
 
-demoCfg = DefSFCfg {
-    cfgValidStyle = emptyCss -- (CssClasses [CssClass "sf-outline-black"])
-  , cfgInvalidStyle = (CssClasses [CssClass "sf-invalid"])
-  , cfgObserverStyle = (CssClasses [CssClass "sf-observer-item"])
-  , cfgLabelF = Nothing
-  , cfgObserver = False
-  }
+demoCfg = DefSFCfg
+          {
+            formConfig = FormConfig (FormStyles emptyCss (CssClasses [CssClass "sf-invalid"]) (CssClasses [CssClass "sf-observer-item"])) Interactive
+          , inputConfig = nullInputConfig
+          }
 
 cssToEmbed = flexCssBS <> tabCssBS <> cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss
 cssToLink = []

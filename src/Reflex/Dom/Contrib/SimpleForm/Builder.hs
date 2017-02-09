@@ -45,23 +45,20 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , liftRAction
        , liftAction
        , switchingSFR
---       , layoutFieldNameHelper
        , validItemStyle
        , invalidItemStyle
        , observerOnlyStyle
        , getFormType
        , LabelText
-       , LabelPosition
-       , LabelConfig
+       , LabelPosition(..)
+       , LabelConfig(..)
        , Placeholder
        , Title
        , InputConfig(..)
+       , nullInputConfig
        , FormStyles(..)
        , FormType(..)
        , FormConfig(..)
---       , textAtLeft
---       , textOnTop
---       , textOnTop'
        , fieldSet
        , itemL
        , itemR
@@ -261,15 +258,17 @@ type Placeholder = T.Text
 type Title = T.Text
 type LabelText = T.Text
 data LabelPosition = LabelBefore | LabelAfter
-data LabelConfig = LabelConfig LabelPosition LabelText
-data FormType = Interactive | ObserveOnly
+
+-- do the attributes below need to be dynamic?  That would complicate things... 
+data LabelConfig = LabelConfig { labelPosition::LabelPosition, labelText::LabelText, labelAttrs::M.Map T.Text T.Text }
+data FormType = Interactive | ObserveOnly deriving (Eq)
 
 data InputConfig = InputConfig { placeHolder::Maybe Placeholder, title::Maybe Title, labelConfig::Maybe LabelConfig }
 data FormStyles = FormStyles { valid::CssClasses, invalid::CssClasses, observeOnly::CssClasses }
 data FormConfig = FormConfig { styles::FormStyles, formType::FormType }
 
-noConfig::InputConfig
-noConfig = InputConfig Nothing Nothing Nothing
+nullInputConfig::InputConfig
+nullInputConfig = InputConfig Nothing Nothing Nothing
 
 -- presumably, an instance of this will have fields for the configs and the sets will be done via Control.Monad.Reader.local
 
@@ -285,12 +284,6 @@ class Monad m=>SimpleFormLayoutFunctions e m where
 
   getInputConfig::ReaderT e m InputConfig
   setInputConfig::InputConfig->SFLayoutF e m a
-  
---  setLayoutFieldName::Maybe (T.Text -> T.Text)->SFLayoutF e m a
---  getLayoutFieldName::ReaderT e m (Maybe (T.Text -> SFLayoutF e m a)) -- Nothing is ignored, otherwise do the layout
-
---formItem::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
---formItem = formItem' noConfig
 
 validItemStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
 validItemStyle = valid . styles <$> getFormConfig
@@ -309,40 +302,10 @@ setToObserve w = do
   fc <- getFormConfig
   setFormConfig fc{ formType = ObserveOnly }  w
 
-{-
-layoutFieldNameHelper::SimpleFormC e t m=>Maybe FieldName->SFLayoutF e m a
-layoutFieldNameHelper mFN sfra = do
-  mf <- getLayoutFieldName
-  let lf = fromMaybe id $ mf <*> (T.pack <$> mFN)
-  lf sfra
-
-textAtLeft::SimpleFormC e t m=>T.Text->SFLayoutF e m a
-textAtLeft label ra = formRow $ do
-  formItem $ RD.el "span" $ RD.text label
-  formItem ra
-
-textOnTop::SimpleFormC e t m=>T.Text->SFLayoutF e m a
-textOnTop = textOnTop' id
-
-textOnTop'::SimpleFormC e t m=>SFLayoutF e m ()->T.Text->SFLayoutF e m a
-textOnTop' labelLayout label ra = formCol $ do
-  labelLayout . formItem $ RD.el "span" $ RD.text label
-  formItem ra
--}
-
 fieldSet::SimpleFormC e t m=>T.Text->SFLayoutF e m a
 fieldSet legendText ra = RD.el "fieldset" $ do
     lift $ RD.el "legend" $ RD.text legendText
     ra
-
-{-
-labelTop::SimpleFormC e t m=>String->SFLayoutF e m a
-labelTop label ra = do
-  labelClasses <- labelStyle
-  layoutVert $ do
-    formItem . lift $ RD.elClass "div" (toCssString labelClasses) $ RD.text label
-    ra
--}
 
 itemL::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
 itemL = layoutFill LayoutRight  . formItem
@@ -362,12 +325,7 @@ formRow' attrsDyn  = formItem . dynamicDiv attrsDyn . layoutOrientation LayoutHo
 formCol'::(RD.Reflex t,SimpleFormLayoutFunctions e m, SimpleFormBuilderFunctions e t m)=>DynAttrs t->SFLayoutF e m a
 formCol' attrsDyn = formItem . dynamicDiv attrsDyn .layoutOrientation LayoutVertical
 
-{-
-disabledAttr::(Monad m,SimpleFormConfiguration e t m)=>ReaderT e m (M.Map String String)
-disabledAttr = do
-  disabled <- inputsDisabled
-  return $ if disabled then ("disabled" RD.=: "") else mempty
--}
+
 attrs0::R.Reflex t=>DynAttrs t
 attrs0 = R.constDyn mempty
 

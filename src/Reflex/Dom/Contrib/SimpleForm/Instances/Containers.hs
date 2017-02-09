@@ -83,10 +83,10 @@ data SFAdjustableI fa g b k s= SFAdjustableI { sfAI::SFAppendableI fa g b, sfDI:
 buildAdjustableContainer::(SimpleFormInstanceC e t m,B.Builder (SimpleFormR e t m) b,Traversable g)
                           =>SFAdjustableI fa g b k s->Maybe FieldName->Maybe fa->SimpleFormR e t m fa
 buildAdjustableContainer sfAdj mFN mfa = SimpleFormR  $ do
-  isObserver <- observer
-  if isObserver
-    then buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfa
-    else buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
+  formType <- getFormType
+  case formType of
+    ObserveOnly ->  buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfa
+    Interactive ->  buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
 --    else buildSFContainer (sfAI sfAdj) (buildTraversableSFA idRep) mFN mfa
 
 {-

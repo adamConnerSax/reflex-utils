@@ -5,8 +5,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Contrib.SimpleForm.AllDefault
@@ -50,15 +48,9 @@ import Data.Monoid ((<>))
 
 data DefSFCfg  = DefSFCfg
                  {
-                   cfgValidStyle::CssClasses
-                 , cfgInvalidStyle::CssClasses                                    
-                 , cfgObserverStyle::CssClasses
-                 , cfgLabelF::Maybe (T.Text -> T.Text)
-                 , cfgObserver::Bool
+                   formConfig::FormConfig,
+                   inputConfig::InputConfig
                  }
-
-setCfgToObserver::DefSFCfg->DefSFCfg
-setCfgToObserver x = x { cfgObserver = True }
 
 defFailureF::SimpleFormC e t m=>T.Text->SimpleFormR e t m a
 defFailureF msg = SimpleFormR $ do
@@ -78,8 +70,8 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
       pft (x,y) = SFRPair x y
       defPair = maybe (pft $ head conWidgets) (`getSFRP` conWidgets) mDefCon
   validClasses <- validItemStyle
-  observerClasses <- observerStyle
-  isObserver <- observer
+  observerClasses <- observerOnlyStyle
+  isObserver <- (==ObserveOnly) <$> getFormType
   let classes = if isObserver then observerClasses else validClasses 
       attrsDyn = R.constDyn (cssClassAttr classes <> titleAttr "Constructor")
       wc = WidgetConfig RD.never defPair attrsDyn
@@ -87,13 +79,7 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
     sfrpCW <- itemL $ (sfWidget id (T.pack . sfrpCN) Nothing wc $ \wc' -> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getSFRP` conWidgets) wc')
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
-{-
-instance (MonadIO (PushM t),RD.DomBuilder t m,
-          MonadAsyncException (l m),
-          MonadTrans l, MFunctor l, Monad (l m),MonadLayout (StackedMW l) m,
-          MonadFix (l m), MonadIO (l m), MonadRef (l m),MonadException (l m),
-          Ref (StackedMW l m) ~ Ref IO)=>SimpleFormConfiguration DefSFCfg t (StackedMW l m) where
--}
+
 instance (MonadWidgetExtraC t m, MonadIO (PushM t),RD.DomBuilder t m, R.MonadHold t m, MonadFix m, RD.PostBuild t m)=>SimpleFormBuilderFunctions DefSFCfg t m where
   failureF = defFailureF
   sumF = defSumF
@@ -102,21 +88,16 @@ instance (MonadWidgetExtraC t m, MonadIO (PushM t),RD.DomBuilder t m, R.MonadHol
 instance (MonadIO (PushM t),RD.DomBuilder t m,MonadWidgetExtraC t m
          , RD.MonadHold t m, MonadFix m, RD.PostBuild t m)=>SimpleFormLayoutFunctions DefSFCfg m where
   formItem = liftLF flexItem
-  layoutOrientation LayoutHorizontal = liftLF flexCol
-  layoutOrientation LayoutVertical = liftLF flexRow
+  layoutOrientation LayoutHorizontal = liftLF flexRow
+  layoutOrientation LayoutVertical = liftLF flexCol
   layoutFill d = liftLF (flexFill d)
   layoutCentered o = liftLF (flexCenter o)
-  layoutCollapsible = collapsibleWidget 
-  validItemStyle   = cfgValidStyle <$> ask 
-  invalidItemStyle = cfgInvalidStyle <$> ask
-  observerStyle    = cfgObserverStyle <$> ask
-  observer         = cfgObserver <$> ask
-  setToObserve = local (\cfg -> cfg {cfgObserver = True })
-  setLayoutFieldName f = local (\cfg -> cfg { cfgLabelF = f })
-  getLayoutFieldName = do
-    mf <- asks cfgLabelF
-    return $ mf >>= (\f -> Just $ textAtLeft . f)
-
+  layoutCollapsible = collapsibleWidget
+  getFormConfig = formConfig <$> ask
+  setFormConfig fc = local (\cfg -> cfg{ formConfig = fc})
+  getInputConfig = inputConfig <$> ask
+  setInputConfig ic = local (\cfg -> cfg {inputConfig = ic})
+  
 
 collapsibleWidget::(MonadIO (PushM t),RD.DomBuilder t m)=>T.Text->CollapsibleInitialState->m a->m a
 collapsibleWidget summary cis w = 

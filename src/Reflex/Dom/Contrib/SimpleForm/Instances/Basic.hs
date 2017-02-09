@@ -21,13 +21,16 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
 import           Control.Monad.Reader                  (ReaderT, lift)
 import           Control.Monad.Fix                     (MonadFix)
 import           Control.Monad.Ref                     (MonadRef,Ref)
+import           Control.Lens                          (over)
 import           GHC.IORef                             (IORef)
 import           Data.Maybe                            (fromMaybe)
 import           Data.Monoid                           ((<>))
 import           Data.Readable                         (Readable)
 import qualified Data.Text                             as T
+import qualified Data.Map                              as M
 import           Data.Validation                       (AccValidation (..))
 import           Text.Read                             (readMaybe)
+
 -- types for instances
 import           Data.ByteString                       (ByteString)
 import           Data.Int                              (Int16, Int32, Int64,
@@ -64,7 +67,7 @@ readOnlyW f wc = do
   RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
   return da
 
-sfWidget::(SimpleFormC e t m, RD.PostBuild t m,MonadFix m)=>
+sfWidget::R.Reflex t=>(SimpleFormC e t m, RD.PostBuild t m,MonadFix m)=>
           (a->b)->
           (a->T.Text)->
           Maybe FieldName->
@@ -72,9 +75,20 @@ sfWidget::(SimpleFormC e t m, RD.PostBuild t m,MonadFix m)=>
           (WidgetConfig t a-> m (R.Dynamic t a))->
           ReaderT e m (R.Dynamic t b)
 sfWidget fDyn fString mFN wc widget = do
-  isObserver <- (==ObserveOnly) <$> getFormType 
-  let lfnF = layoutFieldNameHelper mFN
-  lfnF . lift $ (fmap fDyn <$> (if isObserver then readOnlyW fString wc else widget wc)) -- >>= R.mapDyn fDyn
+  let addToAttrs::R.Reflex t=>T.Text->Maybe T.Text->RD.Dynamic t (M.Map T.Text T.Text)->RD.Dynamic t (M.Map T.Text T.Text)
+      addToAttrs attr mVal attrsDyn = case mVal of
+        Nothing -> attrsDyn
+        Just val -> M.union (attr RD.=: val) <$> attrsDyn
+  isObserver <- (==ObserveOnly) <$> getFormType
+  inputConfig <- getInputConfig
+  let mTitleVal = maybe (T.pack <$> mFN) Just (title inputConfig) -- if none specified and there's a fieldname, use it.
+      wc' = over widgetConfig_attributes (addToAttrs "placeholder" (placeHolder inputConfig) . addToAttrs "title" mTitleVal) wc
+      labeledWidget iw = case labelConfig inputConfig of
+        Nothing -> iw
+        Just (LabelConfig pos t attrs) -> case pos of
+          LabelBefore -> RD.elAttr "label" attrs  (RD.text t >> iw)
+          LabelAfter -> RD.elAttr "label" attrs  $ do  {a <- iw; RD.text t; return a}
+  lift . labeledWidget $ (fmap fDyn <$> (if isObserver then readOnlyW fString wc' else widget wc'))
 
 fromAccVal::AccValidation e a->a
 fromAccVal (AccSuccess a) = a
