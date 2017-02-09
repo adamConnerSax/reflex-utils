@@ -72,7 +72,7 @@ sfWidget::(SimpleFormC e t m, RD.PostBuild t m,MonadFix m)=>
           (WidgetConfig t a-> m (R.Dynamic t a))->
           ReaderT e m (R.Dynamic t b)
 sfWidget fDyn fString mFN wc widget = do
-  isObserver <- observer
+  isObserver <- (==ObserveOnly) <$> getFormType 
   let lfnF = layoutFieldNameHelper mFN
   lfnF . lift $ (fmap fDyn <$> (if isObserver then readOnlyW fString wc else widget wc)) -- >>= R.mapDyn fDyn
 

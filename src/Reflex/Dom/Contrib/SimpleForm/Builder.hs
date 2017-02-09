@@ -45,11 +45,11 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , liftRAction
        , liftAction
        , switchingSFR
-       , layoutFieldNameHelper
+--       , layoutFieldNameHelper
        , validItemStyle
        , invalidItemStyle
        , observerOnlyStyle
-       , observer
+       , getFormType
        , LabelText
        , LabelPosition
        , LabelConfig
@@ -57,6 +57,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , Title
        , InputConfig(..)
        , FormStyles(..)
+       , FormType(..)
        , FormConfig(..)
 --       , textAtLeft
 --       , textOnTop
@@ -272,7 +273,7 @@ noConfig = InputConfig Nothing Nothing Nothing
 
 -- presumably, an instance of this will have fields for the configs and the sets will be done via Control.Monad.Reader.local
 
-class SimpleFormLayoutFunctions e m where
+class Monad m=>SimpleFormLayoutFunctions e m where
   formItem::SFLayoutF e m a
   layoutOrientation::LayoutOrientation->SFLayoutF e m a
   layoutFill::LayoutDirection->SFLayoutF e m a
@@ -291,19 +292,19 @@ class SimpleFormLayoutFunctions e m where
 --formItem::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
 --formItem = formItem' noConfig
 
-validItemStyle::ReaderT e m CssClasses
+validItemStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
 validItemStyle = valid . styles <$> getFormConfig
 
-invalidItemStyle::ReaderT e m CssClasses
+invalidItemStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
 invalidItemStyle = invalid . styles <$> getFormConfig
 
-observerOnlyStyle::ReaderT e m CssClasses
+observerOnlyStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
 observerOnlyStyle = observeOnly . styles <$> getFormConfig
 
-getFormType::ReaderT e m FormType
+getFormType::SimpleFormLayoutFunctions e m=>ReaderT e m FormType
 getFormType = formType <$> getFormConfig
 
-setToObserve::SFLayoutF e m a
+setToObserve::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
 setToObserve w = do
   fc <- getFormConfig
   setFormConfig fc{ formType = ObserveOnly }  w
@@ -386,15 +387,15 @@ sfAttrs'::(RD.MonadHold t m, R.Reflex t, SimpleFormLayoutFunctions e m)
 sfAttrs' mDyn mFN mTypeS fixedCss = do
   validClasses <- validItemStyle
   invalidClasses <- invalidItemStyle
-  observerClasses <- observerStyle
-  isObserver <- observer
+  observerClasses <- observerOnlyStyle
+  fType <- formType <$> getFormConfig 
   let title = componentTitle mFN mTypeS
       validAttrs = titleAttr title <> cssClassAttr (validClasses <> fixedCss)
       invalidAttrs = titleAttr title <> cssClassAttr (invalidClasses <> fixedCss)
       observerAttr = titleAttr title <> cssClassAttr (observerClasses <> fixedCss)
-  lift $ if isObserver
-         then return $ R.constDyn observerAttr
-         else return . RD.ffor (unDynValidation mDyn) $ \x -> case x of
+  lift  $ case fType of
+         ObserveOnly -> return $ R.constDyn observerAttr
+         Interactive -> return . RD.ffor (unDynValidation mDyn) $ \x -> case x of
                                                              (AccSuccess _)-> validAttrs
                                                              (AccFailure _)->invalidAttrs
 
