@@ -39,11 +39,15 @@ import           Reflex.Dom.Core
 import           GHCJS.DOM.Types                         (JSM)
 import           Reflex.Dom.Contrib.CssUtils
 import           Reflex.Dom.Contrib.Layout.ClayUtils     (cssToBS)
-import           Reflex.Dom.Contrib.Layout.FlexLayout    (flexCssBS, flexFill, flexRow', flexCol', flexItem')
+import           Reflex.Dom.Contrib.Layout.FlexLayout    (flexCol', flexCssBS,
+                                                          flexFill, flexItem',
+                                                          flexRow')
+import           Reflex.Dom.Contrib.Layout.TabLayout
 import           Reflex.Dom.Contrib.Layout.Types         (CssClass (..),
                                                           CssClasses (..),
-                                                          emptyCss,LayoutDirection(..),LayoutOrientation(..))
-import           Reflex.Dom.Contrib.Layout.TabLayout                 
+                                                          LayoutDirection (..),
+                                                          LayoutOrientation (..),
+                                                          emptyCss)
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
 
 #ifdef USE_WKWEBVIEW
@@ -71,29 +75,29 @@ instance SimpleFormInstanceC e t m => Builder (SimpleFormR e t m) Age where
   buildA mFn ma =
     let labelCfg = LabelConfig LabelBefore "Age" M.empty
         inputCfg = InputConfig (Just "35") (Just "Age") (Just labelCfg)
-    in liftF (setInputConfig inputCfg) $ buildValidated validAge unAge Age mFn ma 
+    in liftF (setInputConfig inputCfg) $ buildValidated validAge unAge Age mFn ma
 
 newtype EmailAddress = EmailAddress { unEmailAddress::T.Text } deriving (Show)
 
 validEmail::EmailAddress->Either T.Text EmailAddress
 validEmail ea@(EmailAddress address) = let
   (userPart,domainPart) = T.breakOn "@" address
-  valid = (T.length userPart >= 1) && (T.length domainPart >= 2)  
+  valid = (T.length userPart >= 1) && (T.length domainPart >= 2)
   in if valid then Right ea else Left "Email address must be of the form a@b"
 
 instance SimpleFormInstanceC e t m => Builder (SimpleFormR e t m) EmailAddress where
   buildA mFn ma =
     let labelCfg = LabelConfig LabelBefore "Email" M.empty
         inputCfg = InputConfig (Just "yourname@emailprovider.com") (Just "Email") (Just labelCfg)
-    in liftF (setInputConfig inputCfg) $ buildValidated validEmail unEmailAddress EmailAddress mFn ma 
+    in liftF (setInputConfig inputCfg) $ buildValidated validEmail unEmailAddress EmailAddress mFn ma
 
 newtype Name = Name { unName::T.Text } deriving (Show)
 instance SimpleFormInstanceC e t m => Builder (SimpleFormR e t m)  Name where
   buildA mFn ma =
     let labelCfg = LabelConfig LabelBefore "Name" M.empty
         inputCfg = InputConfig (Just "John Doe") (Just "Name") (Just labelCfg)
-    in liftF (setInputConfig inputCfg) $ Name <$> buildA mFn (unName <$> ma) 
-  
+    in liftF (setInputConfig inputCfg) $ Name <$> buildA mFn (unName <$> ma)
+
 -- a simple structure
 data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Generic,Show)
 
@@ -263,6 +267,7 @@ test cfg = do
 demoCfg = DefSFCfg
           {
             formConfig = FormConfig (FormStyles
+                                      (CssClasses [CssClass "form-group"])
                                       (CssClasses [CssClass "sf-valid", CssClass ".form-control"])
                                       (CssClasses [CssClass "sf-invalid", CssClass ".form-control"])
                                       (CssClasses [CssClass "sf-observer-item"])) Interactive

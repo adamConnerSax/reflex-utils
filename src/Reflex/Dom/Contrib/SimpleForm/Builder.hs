@@ -45,8 +45,9 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , liftRAction
        , liftAction
        , switchingSFR
-       , validItemStyle
-       , invalidItemStyle
+       , formItemStyle
+       , validInputStyle
+       , invalidInputStyle
        , observerOnlyStyle
        , getFormType
        , LabelText
@@ -266,7 +267,7 @@ data LabelConfig = LabelConfig { labelPosition::LabelPosition, labelText::LabelT
 data FormType = Interactive | ObserveOnly deriving (Eq)
 
 data InputConfig = InputConfig { placeHolder::Maybe Placeholder, title::Maybe Title, labelConfig::Maybe LabelConfig }
-data FormStyles = FormStyles { valid::CssClasses, invalid::CssClasses, observeOnly::CssClasses }
+data FormStyles = FormStyles { item::CssClasses, validInput::CssClasses, invalidInput::CssClasses, observeOnly::CssClasses }
 data FormConfig = FormConfig { styles::FormStyles, formType::FormType } -- need a way to add a class to wrapping div
 
 nullInputConfig::InputConfig
@@ -321,11 +322,14 @@ class Monad m=>SimpleFormLayoutFunctions e m where
   getInputConfig::ReaderT e m InputConfig
   setInputConfig::InputConfig->SFLayoutF e m a
 
-validItemStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
-validItemStyle = valid . styles <$> getFormConfig
+formItemStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
+formItemStyle = item . styles <$> getFormConfig
 
-invalidItemStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
-invalidItemStyle = invalid . styles <$> getFormConfig
+validInputStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
+validInputStyle = validInput . styles <$> getFormConfig
+
+invalidInputStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
+invalidInputStyle = invalidInput . styles <$> getFormConfig
 
 observerOnlyStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
 observerOnlyStyle = observeOnly . styles <$> getFormConfig
@@ -379,8 +383,8 @@ sfAttrs'::(RD.MonadHold t m, R.Reflex t, SimpleFormLayoutFunctions e m)
          =>DynValidation t a->Maybe FieldName->Maybe T.Text->CssClasses->ReaderT e m (R.Dynamic t (M.Map T.Text T.Text))
 
 sfAttrs' mDyn mFN mTypeS fixedCss = do
-  validClasses <- validItemStyle
-  invalidClasses <- invalidItemStyle
+  validClasses <- validInputStyle
+  invalidClasses <- invalidInputStyle
   observerClasses <- observerOnlyStyle
   fType <- formType <$> getFormConfig
   let title = componentTitle mFN mTypeS

@@ -101,13 +101,13 @@ flexCssBS::B.ByteString
 flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty []  flexCss
 
 flexRow'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->m a->m a
-flexRow' classes = RD.divClass ("gl-flex-row" <> toCssString classes) 
+flexRow' classes = RD.divClass ("gl-flex-row " <> toCssString classes) 
 
 flexCol'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->m a->m a
-flexCol' classes = RD.divClass ("gl-flex-col"  <> toCssString classes)
+flexCol' classes = RD.divClass ("gl-flex-col "  <> toCssString classes)
 
 flexItem'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->m a->m a
-flexItem' classes = RD.divClass ("gl-flex-item" <> toCssString classes)
+flexItem' classes = RD.divClass ("gl-flex-item " <> toCssString classes)
 
 flexSizedItem'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->Int->m a->m a
 flexSizedItem' classes n = let n' = Prelude.min n numberFlexGrowOptions in RD.divClass $ T.pack ("gl-flex-item-" ++ show n')  <> toCssString classes

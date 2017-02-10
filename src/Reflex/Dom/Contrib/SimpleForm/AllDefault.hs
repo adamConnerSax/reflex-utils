@@ -22,7 +22,7 @@ module Reflex.Dom.Contrib.SimpleForm.AllDefault
 -- | and defFailureF and defSumF can be re-used for other implementations
 import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
 import Reflex.Dom.Contrib.Layout.Types (CssClasses(..),LayoutDirection(..),LayoutOrientation(..))
-import Reflex.Dom.Contrib.Layout.FlexLayout (flexCol,flexRow,flexItem,
+import Reflex.Dom.Contrib.Layout.FlexLayout (flexCol,flexRow,flexItem,flexItem',
                                              flexFill,flexCenter)
 
 import Reflex.Dom.Contrib.SimpleForm.Builder
@@ -38,7 +38,7 @@ import Reflex.Dom.Contrib.Widgets.Common (WidgetConfig(..),Widget0(..),htmlDropd
 import Clay ((?),(@=),(#))
 import qualified Clay as C
 
-import Control.Monad.Reader (ask, asks,local)
+import Control.Monad.Reader (ask, asks,local,lift)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.IO.Class (MonadIO)
 import Data.Maybe (fromJust)
@@ -69,7 +69,7 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
       getSFRP cn = SFRPair cn . fromJust . M.lookup cn . M.fromList 
       pft (x,y) = SFRPair x y
       defPair = maybe (pft $ head conWidgets) (`getSFRP` conWidgets) mDefCon
-  validClasses <- validItemStyle
+  validClasses <- validInputStyle
   observerClasses <- observerOnlyStyle
   isObserver <- (==ObserveOnly) <$> getFormType
   let classes = if isObserver then observerClasses else validClasses 
@@ -87,7 +87,9 @@ instance (MonadWidgetExtraC t m, MonadIO (PushM t),RD.DomBuilder t m, R.MonadHol
   
 instance (MonadIO (PushM t),RD.DomBuilder t m,MonadWidgetExtraC t m
          , RD.MonadHold t m, MonadFix m, RD.PostBuild t m)=>SimpleFormLayoutFunctions DefSFCfg m where
-  formItem = liftLF flexItem
+  formItem w = do
+    itemStyle <- formItemStyle
+    liftLF (flexItem' itemStyle) w
   layoutOrientation LayoutHorizontal = liftLF flexRow
   layoutOrientation LayoutVertical = liftLF flexCol
   layoutFill d = liftLF (flexFill d)
