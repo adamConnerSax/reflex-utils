@@ -275,7 +275,11 @@ demoCfg = DefSFCfg
           }
 
 cssToEmbed = flexCssBS <> tabCssBS <> cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss
-cssToLink = ["https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"]
+cssToLink = [CssLink
+              "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
+              (Just "sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u")
+              (Just "anonymous")
+            ]
 
 simpleFormMain  :: JSM ()
 simpleFormMain  = mainWidgetWithHead (headElt "simpleForm demo" cssToLink cssToEmbed) $ test demoCfg

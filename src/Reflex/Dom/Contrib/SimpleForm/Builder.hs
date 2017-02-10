@@ -142,7 +142,7 @@ instance R.Reflex t=>Applicative (DynValidation t) where
   dvf <*> dva = DynValidation $ R.zipDynWith (<*>) (unDynValidation dvf) (unDynValidation dva)
 
 -- no Monad instance because it would fail to satisfy <*> = `ap' due to that being impossible for AccValidation
-
+-- TODO: Make e concrete, the type will carry layout functions and css for the wrapping divs, labels and inputs
 type SFRW e t m a = ReaderT e m (DynValidation t a)
 
 -- This is necessary because this functor and applicative are different from that of SFRW

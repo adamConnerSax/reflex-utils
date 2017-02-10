@@ -4,7 +4,7 @@ module Reflex.Dom.Contrib.CssUtils
          CssPathList
        , cssPrepend
        , embedCssFiles
-       , CssLink
+       , CssLink(..)
        , CssLinks
        , headElt
        ) where
@@ -16,6 +16,7 @@ import Reflex.Dom.Core (DomBuilder,el,elAttr,text)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import Data.Text.Encoding (decodeUtf8)
+import Data.Monoid ((<>))
 
 cssPath::String->String->FilePath
 cssPath basePath cssFile = basePath ++ cssFile
@@ -27,18 +28,17 @@ cssPrepend pre paths = (mappend pre) <$> paths
 embedCssFiles::CssPathList->ExpQ
 embedCssFiles cpl = listE $ embedFile <$> cpl
 
-type CssLink = T.Text -- TODO: this should be a proper URL type
+data CssLink = CssLink { url::T.Text, integrity::Maybe T.Text, crossorigin::Maybe T.Text } -- TODO: this should be a proper URL type
 type CssLinks = [CssLink] 
 
-cssLinkToText::CssLink -> T.Text
-cssLinkToText = id
-
 styleSheet::DomBuilder t m=> CssLink -> m ()
-styleSheet link =
-  let attrs = M.fromList [("rel", "stylesheet")
-                         , ("type", "text/css")
-                         , ("href", cssLinkToText link)
-                         ]
+styleSheet (CssLink u mi mco) =
+  let integrityAttrF = maybe id (M.insert "integrity") mi
+      crossOriginAttrF = maybe id (M.insert "crossorigin") mco
+      attrs = integrityAttrF . crossOriginAttrF $ M.fromList [("rel", "stylesheet")
+                                                              , ("type", "text/css")
+                                                              , ("href", u)
+                                                              ]
   in elAttr "link" attrs $ return ()
 
 
