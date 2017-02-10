@@ -1,10 +1,14 @@
 {-# LANGUAGE RankNTypes #-}  
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ConstraintKinds #-}
 module Reflex.Dom.Contrib.SimpleForm.Configuration where
 
 import Reflex.Dom.Contrib.Layout.Types (CssClasses,LayoutOrientation,LayoutDirection)
+import Reflex (MonadHold)
+import Reflex.Dom (DomBuilder)
 import Control.Lens.TH
 import Control.Monad.Reader (ReaderT)
+import Control.Monad.Morph (hoist)
 import Data.Text (Text)
 import Data.Map (Map)
 
@@ -24,15 +28,21 @@ data FormType = Interactive | ObserveOnly deriving (Eq)
 --nullInputConfig::InputConfig
 --nullInputConfig = InputConfig Nothing Nothing Nothing
 
-type SFLayoutF m = forall a.(ReaderT (SimpleFormConfiguration m) m a -> ReaderT (SimpleFormConfiguration m) m a)
+type SFLayoutFC t m = (DomBuilder t m, MonadHold t m)
+type BaseLayoutF = forall a t m.SFLayoutFC t m=>m a->m a
+type SFLayoutF = forall a t m.(SFLayoutFC t m=>ReaderT SimpleFormConfiguration m a -> ReaderT SimpleFormConfiguration m a)
 
-data LayoutConfiguration m = LayoutConfiguration
+liftLF::BaseLayoutF->SFLayoutF
+liftLF = hoist
+
+
+data LayoutConfiguration = LayoutConfiguration
   {
-    formItem::SFLayoutF m
-  , layoutOriented::LayoutOrientation->SFLayoutF m
-  , layoutFill::LayoutDirection->SFLayoutF m
-  , layoutCentered::LayoutOrientation->SFLayoutF m
-  , layoutCollapsible::Text -> SFLayoutF m
+    formItem::SFLayoutF
+  , layoutOriented::LayoutOrientation->SFLayoutF
+  , layoutFill::LayoutDirection->SFLayoutF
+  , layoutCentered::LayoutOrientation->SFLayoutF
+  , layoutCollapsible::Text -> SFLayoutF
   }
 
 data CssConfiguration = StyleConfiguration
@@ -51,10 +61,10 @@ data InputElementConfig = InputElementConfig
   , _imputLabelConfig::Maybe LabelConfig
   }
 
-data SimpleFormConfiguration m = SimpleFormConfiguration
+data SimpleFormConfiguration = SimpleFormConfiguration
   {
     _formType::FormType
-  , _layoutConfig::LayoutConfiguration m
+  , _layoutConfig::LayoutConfiguration
   , _cssConfig::CssConfiguration
   , _inputConfig::InputElementConfig
   }
