@@ -49,6 +49,7 @@ library
 --                  Reflex.Dom.Contrib.Layout.GridLayout                    
 --                  Reflex.Dom.Contrib.StackedMonadWidget             
                   Reflex.Dom.Contrib.SimpleForm
+                  Reflex.Dom.Contrib.SimpleForm.DynValidation
                   Reflex.Dom.Contrib.SimpleForm.Builder
                   Reflex.Dom.Contrib.SimpleForm.Instances
                   Reflex.Dom.Contrib.SimpleForm.AllDefault

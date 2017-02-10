@@ -12,14 +12,8 @@
 {-# LANGUAGE TypeFamilies           #-}
 module Reflex.Dom.Contrib.SimpleForm.Builder
        (
-         SimpleFormError(..)
-       , SimpleFormErrors
-       , DynValidation(..)
-       , accValidation
-       , avToMaybe
-       , maybeToAV
-       , dynValidationNothing
-       , joinDynOfDynValidation
+       , module Reflex.Dom.Contrib.SimpleForm.DynValidation
+       , module Reflex.Dom.Contrib.SimpleForm.Configuration
        , makeSimpleForm
        , makeSimpleForm'
        , observeDynamic
@@ -80,6 +74,9 @@ import           Reflex.Dom.Contrib.Layout.Types (CssClass, CssClasses (..),
                                                   LayoutOrientation (..),
                                                   emptyCss)
 
+import Reflex.Dom.Contrib.SimpleForm.DynValidation
+import Reflex.Dom.Contrib.SimpleForm.Configuration
+
 import           DataBuilder                     as BExport (Builder (..),
                                                              FieldName,
                                                              GBuilder (..),
@@ -103,69 +100,31 @@ import qualified Data.Map                        as M
 import           Data.Maybe                      (fromMaybe, isJust)
 import           Data.Monoid                     ((<>))
 import qualified Data.Text                       as T
-import           Data.Validation                 (AccValidation (..))
+
 import           Language.Haskell.TH
 
 
-data SimpleFormError  = SFNothing | SFNoParse T.Text | SFInvalid T.Text deriving (Show,Eq)
-
-type SimpleFormErrors = [SimpleFormError]
-
-accValidation::(err->b)->(a->b)->AccValidation err a->b
-accValidation f _ (AccFailure e) = f e
-accValidation _ f (AccSuccess a) = f a
-
-avToMaybe::AccValidation e a->Maybe a
-avToMaybe (AccFailure _) = Nothing
-avToMaybe (AccSuccess a) = Just a
-
-maybeToAV::Maybe a->AccValidation SimpleFormErrors a
-maybeToAV Nothing = AccFailure [SFNothing]
-maybeToAV (Just a) = AccSuccess a
-
-newtype DynValidation t a = DynValidation { unDynValidation::R.Dynamic t (AccValidation SimpleFormErrors a) }
-
-dynValidationNothing::R.Reflex t=>DynValidation t a
-dynValidationNothing = DynValidation $ R.constDyn (AccFailure [SFNothing])
-
-dynValidationErr::R.Reflex t=>SimpleFormErrors->DynValidation t a
-dynValidationErr = DynValidation . R.constDyn . AccFailure
-
-joinDynOfDynValidation::R.Reflex t =>R.Dynamic t (DynValidation t a) -> DynValidation t a
-joinDynOfDynValidation = DynValidation . join . fmap unDynValidation
-
-instance R.Reflex t=>Functor (DynValidation t) where
-  fmap f dva = DynValidation $ fmap (fmap f) (unDynValidation dva)
-
-instance R.Reflex t=>Applicative (DynValidation t) where
-  pure = DynValidation . R.constDyn . AccSuccess
-  dvf <*> dva = DynValidation $ R.zipDynWith (<*>) (unDynValidation dvf) (unDynValidation dva)
-
--- no Monad instance because it would fail to satisfy <*> = `ap' due to that being impossible for AccValidation
--- TODO: Make e concrete, the type will carry layout functions and css for the wrapping divs, labels and inputs
-type SFRW e t m a = ReaderT e m (DynValidation t a)
+type SFRW t m a = ReaderT (SimpleFormConfiguration m) m (DynValidation t a)
 
 -- This is necessary because this functor and applicative are different from that of SFRW
-newtype SimpleFormR e t m a = SimpleFormR { unSF::SFRW e t m a }
+newtype SimpleFormR t m a = SimpleFormR { unSF::SFRW t m a }
 
-instance (R.Reflex t, R.MonadHold t m)=>Functor (SimpleFormR e t m) where
+instance (R.Reflex t, R.MonadHold t m)=>Functor (SimpleFormR t m) where
   fmap f sfra = SimpleFormR $ fmap (fmap f) (unSF sfra)
 
-instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR e t m) where
+instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR t m) where
   pure = SimpleFormR . return . pure
   sfrF <*> sfrA = SimpleFormR $ do
     dmF <- unSF sfrF
     dmA <- unSF sfrA
     return $ dmF <*> dmA
 
-runSimpleFormR::Monad m=>e->SimpleFormR e t m a->m (DynValidation t a)
+runSimpleFormR::Monad m=>SimpleFormConfiguration m->SimpleFormR t m a->m (DynValidation t a)
 runSimpleFormR cfg sfra = runReaderT (unSF sfra) cfg
 
-type SimpleFormC e t m = (RD.DomBuilder t m, R.MonadHold t m,
-                          SimpleFormBuilderFunctions e t m,
-                          SimpleFormLayoutFunctions e m)
+type SimpleFormC t m = (RD.DomBuilder t m, R.MonadHold t m, SimpleFormBuilderFunctions t m)
 
-switchingSFR::SimpleFormC e t m=>(a->SimpleFormR e t m b)->a->R.Event t a->SimpleFormR e t m b
+switchingSFR::SimpleFormC t m=>(a->SimpleFormR t m b)->a->R.Event t a->SimpleFormR t m b
 switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
   cfg <- ask
   let f = runSimpleFormR cfg . widgetGetter
@@ -178,14 +137,14 @@ asSimpleObserver::RD.DomBuilder t m=>CssClass->m a->m a
 asSimpleObserver observerClass = RD.divClass (toCssString observerClass)
 
 
-makeSimpleForm::(SimpleFormC e t m
-                , B.Builder (SimpleFormR e t m) a)=>e->CssClass->Maybe a->m (DynValidation t a)
+makeSimpleForm::(SimpleFormC t m
+                , B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration m->CssClass->Maybe a->m (DynValidation t a)
 makeSimpleForm cfg formClass ma =
   asSimpleForm formClass $ runSimpleFormR cfg $ B.buildA Nothing ma
 
-makeSimpleForm'::(SimpleFormC e t m, RD.MonadHold t m
-                 , B.Builder (SimpleFormR e t m) a)=>
-                 e-> -- form config
+makeSimpleForm'::(SimpleFormC t m, RD.MonadHold t m
+                 , B.Builder (SimpleFormR t m) a)=>
+                 SimpleFormConfiguration m->
                  CssClass-> -- css class for form
                  Maybe a-> -- initial values
                  m (RD.Event t ())-> -- submit control
@@ -196,12 +155,12 @@ makeSimpleForm' cfg formClass ma submitWidget = do
   return $ RD.attachPromptlyDynWithMaybe const (avToMaybe <$> dva) submitEv -- fires when control does but only if form entries are valid
 
 
-observeDynamic::(SimpleFormC e t m,RD.PostBuild t m
-                ,B.Builder (SimpleFormR e t m) a)=>e->CssClass->R.Dynamic t a->m (DynValidation t a)
+observeDynamic::(SimpleFormC t m, RD.PostBuild t m
+                ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration m->CssClass->R.Dynamic t a->m (DynValidation t a)
 observeDynamic cfg observerClass aDyn = observeDynValidation cfg observerClass $ DynValidation $ fmap AccSuccess aDyn
 
-observeDynValidation::(SimpleFormC e t m,RD.PostBuild t m
-                      ,B.Builder (SimpleFormR e t m) a)=>e->CssClass->DynValidation t a->m (DynValidation t a)
+observeDynValidation::(SimpleFormC t m,RD.PostBuild t m
+                      ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration m->CssClass->DynValidation t a->m (DynValidation t a)
 observeDynValidation cfg observerClass aDynM =
   asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
     let makeForm = accValidation (return . dynValidationErr) (unSF . buildA Nothing . Just)
@@ -210,17 +169,17 @@ observeDynValidation cfg observerClass aDynM =
     lift $ joinDynOfDynValidation <$> R.holdDyn aDynM newDynEv --R.foldDyn (\_ x-> x) aDynM newDynEv -- DynValidation t a
 
 
-observeWidget::(SimpleFormC e t m
-               ,B.Builder (SimpleFormR e t m) a)=>e->CssClass->m a->m (DynValidation t a)
+observeWidget::(SimpleFormC t m
+               ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration m->CssClass->m a->m (DynValidation t a)
 observeWidget cfg observerClass wa =
   asSimpleObserver observerClass $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
   a <- lift wa
   unSF . buildA Nothing . Just $ a
 
 
-observeFlow::(SimpleFormC e t m, MonadFix m
-             , B.Builder (SimpleFormR e t m) a
-             , B.Builder (SimpleFormR e t m) b)=>e->CssClass->CssClass->(a->m b)->a->m (DynValidation t b)
+observeFlow::(SimpleFormC t m, MonadFix m
+             , B.Builder (SimpleFormR t m) a
+             , B.Builder (SimpleFormR t m) b)=>SimpleFormConfiguration m->CssClass->CssClass->(a->m b)->a->m (DynValidation t b)
 observeFlow cfg formClass observerClass flow initialA = runSimpleFormR cfg . SimpleFormR  $ do
   let initialWidget = flow initialA
       obF = observeWidget cfg observerClass
@@ -229,22 +188,21 @@ observeFlow cfg formClass observerClass flow initialA = runSimpleFormR cfg . Sim
   lift $ joinDynOfDynValidation <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
 
 
-type SFLayoutF e m a = ReaderT e m a -> ReaderT e m a
 type DynAttrs t = R.Dynamic t (M.Map T.Text T.Text)
 
-liftLF::Monad m=>(forall b.m b->m b)->SFLayoutF e m a
+liftLF::Monad m=>(forall b.m b->m b)->SFLayoutF m
 liftLF = hoist
 
-liftF::(forall b.SFLayoutF e m b)->SimpleFormR e t m a->SimpleFormR e t m a
+liftF::SFLayoutF m->SimpleFormR t m a->SimpleFormR t m a
 liftF f = SimpleFormR . f . unSF
 
-liftTransform::Monad m=>(forall b.m b->m b)->SimpleFormR e t m a->SimpleFormR e t m a
+liftTransform::Monad m=>(forall b.m b->m b)->SimpleFormR t m a->SimpleFormR t m a
 liftTransform f = liftF (liftLF f)
 
-liftRAction::Monad m=>ReaderT e m b->SimpleFormR e t m a->SimpleFormR e t m a
+liftRAction::Monad m=>ReaderT (SimpleFormConfiguration m) m b->SimpleFormR t m a->SimpleFormR t m a
 liftRAction ac sf = SimpleFormR $ ac >> unSF sf
 
-liftAction::Monad m=>m b->SimpleFormR e t m a->SimpleFormR e t m a
+liftAction::Monad m=>m b->SimpleFormR t m a->SimpleFormR t m a
 liftAction ac = liftRAction (lift ac)
 
 data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)
@@ -252,62 +210,13 @@ data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed d
 -- | class to hold form configuration.  For different configurations, declare an env type and then
 -- | instantiate the class for that type.
 -- TODO: Should this all just be a data type (record-of-functions)?
-class SimpleFormBuilderFunctions e t m where
-  failureF::T.Text->SimpleFormR e t m a
-  sumF::[(B.ConName,SimpleFormR e t m a)]->Maybe B.ConName->SimpleFormR e t m a
-  dynamicDiv::DynAttrs t->SFLayoutF e m a
+class SimpleFormBuilderFunctions t m where
+  failureF::T.Text->SimpleFormR t m a
+  sumF::[(B.ConName,SimpleFormR t m a)]->Maybe B.ConName->SimpleFormR t m a
+  dynamicDiv::DynAttrs t->SFLayoutF m a
 
-type Placeholder = T.Text
-type Title = T.Text
-type LabelText = T.Text
-data LabelPosition = LabelBefore | LabelAfter
-
--- do the attributes below need to be dynamic?  That would complicate things...
-data LabelConfig = LabelConfig { labelPosition::LabelPosition, labelText::LabelText, labelAttrs::M.Map T.Text T.Text }
-data FormType = Interactive | ObserveOnly deriving (Eq)
-
-data InputConfig = InputConfig { placeHolder::Maybe Placeholder, title::Maybe Title, labelConfig::Maybe LabelConfig }
-data FormStyles = FormStyles { item::CssClasses, validInput::CssClasses, invalidInput::CssClasses, observeOnly::CssClasses }
-data FormConfig = FormConfig { styles::FormStyles, formType::FormType } -- need a way to add a class to wrapping div
-
-nullInputConfig::InputConfig
-nullInputConfig = InputConfig Nothing Nothing Nothing
 
 {-
-data LayoutConfiguration m a = LayoutConfiguration
-  {
-    formItem::SFLayoutF m a
-  , layoutOriented::LayoutOrientation->SFLayoutF m a
-  , layoutFill::LayoutDirection->SFLayoutF m a
-  , layoutCentered::LayoutOrientation->SFLayoutF m a
-  , layoutCollapsible::T.Text -> SFLayoutF m a
-  }
-
-data StyleConfiguration = StyleConfiguration
-  {
-    formType::FormType
-  , allItems::CssClasses
-  , allInputs::CssClasses
-  , validInputs::CssClasses
-  , invalidInputs::CssClasses
-  , readOnly::CssClasses
-  }
-
-data InputConfig = InputConfig
-  {
-    placeholder::Maybe Placeholder
-  , title::Maybe Title
-  , labelConfig::Maybe LabelConfig
-  }
-
-data SimpleFormConfiguration m a = SimpleFormConfiguration
-  {
-    layoutConfig::LayoutConfiguration m a
-  , styleConfig::StyleConfiguration
-  , inputConfig::InputConfig
-  }
--}
-
 -- presumably, an instance of this will have fields for the configs and the sets will be done via Control.Monad.Reader.local
 class Monad m=>SimpleFormLayoutFunctions e m where
   formItem::SFLayoutF e m a
@@ -321,43 +230,59 @@ class Monad m=>SimpleFormLayoutFunctions e m where
 
   getInputConfig::ReaderT e m InputConfig
   setInputConfig::InputConfig->SFLayoutF e m a
+-}
 
-formItemStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
-formItemStyle = item . styles <$> getFormConfig
 
-validInputStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
-validInputStyle = validInput . styles <$> getFormConfig
+formItemStyle::ReaderT (SimpleFormConfiguration m) m CssClasses
+formItemStyle = view (cssConfig . cssAllItems) 
 
-invalidInputStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
-invalidInputStyle = invalidInput . styles <$> getFormConfig
+validInputStyle::ReaderT (SimpleFormConfiguration m) m CssClasses
+validInputStyle = view (cssConfig . cssValidInput)
 
-observerOnlyStyle::SimpleFormLayoutFunctions e m=>ReaderT e m CssClasses
-observerOnlyStyle = observeOnly . styles <$> getFormConfig
+invalidInputStyle::ReaderT (SimpleFormConfiguration m) m CssClasses
+invalidInputStyle = view (cssConfig . cssInvalidInput) 
 
-getFormType::SimpleFormLayoutFunctions e m=>ReaderT e m FormType
-getFormType = formType <$> getFormConfig
+observerOnlyStyle::ReaderT (SimpleFormConfiguration m) m CssClasses
+observerOnlyStyle = view (cssConfig . cssReadOnly)
 
-setToObserve::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
-setToObserve w = do
-  fc <- getFormConfig
-  setFormConfig fc{ formType = ObserveOnly }  w
+getFormType::ReaderT (SimpleFormConfiguration m) m FormType
+getFormType = view formType
 
-fieldSet::SimpleFormC e t m=>T.Text->SFLayoutF e m a
+setToObserve::Monad m=>SFLayoutF m
+setToObserve w = local (\fc -> fc {_formType = ObserveOnly }) w
+--  fc <- getFormConfig
+--  setFormConfig fc{ formType = ObserveOnly }  w
+
+fieldSet::SimpleFormC t m=>T.Text->SFLayoutF m
 fieldSet legendText ra = RD.el "fieldset" $ do
     lift $ RD.el "legend" $ RD.text legendText
     ra
 
-itemL::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
-itemL = layoutFill LayoutRight  . formItem
+itemL::SimpleFormConfiguration m->SFLayoutF m
+itemL cfg =
+  let itemF = _layoutConfig . formItem $ cfg
+      fillF = _layoutConfig . layoutFill
+  fillF LayoutRight  . itemF
 
-itemR::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
-itemR = layoutFill LayoutLeft . formItem
+itemR::SimpleFormConfiguration m->SFLayoutF m
+itemR =
+  let itemF = _layoutConfig . formItem $ cfg
+      fillF = _layoutConfig . layoutFill
+  fillF LayoutLeft . itemF
 
-formRow::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
-formRow  = formItem . layoutOrientation LayoutHorizontal
+formRow::SimpleFormConfiguration m->SFLayoutF m
+formRow  =
+  let itemF = _layoutConfig . formItem $ cfg
+      orientF = _layoutConfig . layoutOrientation
+  itemF . orientF LayoutHorizontal
 
 formCol::SimpleFormLayoutFunctions e m=>SFLayoutF e m a
-formCol = formItem . layoutOrientation LayoutVertical
+formCol =
+  let itemF = _layoutConfig . formItem $ cfg
+      orientF = _layoutConfig . layoutOrientation
+  itemF . orientF LayoutVertical
+
+-- I'm here
 
 formRow'::(RD.Reflex t, SimpleFormLayoutFunctions e m,SimpleFormBuilderFunctions e t m)=>DynAttrs t->SFLayoutF e m a
 formRow' attrsDyn  = formItem . dynamicDiv attrsDyn . layoutOrientation LayoutHorizontal
