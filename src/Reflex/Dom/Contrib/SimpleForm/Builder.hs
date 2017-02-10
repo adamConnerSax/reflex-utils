@@ -74,8 +74,10 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
 
 
 import           Reflex.Dom.Contrib.Layout.Types (CssClass, CssClasses (..),
-                                                  IsCssClass (..),emptyCss,
-                                                  LayoutDirection(..),LayoutOrientation(..))
+                                                  IsCssClass (..),
+                                                  LayoutDirection (..),
+                                                  LayoutOrientation (..),
+                                                  emptyCss)
 
 import           DataBuilder                     as BExport (Builder (..),
                                                              FieldName,
@@ -259,7 +261,7 @@ type Title = T.Text
 type LabelText = T.Text
 data LabelPosition = LabelBefore | LabelAfter
 
--- do the attributes below need to be dynamic?  That would complicate things... 
+-- do the attributes below need to be dynamic?  That would complicate things...
 data LabelConfig = LabelConfig { labelPosition::LabelPosition, labelText::LabelText, labelAttrs::M.Map T.Text T.Text }
 data FormType = Interactive | ObserveOnly deriving (Eq)
 
@@ -270,8 +272,42 @@ data FormConfig = FormConfig { styles::FormStyles, formType::FormType } -- need 
 nullInputConfig::InputConfig
 nullInputConfig = InputConfig Nothing Nothing Nothing
 
--- presumably, an instance of this will have fields for the configs and the sets will be done via Control.Monad.Reader.local
+{-
+data LayoutConfiguration m a = LayoutConfiguration
+  {
+    formItem::SFLayoutF m a
+  , layoutOriented::LayoutOrientation->SFLayoutF m a
+  , layoutFill::LayoutDirection->SFLayoutF m a
+  , layoutCentered::LayoutOrientation->SFLayoutF m a
+  , layoutCollapsible::T.Text -> SFLayoutF m a
+  }
 
+data StyleConfiguration = StyleConfiguration
+  {
+    formType::FormType
+  , allItems::CssClasses
+  , allInputs::CssClasses
+  , validInputs::CssClasses
+  , invalidInputs::CssClasses
+  , readOnly::CssClasses
+  }
+
+data InputConfig = InputConfig
+  {
+    placeholder::Maybe Placeholder
+  , title::Maybe Title
+  , labelConfig::Maybe LabelConfig
+  }
+
+data SimpleFormConfiguration m a = SimpleFormConfiguration
+  {
+    layoutConfig::LayoutConfiguration m a
+  , styleConfig::StyleConfiguration
+  , inputConfig::InputConfig
+  }
+-}
+
+-- presumably, an instance of this will have fields for the configs and the sets will be done via Control.Monad.Reader.local
 class Monad m=>SimpleFormLayoutFunctions e m where
   formItem::SFLayoutF e m a
   layoutOrientation::LayoutOrientation->SFLayoutF e m a
@@ -280,7 +316,7 @@ class Monad m=>SimpleFormLayoutFunctions e m where
   layoutCollapsible::T.Text->CollapsibleInitialState->SFLayoutF e m a
 
   getFormConfig::ReaderT e m FormConfig
-  setFormConfig::FormConfig->SFLayoutF e m a  
+  setFormConfig::FormConfig->SFLayoutF e m a
 
   getInputConfig::ReaderT e m InputConfig
   setInputConfig::InputConfig->SFLayoutF e m a
@@ -346,7 +382,7 @@ sfAttrs' mDyn mFN mTypeS fixedCss = do
   validClasses <- validItemStyle
   invalidClasses <- invalidItemStyle
   observerClasses <- observerOnlyStyle
-  fType <- formType <$> getFormConfig 
+  fType <- formType <$> getFormConfig
   let title = componentTitle mFN mTypeS
       validAttrs = titleAttr title <> cssClassAttr (validClasses <> fixedCss)
       invalidAttrs = titleAttr title <> cssClassAttr (invalidClasses <> fixedCss)
