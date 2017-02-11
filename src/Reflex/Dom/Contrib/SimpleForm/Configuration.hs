@@ -4,8 +4,8 @@
 module Reflex.Dom.Contrib.SimpleForm.Configuration where
 
 import Reflex.Dom.Contrib.Layout.Types (CssClasses,LayoutOrientation,LayoutDirection)
-import Reflex (MonadHold)
-import Reflex.Dom (DomBuilder)
+--import Reflex (MonadHold)
+--import Reflex.Dom (DomBuilder)
 import Control.Lens.TH
 import Control.Monad.Reader (ReaderT)
 import Control.Monad.Morph (hoist)
@@ -21,31 +21,24 @@ data LabelPosition = LabelBefore | LabelAfter
 data LabelConfig = LabelConfig { labelPosition::LabelPosition, labelText::LabelText, labelAttrs::Map Text Text }
 data FormType = Interactive | ObserveOnly deriving (Eq)
 
---data InputConfig = InputConfig { placeHolder::Maybe Placeholder, title::Maybe Title, labelConfig::Maybe LabelConfig }
---data FormStyles = FormStyles { item::CssClasses, validInput::CssClasses, invalidInput::CssClasses, observeOnly::CssClasses }
---data FormConfig = FormConfig { styles::FormStyles, formType::FormType } -- need a way to add a class to wrapping div
+data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)
 
---nullInputConfig::InputConfig
---nullInputConfig = InputConfig Nothing Nothing Nothing
+type SFLayoutF m = forall a.(ReaderT (SimpleFormConfiguration m) m a -> ReaderT (SimpleFormConfiguration m) m a)
 
-type SFLayoutFC t m = (DomBuilder t m, MonadHold t m)
-type BaseLayoutF = forall a t m.SFLayoutFC t m=>m a->m a
-type SFLayoutF = forall a t m.(SFLayoutFC t m=>ReaderT SimpleFormConfiguration m a -> ReaderT SimpleFormConfiguration m a)
-
-liftLF::BaseLayoutF->SFLayoutF
+liftLF::Monad m=>(forall a.m a->m a)->SFLayoutF m
 liftLF = hoist
 
 
-data LayoutConfiguration = LayoutConfiguration
+data LayoutConfiguration m = LayoutConfiguration 
   {
-    formItem::SFLayoutF
-  , layoutOriented::LayoutOrientation->SFLayoutF
-  , layoutFill::LayoutDirection->SFLayoutF
-  , layoutCentered::LayoutOrientation->SFLayoutF
-  , layoutCollapsible::Text -> SFLayoutF
+    formItem::SFLayoutF m
+  , layoutOriented::LayoutOrientation->SFLayoutF m
+  , layoutFill::LayoutDirection->SFLayoutF m
+  , layoutCentered::LayoutOrientation->SFLayoutF m
+  , layoutCollapsible::Text -> CollapsibleInitialState->SFLayoutF m
   }
 
-data CssConfiguration = StyleConfiguration
+data CssConfiguration = CssConfiguration
   {
     _cssAllItems::CssClasses
   , _cssAllInputs::CssClasses
@@ -58,13 +51,13 @@ data InputElementConfig = InputElementConfig
   {
     _inputPlaceholder::Maybe Placeholder
   , _inputTitle::Maybe Title
-  , _imputLabelConfig::Maybe LabelConfig
+  , _inputLabelConfig::Maybe LabelConfig
   }
 
-data SimpleFormConfiguration = SimpleFormConfiguration
+data SimpleFormConfiguration m = SimpleFormConfiguration 
   {
     _formType::FormType
-  , _layoutConfig::LayoutConfiguration
+  , _layoutConfig::LayoutConfiguration m
   , _cssConfig::CssConfiguration
   , _inputConfig::InputElementConfig
   }

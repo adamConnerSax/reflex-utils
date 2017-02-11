@@ -29,6 +29,7 @@ import Control.Monad.Trans (lift)
 import Control.Monad.Ref (Ref,MonadRef)
 import           Control.Monad.Fix               (MonadFix)
 import Data.Monoid ((<>))
+import Data.Default                              (def)
 import Data.FileEmbed
 import Control.Lens ((%~))
 

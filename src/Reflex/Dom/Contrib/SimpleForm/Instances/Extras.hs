@@ -35,17 +35,17 @@ class EquivRep a b where
   to::a -> b
   from::b -> a
 
-instance (SimpleFormC e t m,EquivRep a b, B.Builder (SimpleFormR e t m) b)=>Builder (SimpleFormR e t m) a where
+instance (SimpleFormC t m,EquivRep a b, B.Builder (SimpleFormR t m) b)=>Builder (SimpleFormR t m) a where
   buildA mFN ma = from <$> buildA mFN (to <$> ma)
 -}
 
-instance (SimpleFormC e t m, RD.PostBuild t m, MonadFix m
-         , B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFormR e t m) (R.Dynamic t a) where
+instance (SimpleFormC t m, RD.PostBuild t m, MonadFix m
+         , B.Builder (SimpleFormR t m) a)=>Builder (SimpleFormR t m) (R.Dynamic t a) where
   buildA mFN mda = SimpleFormR $
     case mda of
       Nothing -> return dynValidationNothing
       Just aDyn -> do
-        let builder::Maybe a->SimpleFormR e t m a
+        let builder::Maybe a->SimpleFormR t m a
             builder = buildA mFN
             startDynM = DynValidation $ AccSuccess <$> aDyn
             builtDynM = (unSF . builder . Just) <$> aDyn -- Dynamic t (ReaderT e m (DynValidation t a))
@@ -56,24 +56,24 @@ instance (SimpleFormC e t m, RD.PostBuild t m, MonadFix m
 
 newtype MWidget m a = MWidget { unMW::m a }
 
-instance (SimpleFormC e t m, B.Builder (SimpleFormR e t m) a)=>Builder (SimpleFormR e t m) (MWidget m a) where
+instance (SimpleFormC t m, B.Builder (SimpleFormR t m) a)=>Builder (SimpleFormR t m) (MWidget m a) where
   buildA mFN mwa = SimpleFormR $
     case mwa of
       Nothing -> return dynValidationNothing
       Just wa -> do
         a <- lift $ unMW wa
-        let builder::Maybe a->SimpleFormR e t m a
+        let builder::Maybe a->SimpleFormR t m a
             builder = buildA mFN
         dva <- unSF $ builder (Just a)
         return $ fmap (MWidget . return) dva --R.mapDyn (maybe Nothing (Just . MWidget . return)) dma
 
-buildValidatedIso::forall e t m a b.(SimpleFormC e t m,
-                                  Builder (SimpleFormR e t m) b)=>
+buildValidatedIso::forall t m a b.(SimpleFormC t m,
+                                  Builder (SimpleFormR t m) b)=>
                 (a->Either T.Text a)->
                 Iso' a b->
                 Maybe FieldName->
                 Maybe a->
-                SimpleFormR e t m a
+                SimpleFormR t m a
 buildValidatedIso vf isoAB mFN ma =
   let mInitial = ma >>= either (const Nothing) (Just . view isoAB) . vf
       validatedX = either (\x->AccFailure [SFInvalid x]) AccSuccess . vf
@@ -81,12 +81,12 @@ buildValidatedIso vf isoAB mFN ma =
       validatedDVX = DynValidation . fmap validatedAVX . unDynValidation
   in SimpleFormR $ validatedDVX <$> unSF (view (from isoAB) <$> buildA mFN mInitial)
 
-buildValidated::forall e t m a b.(SimpleFormC e t m,
-                                  Builder (SimpleFormR e t m) b)=>
+buildValidated::forall t m a b.(SimpleFormC t m,
+                                  Builder (SimpleFormR t m) b)=>
                 (a->Either T.Text a)->
                 (a->b)->
                 (b->a)->
                 Maybe FieldName->
                 Maybe a->
-                SimpleFormR e t m a
+                SimpleFormR t m a
 buildValidated vf a2b b2a = buildValidatedIso vf (iso a2b b2a)

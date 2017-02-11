@@ -48,6 +48,9 @@ instance Monoid CssClasses where
 emptyCss::CssClasses
 emptyCss = CssClasses []
 
+oneClass::T.Text -> CssClasses
+oneClass x = CssClasses [CssClass x] 
+
 -- for Layout specification
 data LayoutDirection = LayoutLeft | LayoutRight | LayoutTop | LayoutBottom
 data LayoutOrientation = LayoutHorizontal | LayoutVertical

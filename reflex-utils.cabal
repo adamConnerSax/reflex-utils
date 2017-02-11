@@ -120,6 +120,7 @@ executable reflex-utils-simpleForm
                      , ghcjs-dom
                      , transformers
                      , lens
+                     , data-default
                      , mtl
                      , ref-tf
                      , file-embed
@@ -188,6 +189,7 @@ executable reflex-utils-simpleForm-warp
                      , ghcjs-dom
                      , transformers
                      , mtl
+                     , data-default
                      , lens
                      , ref-tf
                      , file-embed

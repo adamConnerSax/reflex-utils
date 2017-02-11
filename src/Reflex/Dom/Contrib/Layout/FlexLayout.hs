@@ -100,28 +100,28 @@ flexCss = do
 flexCssBS::B.ByteString
 flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty []  flexCss
 
-flexRow'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->m a->m a
+flexRow'::(RD.DomBuilder t m)=>CssClasses->m a->m a
 flexRow' classes = RD.divClass ("gl-flex-row " <> toCssString classes) 
 
-flexCol'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->m a->m a
+flexCol'::(RD.DomBuilder t m)=>CssClasses->m a->m a
 flexCol' classes = RD.divClass ("gl-flex-col "  <> toCssString classes)
 
-flexItem'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->m a->m a
+flexItem'::(RD.DomBuilder t m)=>CssClasses->m a->m a
 flexItem' classes = RD.divClass ("gl-flex-item " <> toCssString classes)
 
-flexSizedItem'::(RD.DomBuilder t m,MonadIO (R.PushM t))=>CssClasses->Int->m a->m a
+flexSizedItem'::(RD.DomBuilder t m)=>CssClasses->Int->m a->m a
 flexSizedItem' classes n = let n' = Prelude.min n numberFlexGrowOptions in RD.divClass $ T.pack ("gl-flex-item-" ++ show n')  <> toCssString classes
 
-flexRow::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
+flexRow::(RD.DomBuilder t m)=>m a->m a
 flexRow = flexRow' emptyCss 
 
-flexCol::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
+flexCol::(RD.DomBuilder t m)=>m a->m a
 flexCol = flexCol' emptyCss
 
-flexItem::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a->m a
+flexItem::(RD.DomBuilder t m)=>m a->m a
 flexItem = flexItem' emptyCss
 
-flexSizedItem::(RD.DomBuilder t m,MonadIO (R.PushM t))=>Int->m a->m a
+flexSizedItem::(RD.DomBuilder t m)=>Int->m a->m a
 flexSizedItem = flexSizedItem' emptyCss
 
 
@@ -129,7 +129,7 @@ wrapWidget::RD.DomBuilder t m=>m a->m a
 wrapWidget = RD.divClass "" 
 
 
-flexFill::(RD.DomBuilder t m,MonadIO (R.PushM t))=>LayoutDirection->m a->m a
+flexFill::(RD.DomBuilder t m)=>LayoutDirection->m a->m a
 flexFill LayoutRight w =
   RD.divClass "flexFillH" $ do
     x <- wrapWidget w
@@ -153,7 +153,7 @@ flexFill LayoutTop w =
     RD.divClass "fill" RD.blank
     wrapWidget w
 
-flexCenter::(RD.DomBuilder t m,MonadIO (R.PushM t))=>LayoutOrientation->m a->m a
+flexCenter::(RD.DomBuilder t m)=>LayoutOrientation->m a->m a
 flexCenter LayoutHorizontal w = 
   RD.divClass "flexFillH" $ do
     RD.divClass "fill" RD.blank
@@ -170,7 +170,7 @@ flexCenter LayoutVertical w =
 
 
 infixl 2 ##
-(##)::(RD.DomBuilder t m,MonadIO (R.PushM t))=>(m a->m a)->m a->m a
+(##)::(RD.DomBuilder t m)=>(m a->m a)->m a->m a
 (##) = ($)
 
 infix 1 #$
