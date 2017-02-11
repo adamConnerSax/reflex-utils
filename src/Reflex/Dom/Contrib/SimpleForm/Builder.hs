@@ -22,36 +22,23 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , observeFlow
        , deriveSFRowBuilder
        , deriveSFColBuilder
-       , SFR
        , SFRW
        , SimpleFormR(..)
        , CollapsibleInitialState(..)
        , SimpleFormBuilderFunctions(..)
-       , SFLayoutF
        , runSimpleFormR
        , SimpleFormC
        , module ReflexExport
        , module BExport
        , module GSOP
        , liftF
-       , liftLF
        , liftTransform
        , liftRAction
        , liftAction
        , switchingSFR
-       , setInputConfig
-       , formItemStyle
-       , validInputStyle
-       , invalidInputStyle
-       , observerOnlyStyle
-       , getFormType
        , fieldSet
-       , itemL
-       , itemR
-       , formRow
-       , formRow'
-       , formCol
-       , formCol'
+       , sfRowDynAttr
+       , sfColDynAttr
        , attrs0
        , titleAttr
        , cssClassAttr
@@ -60,10 +47,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
 
 
 import           Reflex.Dom.Contrib.Layout.Types (CssClass, CssClasses (..),
-                                                  IsCssClass (..),
-                                                  LayoutDirection (..),
-                                                  LayoutOrientation (..),
-                                                  emptyCss)
+                                                  IsCssClass (..),LayoutOrientation(..))
 
 import Reflex.Dom.Contrib.SimpleForm.DynValidation
 import Reflex.Dom.Contrib.SimpleForm.Configuration
@@ -83,11 +67,9 @@ import qualified Reflex                          as R
 import qualified Reflex.Dom                      as RD
 
 import           Control.Arrow                   ((&&&))
-import           Control.Monad                   (join)
 import           Control.Monad.Fix               (MonadFix)
 import           Control.Monad.Morph
-import           Control.Monad.Reader            (ReaderT, ask, runReaderT,local)
-import           Control.Lens                    (view)
+import           Control.Monad.Reader            (ask, runReaderT)
 import qualified Data.Map                        as M
 import           Data.Maybe                      (fromMaybe, isJust)
 import           Data.Monoid                     ((<>))
@@ -96,7 +78,7 @@ import           Data.Validation                 (AccValidation (..))
 import           Language.Haskell.TH
 
 
-type SFR m = ReaderT (SimpleFormConfiguration m) m
+
 type SFRW t m a = SFR m (DynValidation t a)
 
 -- This is necessary because this functor and applicative are different from that of SFRW
@@ -183,13 +165,11 @@ observeFlow cfg formClass observerClass flow initialA = runSimpleFormR cfg . Sim
 
 type DynAttrs t = R.Dynamic t (M.Map T.Text T.Text)
 
---askSimpleForm::SimpleFormR t m (SimpleFormConfiguration m)
---askSimpleForm = SimpleFormR ask
-
-liftF::SFLayoutF m->SimpleFormR t m a->SimpleFormR t m a
+liftF::SFLayoutF m->SimpleFormR t m a->SimpleFormR t m a 
+--liftF::(SFRW t m1 a1 -> SFRW t m2 a2)->SimpleFormR t m1 a1->SimpleFormR t m2 a2 
 liftF f = SimpleFormR . f . unSF
 
-liftTransform::Monad m=>(forall a.m a->m a)->SimpleFormR t m a->SimpleFormR t m a
+liftTransform::Monad m=>(forall b.m b->m b)->SimpleFormR t m a->SimpleFormR t m a
 liftTransform f = liftF (liftLF f)
 
 liftRAction::Monad m=>SFR m b->SimpleFormR t m a->SimpleFormR t m a
@@ -209,86 +189,16 @@ class SimpleFormBuilderFunctions t m  where
   dynamicDiv::DynAttrs t->SFLayoutF m
 
 
-{-
--- presumably, an instance of this will have fields for the configs and the sets will be done via Control.Monad.Reader.local
-class Monad m=>SimpleFormLayoutFunctions e m where
-  formItem::SFLayoutF e m a
-  layoutOrientation::LayoutOrientation->SFLayoutF e m a
-  layoutFill::LayoutDirection->SFLayoutF e m a
-  layoutCentered::LayoutOrientation->SFLayoutF e m a
-  layoutCollapsible::T.Text->CollapsibleInitialState->SFLayoutF e m a
+sfRowDynAttr::Monad m=>SimpleFormBuilderFunctions t m=>DynAttrs t->SFLayoutF m
+sfRowDynAttr attrsDyn = sfItem . dynamicDiv attrsDyn . sfOrient LayoutHorizontal
 
-  getFormConfig::ReaderT e m FormConfig
-  setFormConfig::FormConfig->SFLayoutF e m a
-
-  getInputConfig::ReaderT e m InputConfig
-  setInputConfig::InputConfig->SFLayoutF e m a
--}
-
-setInputConfig::Monad m=>InputElementConfig->SFLayoutF m
-setInputConfig ic = local (\cfg -> cfg {_inputConfig = ic })
-
-formItemStyle::Monad m=>SFR m CssClasses 
-formItemStyle = view (cssConfig . cssAllItems) 
-
-validInputStyle::Monad m=>SFR m CssClasses 
-validInputStyle = view (cssConfig . cssValidInputs)
-
-invalidInputStyle::Monad m=>SFR m CssClasses
-invalidInputStyle = view (cssConfig . cssInvalidInputs) 
-
-observerOnlyStyle::Monad m=>SFR m CssClasses
-observerOnlyStyle = view (cssConfig . cssReadOnly)
-
-getFormType::Monad m=>SFR m FormType
-getFormType = view formType
-
-setToObserve::Monad m=>SFLayoutF m
-setToObserve = local (\fc -> fc {_formType = ObserveOnly })
---  fc <- getFormConfig
---  setFormConfig fc{ formType = ObserveOnly }  w
+sfColDynAttr::Monad m=>SimpleFormBuilderFunctions t m=>DynAttrs t->SFLayoutF m
+sfColDynAttr attrsDyn =   sfItem . dynamicDiv attrsDyn . sfOrient LayoutHorizontal
 
 fieldSet::RD.DomBuilder t m=>T.Text->SFLayoutF m
 fieldSet legendText ra = RD.el "fieldset" $ do
     lift $ RD.el "legend" $ RD.text legendText
     ra
-
---getLayoutPair::Monad m=>(LayoutConfiguration m->a)->(SFLayoutF m,a)
-getLayoutPair selector = do
-  cfg <- ask
-  let itemF = formItem . _layoutConfig $ cfg
-      otherF = selector . _layoutConfig $ cfg
-  return (itemF, otherF)
-
-itemL::Monad m=>SFLayoutF m
-itemL ra = do
-  (itemF, fillF) <- getLayoutPair layoutFill
-  fillF LayoutRight . itemF $ ra
-
-itemR::Monad m=>SFLayoutF m
-itemR ra = do
-  (itemF, fillF) <- getLayoutPair layoutFill
-  fillF LayoutLeft . itemF $ ra
-
-formRow::Monad m=>SFLayoutF m
-formRow  ra = do
-  (itemF, orientF) <- getLayoutPair layoutOriented
-  itemF . orientF LayoutHorizontal $ ra
-
-formCol::Monad m=>SFLayoutF m
-formCol ra = do
-  (itemF, orientF) <- getLayoutPair layoutOriented
-  itemF . orientF LayoutVertical $ ra
-
-formRow'::Monad m=>SimpleFormBuilderFunctions t m=>DynAttrs t->SFLayoutF m
-formRow' attrsDyn ra = do
-  (itemF, orientF) <- getLayoutPair layoutOriented
-  itemF . dynamicDiv attrsDyn . orientF LayoutHorizontal $ ra
-
-formCol'::Monad m=>SimpleFormBuilderFunctions t m=>DynAttrs t->SFLayoutF m
-formCol' attrsDyn ra = do
-  (itemF, orientF) <- getLayoutPair layoutOriented
-  itemF . dynamicDiv attrsDyn . orientF LayoutHorizontal $ ra
 
 attrs0::R.Reflex t=>DynAttrs t
 attrs0 = R.constDyn mempty

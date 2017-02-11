@@ -13,15 +13,14 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 -- All the basic (primitive types, tuples, etc.) are in here
 import Reflex.Dom.Contrib.SimpleForm.Instances.Basic (SimpleFormInstanceC)
 import Reflex.Dom.Contrib.SimpleForm.Builder
-import Reflex.Dom.Contrib.ReflexConstraints
-import Reflex.Dom.Contrib.Layout.Types (LayoutDirection(..),LayoutOrientation(..))
+import Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
 -- reflex imports
 import qualified Reflex as R 
 import qualified Reflex.Dom as RD
 
 
 import Control.Monad (join)
-import Control.Monad.Reader (ReaderT, lift)
+import Control.Monad.Reader (lift)
 import Control.Monad.State (StateT, runStateT, get, put)
 import Control.Monad.Morph (hoist)
 import Control.Lens (view)
@@ -84,8 +83,8 @@ data SFAdjustableI fa g b k s= SFAdjustableI { sfAI::SFAppendableI fa g b, sfDI:
 buildAdjustableContainer::(SimpleFormInstanceC t m,B.Builder (SimpleFormR t m) b,Traversable g)
                           =>SFAdjustableI fa g b k s->Maybe FieldName->Maybe fa->SimpleFormR t m fa
 buildAdjustableContainer sfAdj mFN mfa = SimpleFormR  $ do
-  formType <- getFormType
-  case formType of
+  fType <- getFormType
+  case fType of
     ObserveOnly ->  buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfa
     Interactive ->  buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
 --    else buildSFContainer (sfAI sfAdj) (buildTraversableSFA idRep) mFN mfa
@@ -243,8 +242,8 @@ widgetToggleDyn startCond condEv trueW falseW = join <$> widgetToggle startCond 
 buildTraversableSFA'::(SimpleFormInstanceC t m,B.Builder (SimpleFormR t m) b,Traversable g)=>CRepI fa (g b)->BuildF t m b->BuildF t m fa
 buildTraversableSFA' crI buildOne _ mfa =
   case mfa of
-    Just fa -> unSF $ fromRep crI <$> traverse (liftF formRow . SimpleFormR . buildOne Nothing . Just) (toRep crI fa)
-    Nothing -> return $ dynValidationNothing
+    Just fa -> unSF $ fromRep crI <$> traverse (liftF sfRow . SimpleFormR . buildOne Nothing . Just) (toRep crI fa)
+    Nothing -> return dynValidationNothing
 
 -- styled, in case we ever want an editable container without add/remove
 
@@ -252,9 +251,8 @@ buildTraversableSFA::forall t m b g fa.(SimpleFormInstanceC t m,
                       B.Builder (SimpleFormR t m) b,Traversable g)=>CRepI fa (g b)->BuildF t m fa 
 buildTraversableSFA crI md mfa = do
   validClasses <- validInputStyle
-  lcF <- layoutCollapsible <$> view layoutConfig
   let attrsDyn = R.constDyn $ cssClassAttr validClasses :: R.Dynamic t (M.Map T.Text T.Text)
-  formCol' attrsDyn $ lcF "" CollapsibleStartsOpen $ buildTraversableSFA' crI (\x -> itemL . unSF . B.buildA x) md mfa
+  sfColDynAttr attrsDyn $ sfCollapsible "" CollapsibleStartsOpen $ buildTraversableSFA' crI (\x -> sfItemL . unSF . B.buildA x) md mfa
 
 -- TODO: need a new version to do widgetHold over whole thing if collapsible depends on size
 buildSFContainer::(SimpleFormInstanceC t m,
@@ -262,21 +260,19 @@ buildSFContainer::(SimpleFormInstanceC t m,
                    Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
 buildSFContainer aI buildTr mFN mfa = mdo
   attrsDyn <- sfAttrs dmfa mFN Nothing
-  layoutCollapsibleF <- layoutCollapsible <$> view layoutConfig
-  layoutCenteredF <- layoutCentered <$> view layoutConfig
   let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
-  dmfa <- formCol' attrsDyn $ layoutCollapsibleF "" CollapsibleStartsOpen $ mdo
+  dmfa <- sfColDynAttr attrsDyn $ sfCollapsible "" CollapsibleStartsOpen $ mdo
     dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynValidation <$> RD.widgetHold (buildTr mFN initial) newSFREv)
     let udmfa' = unDynValidation dmfa'
         sizeDM = fmap (sizeFa aI) dmfa'
         newSizeEv = R.updated . R.uniqDyn $ unDynValidation sizeDM
         resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> accValidation (const Nothing) (const $ avToMaybe mFa) ms) udmfa' newSizeEv
           
-    addEv <- formRow $  do
+    addEv <- sfRow $  do
       let emptyB = unSF $ B.buildA Nothing Nothing
       -- we have to clear it once it's used. For now we replace it with a new one.
-      dmb <- itemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-      clickEv <-  layoutCenteredF LayoutVertical . itemR . lift $ containerActionButton "+" 
+      dmb <- sfItemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
+      clickEv <-  sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "+" 
       return $ R.attachPromptlyDynWithMaybe (\a b -> avToMaybe a) (unDynValidation dmb) clickEv -- only fires if button is clicked when mb is a Just.
         
     let insert vfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> vfa'  
@@ -289,20 +285,19 @@ buildSFContainer aI buildTr mFN mfa = mdo
 buildSFContainer'::(SimpleFormInstanceC t m,B.Builder (SimpleFormR t m) b,Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
 buildSFContainer' aI buildTr mFN mfa = mdo
   attrsDyn <- sfAttrs dmfa mFN Nothing
-  layoutCenteredF <- layoutCentered <$> view layoutConfig
   let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
-  dmfa <- formCol' attrsDyn $ mdo
+  dmfa <- sfColDynAttr attrsDyn $ mdo
     dmfa' <- unSF $ fromT aI <$> (SimpleFormR $ joinDynOfDynValidation <$> RD.widgetHold (buildTr mFN initial) newSFREv)
     let udmfa' = unDynValidation dmfa'
         sizeDM = fmap (sizeFa aI) dmfa'
         newSizeEv = R.updated . R.uniqDyn $ unDynValidation sizeDM
         resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> accValidation (const Nothing) (const $ avToMaybe mFa) ms) udmfa' newSizeEv
           
-    addEv <- formRow $  do
+    addEv <- sfRow $  do
       let emptyB = unSF $ B.buildA Nothing Nothing
       -- we have to clear it once it's used. For now we replace it with a new one.
-      dmb <- itemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-      clickEv <-  layoutCenteredF LayoutVertical . itemR . lift $ containerActionButton "+" 
+      dmb <- sfItemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
+      clickEv <-  sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "+" 
       return $ R.attachPromptlyDynWithMaybe (\a b -> avToMaybe a) (unDynValidation dmb)  clickEv -- only fires if button is clicked when mb is a Just.
         
     let insert mfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> mfa'  
@@ -313,11 +308,10 @@ buildSFContainer' aI buildTr mFN mfa = mdo
 
 buildOneDeletable::(SimpleFormInstanceC t m, B.Builder (SimpleFormR t m) b)
                    =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (SFR m) (DynValidation t b)
-buildOneDeletable dI mFN ma = liftLF' formRow $ do     
+buildOneDeletable dI mFN ma = liftLF' sfRow $ do     
     (evs,curS) <- get
-    dma <- lift . itemL . unSF $ B.buildA mFN ma
-    layoutCenteredF <- layoutCentered <$> view layoutConfig
-    ev  <- lift . layoutCenteredF LayoutVertical . itemR . lift $ containerActionButton "-" 
+    dma <- lift . sfItemL . unSF $ B.buildA mFN ma
+    ev  <- lift . sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "-" 
     let ev' = R.attachPromptlyDynWithMaybe (\va' _ -> getKey dI <$> (avToMaybe va') <*> Just curS) (unDynValidation dma) ev
     put (ev':evs,updateS dI curS)
     return dma
@@ -329,7 +323,7 @@ buildDeletable dI _ mgb =
     Nothing -> return dynValidationNothing
     Just gb -> mdo
       let f gb' = do
-            (dmgb',(evs,_)) <- runStateT (unSSFR $ traverse (SSFR . liftLF' formRow  . buildOneDeletable dI Nothing . Just) gb') ([],initialS dI)
+            (dmgb',(evs,_)) <- runStateT (unSSFR $ traverse (SSFR . liftLF' sfRow  . buildOneDeletable dI Nothing . Just) gb') ([],initialS dI)
             return  (dmgb',R.leftmost evs)
 --      (ddmgb,dEv) <- join $ R.splitDyn <$> RD.widgetHold (f gb) (f <$> newgbEv)
       (ddmgb,dEv) <- R.splitDynPure <$> RD.widgetHold (f gb) (f <$> newgbEv)

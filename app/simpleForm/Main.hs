@@ -7,7 +7,8 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
-
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Main where
 
 import           Control.Monad                           (foldM)
@@ -108,7 +109,7 @@ data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Gen
 instance Generic User
 instance HasDatatypeInfo User
 instance SimpleFormInstanceC t m=>Builder (SimpleFormR t m) User where
-  buildA mFN = liftF formCol . gBuildA mFN
+  buildA mFN = liftF sfCol . gBuildA mFN
 
 
 
@@ -163,12 +164,12 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 instance Generic A
 instance HasDatatypeInfo A
 instance SimpleFormInstanceC t m=>Builder (SimpleFormR t m) A where
-  buildA mFN = liftF formRow . gBuildA mFN
+  buildA mFN = liftF sfRow . gBuildA mFN
 
 instance Generic B
 instance HasDatatypeInfo B
 instance SimpleFormInstanceC t m=>Builder (SimpleFormR t m) B where
-  buildA mFN = liftF (fieldSet "B" . formRow) . gBuildA mFN
+  buildA mFN = liftF (fieldSet "B" . sfRow) . gBuildA mFN
 
 instance Generic MyMap
 instance HasDatatypeInfo MyMap
@@ -177,24 +178,38 @@ instance SimpleFormInstanceC t m=>Builder (SimpleFormR t m) MyMap
 instance Generic C
 instance HasDatatypeInfo C
 instance SimpleFormInstanceC t m=>Builder (SimpleFormR t m) C where
-  buildA mFN = liftF (fieldSet "C" . formCol) . gBuildA mFN
-
+  buildA mFN = liftF (fieldSet "C" . sfCol) . gBuildA mFN
 
 -- More layout options are available if you write custom instances.
 -- handwritten single constructor instance
+{-
+buildBRec::forall t m.SimpleFormInstanceC t m=>Maybe FieldName->Maybe BRec->SFRW t m BRec
+buildBRec mFN mBRec = do
+--  layoutCenteredF :: (LayoutOrientation->SFLayoutF m) <- layoutCentered <$> view layoutConfig
+--  layoutOrientedF <- layoutOriented <$> view layoutConfig
+  let b::SimpleFormR t m B
+      b = buildA Nothing (oneB <$> mBRec)
+      sA::SimpleFormR t m (Seq.Seq A)
+      sA = liftF (formCentered LayoutHorizontal) $ buildA Nothing (seqOfA <$> mBRec)
+      hs::SimpleFormR t m (HS.HashSet String)
+      hs =  liftF (formCentered LayoutHorizontal) $ buildA Nothing (hashSetOfString <$> mBRec)
+  formRow . unSF $ (BRec <$> b <*> sA <*> hs)
+--      <*> (liftF (layoutCenteredF LayoutHorizontal) (buildA Nothing (seqOfA <$> mBRec)))
+--      <*> (liftF (layoutCenteredF LayoutHorizontal) (buildA Nothing (hashSetOfString <$> mBRec)))
+-}
+  
 instance SimpleFormInstanceC t m=>Builder (SimpleFormR t m) BRec where
   buildA mFN mBRec = SimpleFormR $ do
-    layoutCenteredF <- layoutCentered . _layoutConfig <$> ask
-    formRow . unSF $ BRec
-      <$> buildA Nothing (oneB <$> mBRec)
-      <*> liftF (layoutCenteredF LayoutHorizontal) (buildA Nothing (seqOfA <$> mBRec))
-      <*> buildA Nothing (hashSetOfString <$> mBRec)
+    let b1 = buildA Nothing (oneB <$> mBRec)
+        b2 = liftF (sfCenter LayoutHorizontal) $ buildA Nothing (seqOfA <$> mBRec)
+        b3 = liftF (sfCenter LayoutHorizontal) $ buildA Nothing (hashSetOfString <$> mBRec)
+    sfRow . unSF $ (BRec <$> b1 <*> b2 <*> b3)
 
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
 buildDate::SimpleFormInstanceC t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SimpleFormR t m) DateOrDateTime
 buildDate mFN ms = MDWrapped matched ("Date",mFN) bldr where
-  inputCfg = InputConfig (Just "1/1/2001") (Just "Date") Nothing
+--  inputCfg = InputElementConfig (Just "1/1/2001") (Just "Date") Nothing
   (matched,mDay) = case ms of
     Just (D day) -> (True,Just day)
     _            -> (False, Nothing)
@@ -228,7 +243,7 @@ testComplexForm cfg = do
   _ <- flexFill LayoutRight $ observeDynValidation cfg (CssClass "sf-observer") cDynM
   return ()
 
-complexFormTab::SimpleFormInstanceC t m=>e -> TabInfo t m ()
+complexFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration m -> TabInfo t m ()
 complexFormTab cfg = TabInfo "complexFormTab" "Complex Example" $ testComplexForm cfg
 
 
@@ -248,7 +263,7 @@ testFlow cfg = do
   _ <- observeFlow cfg (CssClass "sf-form") (CssClass "sf-observer") flowTestWidget 2
   return ()
 
-flowTestTab::SimpleFormInstanceC t m=>e -> TabInfo t m ()
+flowTestTab::SimpleFormInstanceC t m=>SimpleFormConfiguration m -> TabInfo t m ()
 flowTestTab cfg = TabInfo "flowTestTab" "Flow Example" $ testFlow cfg
 
 test::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration m -> m ()

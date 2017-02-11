@@ -74,8 +74,8 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
   let classes = if isObserver then observerClasses else validClasses 
       attrsDyn = R.constDyn (cssClassAttr classes <> titleAttr "Constructor")
       wc = WidgetConfig RD.never defPair attrsDyn
-  formRow $ do
-    sfrpCW <- itemL $ (sfWidget id (T.pack . sfrpCN) Nothing wc $ \wc' -> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getSFRP` conWidgets) wc')
+  sfRow $ do
+    sfrpCW <- sfItemL $ (sfWidget id (T.pack . sfrpCN) Nothing wc $ \wc' -> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getSFRP` conWidgets) wc')
     unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
 
 
