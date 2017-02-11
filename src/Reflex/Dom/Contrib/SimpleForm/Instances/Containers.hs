@@ -212,7 +212,7 @@ instance (SimpleFormInstanceC t m,
 type BuildF t m a = Maybe FieldName->Maybe a->SFRW t m a
 
 -- This feels like a lot of machinery just to get removables...but it does work...
-newtype SSFR s t m a = SSFR { unSSFR::StateT s (SFR m) (DynValidation t a) }
+newtype SSFR s t m a = SSFR { unSSFR::StateT s (SFR t m) (DynValidation t a) }
 
 instance (R.Reflex t, R.MonadHold t m)=>Functor (SSFR s t m) where
 --  fmap f ssfra = SSFR $ unSSFR ssfra >>= lift . lift . R.mapDyn (fmap f)
@@ -307,7 +307,7 @@ buildSFContainer' aI buildTr mFN mfa = mdo
   return dmfa
 
 buildOneDeletable::(SimpleFormInstanceC t m, B.Builder (SimpleFormR t m) b)
-                   =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (SFR m) (DynValidation t b)
+                   =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (SFR t m) (DynValidation t b)
 buildOneDeletable dI mFN ma = liftLF' sfRow $ do     
     (evs,curS) <- get
     dma <- lift . sfItemL . unSF $ B.buildA mFN ma

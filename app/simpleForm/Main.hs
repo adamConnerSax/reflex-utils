@@ -51,7 +51,7 @@ import           Reflex.Dom.Contrib.Layout.Types         (CssClass (..),
                                                           CssClasses (..),
                                                           LayoutDirection (..),
                                                           LayoutOrientation (..),
-                                                          emptyCss)
+                                                          emptyCss,oneClass)
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
 
 #ifdef USE_WKWEBVIEW
@@ -113,18 +113,18 @@ instance SimpleFormInstanceC t m=>Builder (SimpleFormR t m) User where
 
 
 
-testUserForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration m->m ()
+testUserForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m->m ()
 testUserForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a simple data structure, Output is an event, fired when submit button is clicked but only if data is of right types and valid."
-  newUserEv <- flexFill LayoutRight $ makeSimpleForm' cfg (CssClass "sf-form") Nothing (buttonNoSubmit' "submit")
+  newUserEv <- flexFill LayoutRight $ makeSimpleForm' cfg Nothing (buttonNoSubmit' "submit")
   curUserDyn <- foldDyn const (User (Name "") (EmailAddress "") (Age 0)) newUserEv
   dynText (printUser <$> curUserDyn)
 
 printUser::User->T.Text
 printUser (User (Name n) (EmailAddress ea) (Age a)) = "User with name " <> n <> " email " <> ea <> " and age " <> (T.pack $ show a)
 
-userFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration m -> TabInfo t m ()
+userFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration t m -> TabInfo t m ()
 userFormTab cfg = TabInfo "userFormTab" "Classic Form" $ testUserForm cfg
 
 buttonNoSubmit'::DomBuilder t m=>T.Text -> m (Event t ())
@@ -231,19 +231,19 @@ b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 199
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
 
 
-testComplexForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration m -> m ()
+testComplexForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (CssClass "sf-form") (Just c)
+  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (Just c)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed C:"
   el "p" blank
-  _ <- flexFill LayoutRight $ observeDynValidation cfg (CssClass "sf-observer") cDynM
+  _ <- flexFill LayoutRight $ observeDynValidation cfg cDynM
   return ()
 
-complexFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration m -> TabInfo t m ()
+complexFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration t m -> TabInfo t m ()
 complexFormTab cfg = TabInfo "complexFormTab" "Complex Example" $ testComplexForm cfg
 
 
@@ -255,18 +255,18 @@ flowTestWidget n = do
   forDyn allTrueDyn $ \b -> if b then "All Checked!" else "Some Unchecked."
 
 
-testFlow::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration m->m ()
+testFlow::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m->m ()
 testFlow cfg = do
   el "p" $ text ""
   el "h2" $ text "Observe a \"flow\", that is directly see input and output of a function of type WidgetMonad m=>a -> m b"
   el "h2" $ text "In this case, WidgetMonad m=>Int -> Dynamic t (String)"
-  _ <- observeFlow cfg (CssClass "sf-form") (CssClass "sf-observer") flowTestWidget 2
+  _ <- observeFlow cfg flowTestWidget 2
   return ()
 
-flowTestTab::SimpleFormInstanceC t m=>SimpleFormConfiguration m -> TabInfo t m ()
+flowTestTab::SimpleFormInstanceC t m=>SimpleFormConfiguration t m -> TabInfo t m ()
 flowTestTab cfg = TabInfo "flowTestTab" "Flow Example" $ testFlow cfg
 
-test::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration m -> m ()
+test::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m -> m ()
 test cfg = do
   el "p" (text "")
   el "br" blank
@@ -305,6 +305,9 @@ cssToLink = [CssLink
               (Just "sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u")
               (Just "anonymous")
             ]
+
+bootstrapCssCfg::CssConfiguration 
+bootstrapCssCfg = def {_cssAllInputs = oneClass "form-control" }
 
 simpleFormMain  :: JSM ()
 simpleFormMain  = mainWidgetWithHead (headElt "simpleForm demo" cssToLink cssToEmbed) $ test def

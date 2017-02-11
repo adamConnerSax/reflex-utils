@@ -69,7 +69,7 @@ sfWidget::(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)=>
           Maybe FieldName->
           WidgetConfig t a->
           (WidgetConfig t a-> m (R.Dynamic t a))->
-          SFR m (R.Dynamic t b)
+          SFR t m (R.Dynamic t b)
 sfWidget fDyn fString mFN wc widget = do
   let addToAttrs::R.Reflex t=>T.Text->Maybe T.Text->RD.Dynamic t (M.Map T.Text T.Text)->RD.Dynamic t (M.Map T.Text T.Text)
       addToAttrs attr mVal attrsDyn = case mVal of

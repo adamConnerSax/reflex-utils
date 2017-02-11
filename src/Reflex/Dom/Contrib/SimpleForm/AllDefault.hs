@@ -19,7 +19,6 @@ module Reflex.Dom.Contrib.SimpleForm.AllDefault
 -- | A useful default config for quick form building
 -- | Also serves as an example for building others
 -- | and defFailureF and defSumF can be re-used for other implementations
-import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
 import Reflex.Dom.Contrib.Layout.Types (CssClasses(..),LayoutDirection(..),LayoutOrientation(..),emptyCss,oneClass)
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexCol,flexRow,flexItem,flexItem',
                                              flexFill,flexCenter)
@@ -50,21 +49,21 @@ import Data.Default (Default(..))
 
 
 
-defFailureF::SimpleFormC t m=>T.Text->SimpleFormR t m a
-defFailureF msg = SimpleFormR $ do
+defFailureF::SimpleFormC t m=>T.Text->SFRW t m a
+defFailureF msg = do
   RD.text msg
   return dynValidationNothing
 
-data SFRPair t m a = SFRPair { sfrpCN::B.ConName, sfrpV::SimpleFormR t m a }
+data SFRPair t m a = SFRPair { sfrpCN::B.ConName, sfrpV::SFRW t m a }
 
 instance Eq (SFRPair t m a) where
   (SFRPair a _) == (SFRPair b _) = a == b
 
 defSumF::(SimpleFormC t m, RD.PostBuild t m, MonadFix m, MonadWidgetExtraC t m, 
-          SimpleFormInstanceC et m)=>[(B.ConName,SimpleFormR t m a)]->Maybe B.ConName->SimpleFormR t m a
-defSumF conWidgets mDefCon = SimpleFormR $ do
+          SimpleFormInstanceC t m)=>[(B.ConName,SFRW t m a)]->Maybe B.ConName->SFRW t m a
+defSumF conWidgets mDefCon = do
   let conNames = fst . unzip $ conWidgets
-      getSFRP::B.ConName->[(B.ConName,SimpleFormR t m a)]->SFRPair t m a
+      getSFRP::B.ConName->[(B.ConName,SFRW t m a)]->SFRPair t m a
       getSFRP cn = SFRPair cn . fromJust . M.lookup cn . M.fromList 
       pft (x,y) = SFRPair x y
       defPair = maybe (pft $ head conWidgets) (`getSFRP` conWidgets) mDefCon
@@ -76,44 +75,50 @@ defSumF conWidgets mDefCon = SimpleFormR $ do
       wc = WidgetConfig RD.never defPair attrsDyn
   sfRow $ do
     sfrpCW <- sfItemL $ (sfWidget id (T.pack . sfrpCN) Nothing wc $ \wc' -> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getSFRP` conWidgets) wc')
-    unSF $ switchingSFR sfrpV defPair (R.updated sfrpCW)
+    unSF $ switchingSFR (SimpleFormR . sfrpV) defPair (R.updated sfrpCW)
 
 
+instance (SimpleFormC t m, RD.PostBuild t m, MonadFix m, MonadWidgetExtraC t m, 
+          SimpleFormInstanceC t m) => Default (BuilderFunctions t m) where
+  def = BuilderFunctions defFailureF defSumF (\attrsDyn->liftLF $ RD.elDynAttr "div" attrsDyn)
+
+{-
 instance (MonadWidgetExtraC t m, MonadIO (PushM t),RD.DomBuilder t m, R.MonadHold t m, MonadFix m, RD.PostBuild t m)=>SimpleFormBuilderFunctions t m where
   failureF = defFailureF
   sumF = defSumF
   dynamicDiv  attrsDyn = liftLF $ RD.elDynAttr "div" attrsDyn
-
+-}
 
 instance Default (CssConfiguration) where
-  def = CssConfiguration emptyCss emptyCss (oneClass "sf-valid") (oneClass "sf-invalid") (oneClass "sf-observer")
+  def = CssConfiguration emptyCss (oneClass "sf-form") (oneClass "sf-observer") emptyCss emptyCss (oneClass "sf-valid") (oneClass "sf-invalid") (oneClass "sf-observer")
 
 instance Default (InputElementConfig) where
   def = InputElementConfig Nothing Nothing Nothing
 
-defFormItem::RD.DomBuilder t m=>SFLayoutF m
+defFormItem::RD.DomBuilder t m=>SFLayoutF t m
 defFormItem w = do
   itemStyle <- formItemStyle
   liftLF (flexItem' itemStyle) w
 
-defLayoutOriented::RD.DomBuilder t m=>LayoutOrientation->SFLayoutF m
+defLayoutOriented::RD.DomBuilder t m=>LayoutOrientation->SFLayoutF t m
 defLayoutOriented LayoutHorizontal = liftLF flexRow
 defLayoutOriented LayoutVertical = liftLF flexCol
 
-defLayoutFill::RD.DomBuilder t m=>LayoutDirection->SFLayoutF m
+defLayoutFill::RD.DomBuilder t m=>LayoutDirection->SFLayoutF t m
 defLayoutFill d = liftLF (flexFill d)
 
-defLayoutCentered::RD.DomBuilder t m=>LayoutOrientation->SFLayoutF m
+defLayoutCentered::RD.DomBuilder t m=>LayoutOrientation->SFLayoutF t m
 defLayoutCentered o = liftLF (flexCenter o)
 
-defLayoutCollapsible::RD.DomBuilder t m=>T.Text->CollapsibleInitialState->SFLayoutF m
+defLayoutCollapsible::RD.DomBuilder t m=>T.Text->CollapsibleInitialState->SFLayoutF t m
 defLayoutCollapsible t is = liftLF (collapsibleWidget t is)
 
-instance RD.DomBuilder t m=>Default (LayoutConfiguration m) where
+instance RD.DomBuilder t m=>Default (LayoutConfiguration t m) where
   def = LayoutConfiguration defFormItem defLayoutOriented defLayoutFill defLayoutCentered defLayoutCollapsible
 
-instance RD.DomBuilder t m=>Default (SimpleFormConfiguration m) where
-  def = SimpleFormConfiguration Interactive def def def
+instance (SimpleFormC t m, RD.PostBuild t m, MonadFix m, MonadWidgetExtraC t m, 
+          SimpleFormInstanceC t m) =>Default (SimpleFormConfiguration t m) where
+  def = SimpleFormConfiguration Interactive def def def def
 
 collapsibleWidget::RD.DomBuilder t m=>T.Text->CollapsibleInitialState->m a->m a
 collapsibleWidget summary cis w = 
