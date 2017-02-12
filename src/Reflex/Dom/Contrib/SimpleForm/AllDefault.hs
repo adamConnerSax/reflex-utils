@@ -40,6 +40,7 @@ import           Reflex.Dom.Contrib.Widgets.Common             (Widget0 (..), Wi
 
 import           Clay                                          hiding (head, id)
 import qualified Clay                                          as C
+import qualified Clay.Flexbox                                  as Flexbox
 import           Control.Monad.Fix                             (MonadFix)
 import           Control.Monad.IO.Class                        (MonadIO)
 import           Control.Monad.Reader                          (ask, asks, lift,
@@ -69,7 +70,7 @@ type DefaultConfigurationC t m =
    SimpleFormInstanceC t m)
 
 instance Default (CssConfiguration) where
-  def = CssConfiguration emptyCss (oneClass "sf-form") (oneClass "sf-observer") emptyCss emptyCss (oneClass "sf-valid") (oneClass "sf-invalid")
+  def = CssConfiguration emptyCss (oneClass "sf-form") (oneClass "sf-observer") (oneClass "sf-item") emptyCss (oneClass "sf-valid") (oneClass "sf-invalid")
 
 
 
@@ -165,23 +166,38 @@ simpleFormBoxes = do
 isSimpleForm::Selector
 isSimpleForm = form # ".sf-form"
 
+isSimpleFormItem::Selector
+isSimpleFormItem = div # ".sf-item"
 
 simpleFormElements = do
   isSimpleForm ? do
-    background ghostwhite
-    border (px 1) solid black
-    borderRadius solid (px 5)
+    fontSize (rem 1.1)
+    border solid (px 1) black
+    sym borderRadius (rem 0.2)
+    sym padding (rem 0.2)
     summary ? cursor pointer
-    button ? cssSolidTextBox 0.1 whitesmoke black
+    button ? do
+      sym borderRadius (rem 0.2)
+      cssSolidTextBox 0.1 whitesmoke black
     input ? do
+      fontSize (rem 1.1)
+      sym borderRadius (rem 0.2)
       verticalAlign middle
       position relative
     input  # ("type" @= "text") ? cssOutlineTextBox 0.1 lightslategrey black
     input  # ("type" @= "number") ? cssOutlineTextBox 0.1 lightslategrey black
-    select ? cssOutlineTextBox 0.1 grey black
+    select ? do
+      fontSize (rem 1.1)
+      cssOutlineTextBox 0.1 grey black
     input # ".sf-invalid" ? cssOutlineTextBox 0.1 red black -- invalid
     span ? do
       verticalAlign middle
+  isSimpleFormItem ? do
+    marginTop (px 10)
+    width (pct 60)
+    display flex
+    justifyContent spaceBetween
+    flexWrap Flexbox.wrap
 
 simpleFormDefaultCss = do
   simpleFormBoxes
