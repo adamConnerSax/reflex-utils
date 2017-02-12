@@ -24,6 +24,8 @@ module Reflex.Dom.Contrib.SimpleForm.Configuration
   , InputElementConfig(..)
   , BuilderFunctions(..)
   , SimpleFormConfiguration(..)
+  , SimpleFormIncludedCss(..)
+  , SFConfigChanger
   , HasCssConfiguration(..)
   , HasInputElementConfig(..)
   , HasSimpleFormConfiguration(..)
@@ -92,15 +94,13 @@ data LayoutConfiguration t m = LayoutConfiguration
 
 data CssConfiguration = CssConfiguration
   {
-    _cssFormWrapper::CssClasses
+    _cssWrapper::CssClasses
   , _cssForm::CssClasses
   , _cssObserver::CssClasses
   , _cssAllItems::CssClasses
   , _cssAllInputs::CssClasses
   , _cssValidInputs::CssClasses
   , _cssInvalidInputs::CssClasses
-  , _cssToEmbed::ByteString
-  , _cssToLink::CssLinks  
   }
 
 data InputElementConfig = InputElementConfig
@@ -126,6 +126,9 @@ data SimpleFormConfiguration t m = SimpleFormConfiguration
   , _inputConfig::InputElementConfig
   }
 
+type SFConfigChanger t m = SimpleFormConfiguration t m -> SimpleFormConfiguration t m 
+
+data SimpleFormIncludedCss = SimpleFormIncludedCss { cssToEmbed::ByteString, cssToLink::CssLinks }
 
 --makeLenses ''LayoutConfiguration
 makeClassy ''CssConfiguration

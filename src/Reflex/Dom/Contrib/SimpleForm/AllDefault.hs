@@ -38,10 +38,8 @@ import qualified Reflex.Dom                                    as RD
 import           Reflex.Dom.Contrib.Widgets.Common             (Widget0 (..), WidgetConfig (..),
                                                                 htmlDropdownStatic)
 
-import           Clay                                          (( # ), (?),
-                                                                (@=))
+import           Clay                                          hiding (head, id)
 import qualified Clay                                          as C
-
 import           Control.Monad.Fix                             (MonadFix)
 import           Control.Monad.IO.Class                        (MonadIO)
 import           Control.Monad.Reader                          (ask, asks, lift,
@@ -53,6 +51,14 @@ import           Data.Maybe                                    (fromJust)
 import           Data.Monoid                                   ((<>))
 import qualified Data.Text                                     as T
 
+import           Prelude                                       hiding (div, rem,
+                                                                span)
+
+instance Default (SimpleFormIncludedCss) where
+  def = SimpleFormIncludedCss defaultCss (CssLinks [])
+
+defaultCss::ByteString
+defaultCss = cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss
 
 
 type DefaultConfigurationC t m =
@@ -63,10 +69,9 @@ type DefaultConfigurationC t m =
    SimpleFormInstanceC t m)
 
 instance Default (CssConfiguration) where
-  def = CssConfiguration emptyCss (oneClass "sf-form") (oneClass "sf-observer") emptyCss emptyCss (oneClass "sf-valid") (oneClass "sf-invalid") defaultCss (CssLinks [])
+  def = CssConfiguration emptyCss (oneClass "sf-form") (oneClass "sf-observer") emptyCss emptyCss (oneClass "sf-valid") (oneClass "sf-invalid")
 
-defaultCss::ByteString
-defaultCss = cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss
+
 
 instance Default (InputElementConfig) where
   def = InputElementConfig Nothing Nothing Nothing
@@ -92,8 +97,7 @@ defLayoutCollapsible t is = liftLF (collapsibleWidget t is)
 instance RD.DomBuilder t m=>Default (LayoutConfiguration t m) where
   def = LayoutConfiguration defFormItem defLayoutOriented defLayoutFill defLayoutCentered defLayoutCollapsible
 
-instance (SimpleFormC t m, RD.PostBuild t m, MonadFix m, MonadWidgetExtraC t m,
-          SimpleFormInstanceC t m) =>Default (SimpleFormConfiguration t m) where
+instance DefaultConfigurationC t m=> Default (SimpleFormConfiguration t m) where
   def = SimpleFormConfiguration Interactive def def def def
 
 collapsibleWidget::RD.DomBuilder t m=>T.Text->CollapsibleInitialState->m a->m a
@@ -102,8 +106,7 @@ collapsibleWidget summary cis w =
     RD.el "summary" $ RD.text summary
     w
 
-instance (SimpleFormC t m, RD.PostBuild t m, MonadFix m, MonadWidgetExtraC t m,
-          SimpleFormInstanceC t m) => Default (BuilderFunctions t m) where
+instance DefaultConfigurationC t m => Default (BuilderFunctions t m) where
   def = BuilderFunctions defFailureF defSumF defDynamicDiv
 
 defDynamicDiv::(RD.DomBuilder t m, RD.PostBuild t m)=>DynAttrs t -> SFLayoutF t m
@@ -119,8 +122,7 @@ data SFRPair t m a = SFRPair { sfrpCN::B.ConName, sfrpV::SFRW t m a }
 instance Eq (SFRPair t m a) where
   (SFRPair a _) == (SFRPair b _) = a == b
 
-defSumF::(SimpleFormC t m, RD.PostBuild t m, MonadFix m, MonadWidgetExtraC t m,
-          SimpleFormInstanceC t m)=>[(B.ConName,SFRW t m a)]->Maybe B.ConName->SFRW t m a
+defSumF::DefaultConfigurationC t m=>[(B.ConName,SFRW t m a)]->Maybe B.ConName->SFRW t m a
 defSumF conWidgets mDefCon = do
   let conNames = fst . unzip $ conWidgets
       getSFRP::B.ConName->[(B.ConName,SFRW t m a)]->SFRPair t m a
@@ -139,45 +141,47 @@ defSumF conWidgets mDefCon = do
 
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 
-boxMargin m = C.sym C.margin (C.rem m)
+boxMargin m = sym margin (rem m)
 
 cssOutlineTextBox m cBox cText = do
   boxMargin m
-  C.border C.solid (C.px 2) cBox
-  C.fontColor cText
+  border solid (px 2) cBox
+  fontColor cText
 
 cssSolidTextBox m cBox cText = do
   boxMargin m
-  C.background cBox
-  C.fontColor cText
+  background cBox
+  fontColor cText
 
 -- some styles
 simpleFormBoxes = do
-  ".sf-outline-black" ? cssOutlineTextBox 0.1 C.black C.black
-  ".sf-outline-red" ? cssOutlineTextBox 0.1 C.red C.black
-  ".sf-outline-blue" ? cssOutlineTextBox 0.1 C.blue C.black
-  ".sf-outline-green" ? cssOutlineTextBox 0.1 C.green C.black
-  ".sf-black-on-gray" ? cssSolidTextBox 0.1 C.gray C.black
-  ".sf-white-on-gray" ? cssSolidTextBox 0.1 C.gray C.white
+  ".sf-outline-black" ? cssOutlineTextBox 0.1 black black
+  ".sf-outline-red" ? cssOutlineTextBox 0.1 red black
+  ".sf-outline-blue" ? cssOutlineTextBox 0.1 blue black
+  ".sf-outline-green" ? cssOutlineTextBox 0.1 green black
+  ".sf-black-on-gray" ? cssSolidTextBox 0.1 gray black
+  ".sf-white-on-gray" ? cssSolidTextBox 0.1 gray white
 
-isSimpleForm::C.Selector
-isSimpleForm = C.form # ".sf-form"
+isSimpleForm::Selector
+isSimpleForm = form # ".sf-form"
 
 
 simpleFormElements = do
   isSimpleForm ? do
-    C.background C.ghostwhite
-    C.summary ? C.cursor C.pointer
-    C.button ? cssSolidTextBox 0.1 C.whitesmoke C.black
-    C.input ? do
-      C.verticalAlign C.middle
-      C.position C.relative
-    C.input  # ("type" @= "text") ? cssOutlineTextBox 0.1 C.lightslategrey C.black
-    C.input  # ("type" @= "number") ? cssOutlineTextBox 0.1 C.lightslategrey C.black
-    C.select ? cssOutlineTextBox 0.1 C.grey C.black
-    C.input # ".sf-invalid" ? cssOutlineTextBox 0.1 C.red C.black -- invalid
-    C.span ? do
-      C.verticalAlign C.middle
+    background ghostwhite
+    border (px 1) solid black
+    borderRadius solid (px 5)
+    summary ? cursor pointer
+    button ? cssSolidTextBox 0.1 whitesmoke black
+    input ? do
+      verticalAlign middle
+      position relative
+    input  # ("type" @= "text") ? cssOutlineTextBox 0.1 lightslategrey black
+    input  # ("type" @= "number") ? cssOutlineTextBox 0.1 lightslategrey black
+    select ? cssOutlineTextBox 0.1 grey black
+    input # ".sf-invalid" ? cssOutlineTextBox 0.1 red black -- invalid
+    span ? do
+      verticalAlign middle
 
 simpleFormDefaultCss = do
   simpleFormBoxes
@@ -185,15 +189,15 @@ simpleFormDefaultCss = do
 
 isSimpleObserver = C.div # ".sf-observer"
 
-isSimpleObserverItem::C.Selector
+isSimpleObserverItem::Selector
 isSimpleObserverItem = C.div # ".sf-observer-item"
 
 
 simpleObserverDefaultCss = do
   isSimpleObserver ? do
-    C.background C.ghostwhite
-    C.summary ? C.cursor C.pointer
+    background ghostwhite
+    summary ? cursor pointer
     isSimpleObserverItem ? do
-      cssSolidTextBox 0.1 C.lightslategrey C.black
-      C.sym C.padding (C.rem 0.1)
+      cssSolidTextBox 0.1 lightslategrey black
+      sym padding (rem 0.1)
 

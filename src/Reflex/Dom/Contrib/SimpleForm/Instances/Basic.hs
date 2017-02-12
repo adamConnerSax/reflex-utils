@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -7,7 +8,6 @@
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE CPP #-}
 
 module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        (
@@ -18,14 +18,14 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        , SimpleFormInstanceC
        ) where
 
-import           Control.Monad.Reader                  (lift)
+import           Control.Lens                          (over, view, (^.))
 import           Control.Monad.Fix                     (MonadFix)
-import           Control.Lens                          (over,view,(^.))
+import           Control.Monad.Reader                  (lift)
+import qualified Data.Map                              as M
 import           Data.Maybe                            (fromMaybe)
 import           Data.Monoid                           ((<>))
 import           Data.Readable                         (Readable)
 import qualified Data.Text                             as T
-import qualified Data.Map                              as M
 import           Data.Validation                       (AccValidation (..))
 import           Text.Read                             (readMaybe)
 
@@ -45,8 +45,9 @@ import           Reflex.Dom.Contrib.Widgets.Common
 -- From this lib
 
 import qualified DataBuilder                           as B
-import           Reflex.Dom.Contrib.SimpleForm.Builder
+import           Reflex.Dom.Contrib.Layout.Types       (toCssString)
 import           Reflex.Dom.Contrib.ReflexConstraints
+import           Reflex.Dom.Contrib.SimpleForm.Builder
 -- instances
 
 --some helpers
@@ -54,7 +55,7 @@ showText::Show a=>a->T.Text
 showText = T.pack . show
 
 type BasicC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
-type SimpleFormInstanceC t m = (SimpleFormC t m, MonadWidgetExtraC t m, RD.PostBuild t m, MonadFix m) 
+type SimpleFormInstanceC t m = (SimpleFormC t m, MonadWidgetExtraC t m, RD.PostBuild t m, MonadFix m)
 
 readOnlyW::(BasicC t m, RD.PostBuild t m)=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
 readOnlyW f wc = do
@@ -77,14 +78,19 @@ sfWidget fDyn fString mFN wc widget = do
         Just val -> M.union (attr RD.=: val) <$> attrsDyn
   isObserver <- (==ObserveOnly) <$> getFormType
   inputCfg <- view inputConfig
+  cssCfg <- view cssConfig
   let mTitleVal = maybe (T.pack <$> mFN) Just (_inputTitle inputCfg) -- if none specified and there's a fieldname, use it.
-      wc' = over widgetConfig_attributes (addToAttrs "placeholder" (_inputPlaceholder inputCfg) . addToAttrs "title" mTitleVal) wc
+      addTitle = addToAttrs "title" mTitleVal
+      addPlaceHolder = addToAttrs "placeholder" (_inputPlaceholder inputCfg)
+      addInputClass = addToAttrs "class" (Just . toCssString . _cssAllInputs $ cssCfg)
+      wcAll = over widgetConfig_attributes addTitle wc
+      wcInput = over widgetConfig_attributes (addPlaceHolder . addInputClass) wcAll
       labeledWidget iw = case _inputLabelConfig inputCfg of
         Nothing -> iw
         Just (LabelConfig pos t attrs) -> case pos of
           LabelBefore -> RD.elAttr "label" attrs  (RD.text t >> iw)
           LabelAfter -> RD.elAttr "label" attrs  $ do  {a <- iw; RD.text t; return a}
-  lift . labeledWidget $ (fmap fDyn <$> (if isObserver then readOnlyW fString wc' else widget wc'))
+  lift . labeledWidget $ (fmap fDyn <$> (if isObserver then readOnlyW fString wcAll else widget wcInput))
 
 fromAccVal::AccValidation e a->a
 fromAccVal (AccSuccess a) = a

@@ -271,23 +271,17 @@ test cfg = do
 
 linkedCss::CssLinks
 linkedCss = CssLinks []
-{-
-[CssLink
-"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
-(Just "sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u")
-(Just "anonymous")
-]
--}
 
-cfg = def
+customizeConfig::SimpleFormConfiguration t m -> SimpleFormConfiguration t m
+customizeConfig = id
+
+includedCss = def --bootstrapSFIncludedCss
+toLink = linkedCss <> (cssToLink includedCss)
+toEmbed = flexCssBS <> tabCssBS <> (cssToEmbed includedCss)
 
 simpleFormMain  :: JSM ()
 simpleFormMain  =
-  mainWidgetWithHead (headElt
-                       "simpleForm demo"
-                       (linkedCss <> (_cssToLink . _cssConfig $ cfg))
-                       (flexCssBS <> tabCssBS <> (_cssToEmbed . _cssConfig $ cfg))) $ test cfg --where
---  cfg = def
+  mainWidgetWithHead (headElt "simpleForm demo" toLink toEmbed) $ test (customizeConfig def)
 
 
 #ifdef USE_WKWEBVIEW
