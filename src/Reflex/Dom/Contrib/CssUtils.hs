@@ -5,7 +5,7 @@ module Reflex.Dom.Contrib.CssUtils
        , cssPrepend
        , embedCssFiles
        , CssLink(..)
-       , CssLinks
+       , CssLinks(..)
        , headElt
        ) where
 
@@ -16,7 +16,7 @@ import Reflex.Dom.Core (DomBuilder,el,elAttr,text)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import Data.Text.Encoding (decodeUtf8)
-import Data.Monoid ((<>))
+import Data.Monoid (Monoid(..),(<>))
 
 cssPath::String->String->FilePath
 cssPath basePath cssFile = basePath ++ cssFile
@@ -29,7 +29,11 @@ embedCssFiles::CssPathList->ExpQ
 embedCssFiles cpl = listE $ embedFile <$> cpl
 
 data CssLink = CssLink { url::T.Text, integrity::Maybe T.Text, crossorigin::Maybe T.Text } -- TODO: this should be a proper URL type
-type CssLinks = [CssLink] 
+newtype CssLinks = CssLinks [CssLink] 
+
+instance Monoid CssLinks where
+  mempty = CssLinks []
+  (CssLinks a) `mappend` (CssLinks b) = CssLinks (a `mappend` b)
 
 styleSheet::DomBuilder t m=> CssLink -> m ()
 styleSheet (CssLink u mi mco) =
@@ -43,7 +47,7 @@ styleSheet (CssLink u mi mco) =
 
 
 headElt::DomBuilder t m=> T.Text->CssLinks->B.ByteString->m ()
-headElt title cssLinks embeddedCss = do
+headElt title (CssLinks cssLinks) embeddedCss = do
   el "title" (text title)
   mapM_ styleSheet cssLinks
   el "style" (text $ decodeUtf8 embeddedCss)

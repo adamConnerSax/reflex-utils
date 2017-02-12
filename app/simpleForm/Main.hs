@@ -1,71 +1,77 @@
-{-# LANGUAGE CPP                   #-}
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE CPP                       #-}
+{-# LANGUAGE DataKinds                 #-}
+{-# LANGUAGE DeriveGeneric             #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
+{-# LANGUAGE TemplateHaskell           #-}
+{-# LANGUAGE TypeFamilies              #-}
 module Main where
 
-import           Control.Monad                           (foldM)
-import           Control.Monad.Fix                       (MonadFix)
-import           Control.Monad.IO.Class                  as IOC (MonadIO)
-import           Control.Lens                            (view)
-import           Control.Monad.Reader                    (ask)
---import           Data.FileEmbed
+import           Control.Lens                                (view, (^.))
+import           Control.Monad                               (foldM)
+import           Control.Monad.Fix                           (MonadFix)
+import           Control.Monad.IO.Class                      as IOC (MonadIO)
+import           Control.Monad.Reader                        (ask)
 
-import           Data.Monoid                             ((<>))
-import qualified GHC.Generics                            as GHC
-import           Prelude                                 hiding (div, rem, span)
-import           Text.Show.Pretty                        (ppShow)
---import Clay hiding (button,col,Color)
-import qualified Data.HashSet                            as HS
-import qualified Data.Map                                as M
-import qualified Data.Sequence                           as Seq
-import qualified Data.Text                               as T
-import           Data.Time.Calendar                      (Day (..),
-                                                          fromGregorian)
-import           Data.Default                            (def)
-import           Data.Time.Clock                         (UTCTime (..))
+import           Data.Monoid                                 ((<>))
+import qualified GHC.Generics                                as GHC
+import           Prelude                                     hiding (div, rem,
+                                                              span)
+import           Text.Show.Pretty                            (ppShow)
+
+import           Data.ByteString                             (ByteString)
+import           Data.Default                                (def)
+import qualified Data.HashSet                                as HS
+import qualified Data.Map                                    as M
+import qualified Data.Sequence                               as Seq
+import qualified Data.Text                                   as T
+import           Data.Time.Calendar                          (Day (..),
+                                                              fromGregorian)
+import           Data.Time.Clock                             (UTCTime (..))
 -- for a validation example...
-import           Control.Lens.Iso                        (iso)
-import           Data.Validation                         (AccValidation (..))
+import           Control.Lens.Iso                            (iso)
+import           Data.Validation                             (AccValidation (..))
 
 import           Reflex
-import qualified Reflex.Dom.Contrib.Widgets.Common       as RDC
-import           Reflex.Dom.Core                         hiding (InputElementConfig)
---import           Reflex.Dynamic.TH
+import qualified Reflex.Dom.Contrib.Widgets.Common           as RDC
+import           Reflex.Dom.Core                             hiding (InputElementConfig)
 
-import           GHCJS.DOM.Types                         (JSM)
-import           Reflex.Dom.Contrib.CssUtils
-import           Reflex.Dom.Contrib.Layout.ClayUtils     (cssToBS)
-import           Reflex.Dom.Contrib.Layout.FlexLayout    (flexCol', flexCssBS,
-                                                          flexFill, flexItem',
-                                                          flexRow')
+import           GHCJS.DOM.Types                             (JSM)
+import           Reflex.Dom.Contrib.CssUtils                 (CssLink,
+                                                              CssLinks (..),
+                                                              headElt)
+import           Reflex.Dom.Contrib.Layout.ClayUtils         (cssToBS)
+import           Reflex.Dom.Contrib.Layout.FlexLayout        (flexCol',
+                                                              flexCssBS,
+                                                              flexFill,
+                                                              flexItem',
+                                                              flexRow')
 import           Reflex.Dom.Contrib.Layout.TabLayout
-import           Reflex.Dom.Contrib.Layout.Types         (CssClass (..),
-                                                          CssClasses (..),
-                                                          LayoutDirection (..),
-                                                          LayoutOrientation (..),
-                                                          emptyCss,oneClass)
-import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
+import           Reflex.Dom.Contrib.Layout.Types             (CssClass (..),
+                                                              CssClasses (..),
+                                                              LayoutDirection (..),
+                                                              LayoutOrientation (..),
+                                                              emptyCss,
+                                                              oneClass)
+import           Reflex.Dom.Contrib.ReflexConstraints        (MonadWidgetExtraC)
 
 #ifdef USE_WKWEBVIEW
-import           Language.Javascript.JSaddle.WKWebView   (run)
+import           Language.Javascript.JSaddle.WKWebView       (run)
 #endif
 
 #ifdef USE_WARP
-import           Language.Javascript.JSaddle.Warp        (run)
+import           Language.Javascript.JSaddle.Warp            (run)
 #endif
 
 --import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
-import           Reflex.Dom.Contrib.SimpleForm.Configuration
 import           Reflex.Dom.Contrib.SimpleForm
-import           Reflex.Dom.Contrib.SimpleForm.Instances (SimpleFormInstanceC)
+import           Reflex.Dom.Contrib.SimpleForm.Configuration
+import           Reflex.Dom.Contrib.SimpleForm.Instances     (SimpleFormInstanceC)
 --import DataBuilder
 
 import           Css
@@ -182,22 +188,6 @@ instance SimpleFormInstanceC t m=>Builder (SimpleFormR t m) C where
 
 -- More layout options are available if you write custom instances.
 -- handwritten single constructor instance
-{-
-buildBRec::forall t m.SimpleFormInstanceC t m=>Maybe FieldName->Maybe BRec->SFRW t m BRec
-buildBRec mFN mBRec = do
---  layoutCenteredF :: (LayoutOrientation->SFLayoutF m) <- layoutCentered <$> view layoutConfig
---  layoutOrientedF <- layoutOriented <$> view layoutConfig
-  let b::SimpleFormR t m B
-      b = buildA Nothing (oneB <$> mBRec)
-      sA::SimpleFormR t m (Seq.Seq A)
-      sA = liftF (formCentered LayoutHorizontal) $ buildA Nothing (seqOfA <$> mBRec)
-      hs::SimpleFormR t m (HS.HashSet String)
-      hs =  liftF (formCentered LayoutHorizontal) $ buildA Nothing (hashSetOfString <$> mBRec)
-  formRow . unSF $ (BRec <$> b <*> sA <*> hs)
---      <*> (liftF (layoutCenteredF LayoutHorizontal) (buildA Nothing (seqOfA <$> mBRec)))
---      <*> (liftF (layoutCenteredF LayoutHorizontal) (buildA Nothing (hashSetOfString <$> mBRec)))
--}
-  
 instance SimpleFormInstanceC t m=>Builder (SimpleFormR t m) BRec where
   buildA mFN mBRec = SimpleFormR $ do
     let b1 = buildA Nothing (oneB <$> mBRec)
@@ -278,39 +268,26 @@ test cfg = do
     ]
   return ()
 
+
+linkedCss::CssLinks
+linkedCss = CssLinks []
 {-
-   NB: AllDefault module exports DefSFCfg which is an instance of SimpleFormConfiguration with all the specific failure, sum and styling.
-   Different instances of that class could be made to change styling or make it more customizable.
-   That's the part to re-implement for different form behavior. Or just to use different layout functions than the ones I've
-   implemented with here.
+[CssLink
+"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
+(Just "sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u")
+(Just "anonymous")
+]
 -}
 
-
-{-
-
-demoCfg = DefSFCfg
-          {
-            formConfig = FormConfig (FormStyles
-                                      (CssClasses [CssClass "form-group"])
-                                      (CssClasses [CssClass "sf-valid", CssClass ".form-control"])
-                                      (CssClasses [CssClass "sf-invalid", CssClass ".form-control"])
-                                      (CssClasses [CssClass "sf-observer-item"])) Interactive
-          , inputConfig = nullInputConfig
-          }
--}
-
-cssToEmbed = flexCssBS <> tabCssBS <> cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss
-cssToLink = [CssLink
-              "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
-              (Just "sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u")
-              (Just "anonymous")
-            ]
-
-bootstrapCssCfg::CssConfiguration 
-bootstrapCssCfg = def {_cssAllInputs = oneClass "form-control" }
+cfg = def
 
 simpleFormMain  :: JSM ()
-simpleFormMain  = mainWidgetWithHead (headElt "simpleForm demo" cssToLink cssToEmbed) $ test def
+simpleFormMain  =
+  mainWidgetWithHead (headElt
+                       "simpleForm demo"
+                       (linkedCss <> (_cssToLink . _cssConfig $ cfg))
+                       (flexCssBS <> tabCssBS <> (_cssToEmbed . _cssConfig $ cfg))) $ test cfg --where
+--  cfg = def
 
 
 #ifdef USE_WKWEBVIEW

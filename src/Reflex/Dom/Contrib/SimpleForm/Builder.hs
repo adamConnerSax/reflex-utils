@@ -44,35 +44,36 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        ) where
 
 
-import           Reflex.Dom.Contrib.Layout.Types (CssClass, CssClasses (..),
-                                                  IsCssClass (..),LayoutOrientation(..))
+import           Reflex.Dom.Contrib.Layout.Types             (CssClass,
+                                                              CssClasses (..),
+                                                              IsCssClass (..),
+                                                              LayoutOrientation (..))
 
-import Reflex.Dom.Contrib.SimpleForm.DynValidation
-import Reflex.Dom.Contrib.SimpleForm.Configuration
+import           Reflex.Dom.Contrib.SimpleForm.Configuration
+import           Reflex.Dom.Contrib.SimpleForm.DynValidation
 
-import           DataBuilder                     as BExport (Builder (..),
-                                                             FieldName,
-                                                             GBuilder (..),
-                                                             MDWrapped (..),
-                                                             buildAFromConList)
-import qualified DataBuilder                     as B
-import           DataBuilder.GenericSOP          as GSOP (Generic,
-                                                          HasDatatypeInfo,
-                                                          deriveGeneric)
+import           DataBuilder                                 as BExport (Builder (..),
+                                                                         FieldName,
+                                                                         GBuilder (..),
+                                                                         MDWrapped (..),
+                                                                         buildAFromConList)
+import qualified DataBuilder                                 as B
+import           DataBuilder.GenericSOP                      as GSOP (Generic, HasDatatypeInfo,
+                                                                      deriveGeneric)
 
-import           Reflex                          as ReflexExport (PushM)
-import qualified Reflex                          as R
-import qualified Reflex.Dom                      as RD
+import           Reflex                                      as ReflexExport (PushM)
+import qualified Reflex                                      as R
+import qualified Reflex.Dom                                  as RD
 
-import           Control.Arrow                   ((&&&))
-import           Control.Monad.Fix               (MonadFix)
+import           Control.Arrow                               ((&&&))
+import           Control.Monad.Fix                           (MonadFix)
 import           Control.Monad.Morph
-import           Control.Monad.Reader            (ask, runReaderT)
-import qualified Data.Map                        as M
-import           Data.Maybe                      (fromMaybe, isJust)
-import           Data.Monoid                     ((<>))
-import qualified Data.Text                       as T
-import           Data.Validation                 (AccValidation (..))
+import           Control.Monad.Reader                        (ask, runReaderT)
+import qualified Data.Map                                    as M
+import           Data.Maybe                                  (fromMaybe, isJust)
+import           Data.Monoid                                 ((<>))
+import qualified Data.Text                                   as T
+import           Data.Validation                             (AccValidation (..))
 import           Language.Haskell.TH
 
 
@@ -129,8 +130,8 @@ makeSimpleForm' cfg ma submitWidget = do
 
 
 observeDynamic::(SimpleFormC t m, RD.PostBuild t m
-                ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->CssClass->R.Dynamic t a->m (DynValidation t a)
-observeDynamic cfg observerClass aDyn = observeDynValidation cfg $ DynValidation $ fmap AccSuccess aDyn
+                ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->R.Dynamic t a->m (DynValidation t a)
+observeDynamic cfg aDyn = observeDynValidation cfg $ DynValidation $ fmap AccSuccess aDyn
 
 observeDynValidation::(SimpleFormC t m,RD.PostBuild t m
                       ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->DynValidation t a->m (DynValidation t a)
@@ -159,12 +160,12 @@ observeFlow cfg flow initialA =
   let formClasses = _cssForm . _cssConfig $ cfg
   in runSimpleFormR cfg . SimpleFormR  $ do
     let initialWidget = flow initialA
-        obF = observeWidget cfg 
+        obF = observeWidget cfg
     dva <- liftLF (asSimpleForm formClasses) (unSF $ buildA Nothing (Just initialA)) -- DynValidation t a
     dwb <- lift $ R.foldDynMaybe (\ma _ -> flow <$> ma) initialWidget (avToMaybe <$> R.updated (unDynValidation dva)) -- Dynamic t (m b)
     lift $ joinDynOfDynValidation <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
 
-liftF::SFLayoutF t m->SimpleFormR t m a->SimpleFormR t m a 
+liftF::SFLayoutF t m->SimpleFormR t m a->SimpleFormR t m a
 liftF f = SimpleFormR . f . unSF
 
 liftTransform::Monad m=>(forall b.m b->m b)->SimpleFormR t m a->SimpleFormR t m a
@@ -236,7 +237,7 @@ instance (R.Reflex t, R.MonadHold t m {-, SimpleFormBuilderFunctions t m -}) => 
   bFail msg = SimpleFormR $ do
     failF <- failureF . _builderFunctions <$> ask
     failF $ T.pack msg
-    
+
   bSum mwWidgets = SimpleFormR $ do
     let constrList = map ((fst . B.metadata) &&& (unSF . B.value)) mwWidgets
         defCon = case filter B.hasDefault mwWidgets of

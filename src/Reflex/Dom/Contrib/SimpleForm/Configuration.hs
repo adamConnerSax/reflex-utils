@@ -57,6 +57,8 @@ import Control.Monad.Reader (ReaderT,ask,local)
 import Control.Monad.Morph (hoist)
 import Data.Text (Text)
 import Data.Map (Map)
+import Data.ByteString (ByteString)
+import Reflex.Dom.Contrib.CssUtils (CssLinks)
 
 type Placeholder = Text
 type Title = Text
@@ -97,7 +99,8 @@ data CssConfiguration = CssConfiguration
   , _cssAllInputs::CssClasses
   , _cssValidInputs::CssClasses
   , _cssInvalidInputs::CssClasses
-  , _cssReadOnly::CssClasses
+  , _cssToEmbed::ByteString
+  , _cssToLink::CssLinks  
   }
 
 data InputElementConfig = InputElementConfig
@@ -129,6 +132,7 @@ makeClassy ''CssConfiguration
 makeClassy ''InputElementConfig
 makeClassy ''SimpleFormConfiguration
 
+
 -- these functions allow direct use from within the reader
 
 setInputConfig::Monad m=>InputElementConfig->SFLayoutF t m
@@ -144,7 +148,7 @@ invalidInputStyle::Monad m=>SFR t m CssClasses
 invalidInputStyle = (_cssInvalidInputs . _cssConfig) <$> ask 
 
 observerOnlyStyle::Monad m=>SFR t m CssClasses
-observerOnlyStyle = (_cssReadOnly . _cssConfig) <$> ask
+observerOnlyStyle = (_cssObserver . _cssConfig) <$> ask
 
 getFormType::Monad m=>SFR t m FormType
 getFormType = _formType <$> ask
