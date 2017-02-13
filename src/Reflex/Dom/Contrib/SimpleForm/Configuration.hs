@@ -68,7 +68,7 @@ type LabelText = Text
 data LabelPosition = LabelBefore | LabelAfter
 
 -- do the attributes below need to be dynamic?  That would complicate things...
-data LabelConfig = LabelConfig { labelPosition::LabelPosition, labelText::LabelText, labelAttrs::Map Text Text }
+data LabelConfig = LabelConfig { labelText::LabelText, labelAttrs::Map Text Text }
 data FormType = Interactive | ObserveOnly deriving (Eq)
 
 data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)

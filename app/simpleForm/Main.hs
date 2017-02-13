@@ -84,7 +84,7 @@ validAge a@(Age x) = if (x >= 0) then Right a else Left "Age must be > 0"
 
 instance SimpleFormInstanceC t m => Builder (SimpleFormR t m) Age where
   buildA mFn ma =
-    let labelCfg = LabelConfig LabelBefore "Age" M.empty
+    let labelCfg = LabelConfig "Age" M.empty
         inputCfg = InputElementConfig (Just "35") (Just "Age") (Just labelCfg)
     in liftF (setInputConfig inputCfg) $ buildValidated validAge unAge Age mFn ma
 
@@ -98,14 +98,14 @@ validEmail ea@(EmailAddress address) = let
 
 instance SimpleFormInstanceC t m => Builder (SimpleFormR t m) EmailAddress where
   buildA mFn ma =
-    let labelCfg = LabelConfig LabelBefore "Email" M.empty
+    let labelCfg = LabelConfig "Email" M.empty
         inputCfg = InputElementConfig (Just "yourname@emailprovider.com") (Just "Email") (Just labelCfg)
     in liftF (setInputConfig inputCfg) $ buildValidated validEmail unEmailAddress EmailAddress mFn ma
 
 newtype Name = Name { unName::T.Text } deriving (Show)
 instance SimpleFormInstanceC t m => Builder (SimpleFormR t m)  Name where
   buildA mFn ma =
-    let labelCfg = LabelConfig LabelBefore "Name" M.empty
+    let labelCfg = LabelConfig "Name" M.empty
         inputCfg = InputElementConfig (Just "John Doe") (Just "Name") (Just labelCfg)
     in liftF (setInputConfig inputCfg) $ Name <$> buildA mFn (unName <$> ma)
 

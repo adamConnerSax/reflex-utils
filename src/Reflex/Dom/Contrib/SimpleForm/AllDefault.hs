@@ -169,9 +169,13 @@ isSimpleForm = form # ".sf-form"
 isSimpleFormItem::Selector
 isSimpleFormItem = div # ".sf-item"
 
+sfInputWidth = rem 20
+sfLabelWidth = rem 10
+sfInputRowMinWidth = rem 40
+
 simpleFormElements = do
   isSimpleForm ? do
-    fontSize (rem 1.1)
+    fontSize (rem 1)
     border solid (px 1) black
     sym borderRadius (rem 0.2)
     sym padding (rem 0.2)
@@ -179,25 +183,32 @@ simpleFormElements = do
     button ? do
       sym borderRadius (rem 0.2)
       cssSolidTextBox 0.1 whitesmoke black
+      textAlign center
     input ? do
-      fontSize (rem 1.1)
+      fontSize (rem 1)
       sym borderRadius (rem 0.2)
       verticalAlign middle
       position relative
     input  # ("type" @= "text") ? cssOutlineTextBox 0.1 lightslategrey black
     input  # ("type" @= "number") ? cssOutlineTextBox 0.1 lightslategrey black
     select ? do
-      fontSize (rem 1.1)
+      fontSize (rem 1)
       cssOutlineTextBox 0.1 grey black
     input # ".sf-invalid" ? cssOutlineTextBox 0.1 red black -- invalid
     span ? do
       verticalAlign middle
   isSimpleFormItem ? do
-    marginTop (px 10)
-    width (pct 60)
-    display flex
-    justifyContent spaceBetween
-    flexWrap Flexbox.wrap
+    label ? do
+      display flex
+      flexDirection Flexbox.row
+      flexWrap Flexbox.wrap
+      alignItems center
+      minWidth sfInputRowMinWidth -- this shouldn't be necessary.  Something is making the blank wrapping div small.  This forces it to be big enough. :(
+      span ? do
+        Flexbox.flex 1 0 sfLabelWidth
+        maxWidth sfInputWidth
+      span |+ star ? do
+        Flexbox.flex 1 0 sfInputWidth
 
 simpleFormDefaultCss = do
   simpleFormBoxes

@@ -27,6 +27,7 @@ import qualified Reflex.Dom as RD
 import Control.Monad.IO.Class (MonadIO)
 
 import Clay hiding (id)
+import qualified Clay.Flexbox as Flexbox
 import Data.Text.Lazy.Encoding (encodeUtf8)
 import qualified Data.Text as T
 import qualified Data.ByteString as B
@@ -37,30 +38,22 @@ import Reflex.Dom.Contrib.Layout.Types (toCssString,CssClasses,emptyCss,LayoutOr
 
 flexFillStyles :: Css
 flexFillStyles = do
-  ".flexFillH" ? do
-    ("display" -: "flex")
+  ".flexFillH" <> ".flexFillV" ? do
+    display flex
+    alignItems stretch
+    Flexbox.flex 1 0 auto
     ("display" -: "-webkit-flex")
-    ("flex-direction" -: "row")
+    ("-webkit-align-items" -: "stretch")    
+    ("-webkit-flex" -: "1 0 auto")
+    ".fill" <? do
+      Flexbox.flex 1 1 auto
+      ("-webkit-flex" -: "1")
+  ".flexFillH" ? do
+    flexDirection row
     ("-webkit-flex-direction" -: "row")
-    ("align-items" -: "stretch")
-    ("-webkit-align-items" -: "stretch")    
-    ("flex" -: "1 0 auto")
-    ("-webkit-flex" -: "1 0 auto")
-    ".fill" <? do
-      ("flex" -: "1")
-      ("-webkit-flex" -: "1")
   ".flexFillV" ? do
-    ("display" -: "flex")
-    ("display" -: "-webkit-flex")    
-    ("flex-direction" -: "column")
+    flexDirection column
     ("-webkit-flex-direction" -: "column")    
-    ("align-items" -: "stretch")
-    ("-webkit-align-items" -: "stretch")    
-    ("flex" -: "1 0 auto")
-    ("-webkit-flex" -: "1 0 auto")
-    ".fill" <? do
-      ("flex" -: "1")
-      ("-webkit-flex" -: "1")
 
 numberFlexGrowOptions :: Int
 numberFlexGrowOptions = 12
@@ -69,21 +62,21 @@ numberFlexGrowOptions = 12
 
 flexContainerStyle :: Css
 flexContainerStyle = do
-  "display" -: "flex"
+  display flex
+  alignItems stretch
+  Flexbox.flex 1 0 auto
   "display" -: "-webkit-flex"
-  "align-items" -: "stretch"
   "-webkit-align-items" -: "stretch"  
-  "flex" -: "1 0 auto"
   "-webkit-flex" -: "1 0 auto"  
 
 flexGridStyles :: Css
 flexGridStyles = do
   ".gl-flex-row" ? do
-    "flex-direction" -: "row"
+    flexDirection row
     "-webkit-flex-direction" -: "row"    
     flexContainerStyle
   ".gl-flex-col" ? do
-    "flex-direction" -: "column"
+    flexDirection column
     "-webkit-flex-direction" -: "column"    
     flexContainerStyle
   let flexItemStyle n = (fromString (".gl-flex-item-" ++ show n)) <? do { "flex" -: fromString (show n ++ " 0 auto"); "-webkit-flex" -: fromString (show n ++ " 0 auto") }
@@ -126,7 +119,7 @@ flexSizedItem = flexSizedItem' emptyCss
 
 
 wrapWidget::RD.DomBuilder t m=>m a->m a
-wrapWidget = RD.divClass "" 
+wrapWidget = RD.el "div" 
 
 
 flexFill::(RD.DomBuilder t m)=>LayoutDirection->m a->m a

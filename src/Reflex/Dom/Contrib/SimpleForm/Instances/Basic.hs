@@ -87,9 +87,7 @@ sfWidget fDyn fString mFN wc widget = do
       wcInput = over widgetConfig_attributes (addPlaceHolder . addInputClass) wcAll
       labeledWidget iw = case _inputLabelConfig inputCfg of
         Nothing -> iw
-        Just (LabelConfig pos t attrs) -> case pos of
-          LabelBefore -> RD.elAttr "label" attrs  (RD.text t >> iw)
-          LabelAfter -> RD.elAttr "label" attrs  $ do  {a <- iw; RD.text t; return a}
+        Just (LabelConfig t attrs) -> RD.elAttr "label" attrs  $ (RD.el "span" $ RD.text t) >> iw
   lift . labeledWidget $ (fmap fDyn <$> (if isObserver then readOnlyW fString wcAll else widget wcInput))
 
 fromAccVal::AccValidation e a->a
