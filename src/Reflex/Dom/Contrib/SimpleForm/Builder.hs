@@ -113,7 +113,7 @@ asSimpleForm cfg =
       wrapper = if (wrapperClasses == emptyCss)
                 then id
                 else RD.divClass (toCssString wrapperClasses)
-  in wrapper . RD.elClass "form" (toCssString formClasses)
+  in wrapper -- . RD.elClass "form" (toCssString formClasses)
 
 asSimpleObserver::RD.DomBuilder t m=>SimpleFormConfiguration t m->m a->m a
 asSimpleObserver cfg =

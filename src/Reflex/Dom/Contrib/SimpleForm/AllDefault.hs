@@ -70,7 +70,7 @@ type DefaultConfigurationC t m =
    SimpleFormInstanceC t m)
 
 instance Default (CssConfiguration) where
-  def = CssConfiguration emptyCss (oneClass "sf-form") (oneClass "sf-observer") (oneClass "sf-item") emptyCss (oneClass "sf-valid") (oneClass "sf-invalid")
+  def = CssConfiguration (oneClass "sf-form") emptyCss (oneClass "sf-observer") (oneClass "sf-item") emptyCss (oneClass "sf-valid") (oneClass "sf-invalid")
 
 
 
@@ -164,14 +164,10 @@ simpleFormBoxes = do
   ".sf-white-on-gray" ? cssSolidTextBox 0.1 gray white
 
 isSimpleForm::Selector
-isSimpleForm = form # ".sf-form"
+isSimpleForm = ".sf-form"
 
 isSimpleFormItem::Selector
 isSimpleFormItem = div # ".sf-item"
-
-sfInputWidth = rem 20
-sfLabelWidth = rem 10
-sfInputRowMinWidth = rem 40
 
 simpleFormElements = do
   isSimpleForm ? do
@@ -203,12 +199,11 @@ simpleFormElements = do
       flexDirection Flexbox.row
       flexWrap Flexbox.wrap
       alignItems center
-      minWidth sfInputRowMinWidth -- this shouldn't be necessary.  Something is making the blank wrapping div small.  This forces it to be big enough. :(
       span ? do
-        Flexbox.flex 1 0 sfLabelWidth
-        maxWidth sfInputWidth
+        Flexbox.flex 1 0 auto --sfLabelWidth
+        minWidth (rem 5)
       span |+ star ? do
-        Flexbox.flex 1 0 sfInputWidth
+        Flexbox.flex 2 0 auto --sfInputWidth
 
 simpleFormDefaultCss = do
   simpleFormBoxes

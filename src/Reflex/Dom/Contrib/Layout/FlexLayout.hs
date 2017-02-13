@@ -45,9 +45,12 @@ flexFillStyles = do
     ("display" -: "-webkit-flex")
     ("-webkit-align-items" -: "stretch")    
     ("-webkit-flex" -: "1 0 auto")
-    ".fill" <? do
+    ".fill-space" <? do
       Flexbox.flex 1 1 auto
-      ("-webkit-flex" -: "1")
+      ("-webkit-flex" -: "1 1 auto")
+    ".fill-content" <? do
+      Flexbox.flex 1 0 auto
+      ("-webkit-flex" -: "1 0 auto")
   ".flexFillH" ? do
     flexDirection row
     ("-webkit-flex-direction" -: "row")
@@ -119,46 +122,46 @@ flexSizedItem = flexSizedItem' emptyCss
 
 
 wrapWidget::RD.DomBuilder t m=>m a->m a
-wrapWidget = RD.el "div" 
+wrapWidget = RD.divClass "fill-content" 
 
 
 flexFill::(RD.DomBuilder t m)=>LayoutDirection->m a->m a
 flexFill LayoutRight w =
   RD.divClass "flexFillH" $ do
     x <- wrapWidget w
-    RD.divClass "fill" RD.blank
+    RD.divClass "fill-space" RD.blank
     return x
 
 flexFill LayoutLeft w =
   RD.divClass "flexFillH" $ do  
-    RD.divClass "fill" RD.blank
+    RD.divClass "fill-space" RD.blank
     wrapWidget w
 
 
 flexFill LayoutBottom w = 
   RD.divClass "flexFillV" $ do
     x <- wrapWidget w
-    RD.divClass "fill" RD.blank
+    RD.divClass "fill-space" RD.blank
     return x
     
 flexFill LayoutTop w = 
   RD.divClass "flexFillV" $ do  
-    RD.divClass "fill" RD.blank
+    RD.divClass "fill-space" RD.blank
     wrapWidget w
 
 flexCenter::(RD.DomBuilder t m)=>LayoutOrientation->m a->m a
 flexCenter LayoutHorizontal w = 
   RD.divClass "flexFillH" $ do
-    RD.divClass "fill" RD.blank
+    RD.divClass "fill-space" RD.blank
     x <- wrapWidget w
-    RD.divClass "fill" RD.blank
+    RD.divClass "fill-space" RD.blank
     return x
     
 flexCenter LayoutVertical w = 
   RD.divClass "flexFillV" $ do
-    RD.divClass "fill" RD.blank
+    RD.divClass "fill-space" RD.blank
     x <- wrapWidget w
-    RD.divClass "fill" RD.blank
+    RD.divClass "fill-space" RD.blank
     return x
 
 

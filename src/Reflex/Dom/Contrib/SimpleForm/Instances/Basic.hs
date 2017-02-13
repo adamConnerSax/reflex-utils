@@ -94,6 +94,8 @@ fromAccVal::AccValidation e a->a
 fromAccVal (AccSuccess a) = a
 fromAccVal (AccFailure _) = undefined
 
+item::Monad m=>SFLayoutF t m 
+item = sfItem
 
 instance R.Reflex t=>Functor (HtmlWidget t) where
   fmap f (HtmlWidget v c kp kd ku hf) = HtmlWidget (f <$> v) (f <$> c) kp kd ku hf
@@ -105,7 +107,7 @@ buildReadable::(SimpleFormInstanceC t m, Readable a, Show a)=>Maybe FieldName->M
 buildReadable mFN ma = SimpleFormR $ mdo
   attrsDyn <- sfAttrs dma mFN Nothing
   let wc = WidgetConfig RD.never (maybeToAV ma) attrsDyn
-  dma <- sfItemL $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV readableWidget) c)
+  dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV readableWidget) c)
   return dma
 
 readMaybeAV::Read a=>Maybe FieldName->T.Text->AccValidation SimpleFormErrors a
@@ -120,7 +122,7 @@ buildReadMaybe mFN ma = SimpleFormR $ mdo
   attrsDyn <- sfAttrs dma mFN Nothing
   let initial = maybe "" showText ma
       wc = WidgetConfig RD.never initial attrsDyn
-  dma <- sfItemL $ DynValidation <$> sfWidget (readMaybeAV mFN) showText mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c)
+  dma <- item $ DynValidation <$> sfWidget (readMaybeAV mFN) showText mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c)
   return dma
 
 -- | String and Text
@@ -129,7 +131,7 @@ instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) T.Text where
     attrsDyn <- sfAttrs dma mFN (Just "Text")
     let initial = fromMaybe "" mInitial
         wc = WidgetConfig RD.never initial attrsDyn
-    dma <- sfItemL $ DynValidation <$> sfWidget AccSuccess showText mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput "Text") c)
+    dma <- item $ DynValidation <$> sfWidget AccSuccess showText mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput "Text") c)
     return dma
 
 
@@ -142,7 +144,7 @@ instance SimpleFormC e t m=>B.Builder (RFormWidget e t m) Char where
   buildA md mInitial = RFormWidget $ do
     e <- ask
     attrsDyn <- makeSFAttrs "Char"
-    lift $ sfItemL attrs0e $ _hwidget_value <$> readableWidget (WidgetConfig RD.never mInitial attrsDyn)
+    lift $ item attrs0e $ _hwidget_value <$> readableWidget (WidgetConfig RD.never mInitial attrsDyn)
 -}
 
 -- We don't need this.  If we leave it out, the Enum instance will work an we get a dropdown instead of a checkbox.  Which might be better...
@@ -151,13 +153,13 @@ instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Bool where
     let initial = fromMaybe False mInitial
         wc = WidgetConfig RD.never initial attrsDyn
     attrsDyn <- sfAttrs dynValidationNothing mFN (Just $ "Bool")
-    sfItemL $ DynValidation <$> (sfWidget AccSuccess showText mFN wc $ \c -> _hwidget_value <$> htmlCheckbox c)
+    item $ DynValidation <$> (sfWidget AccSuccess showText mFN wc $ \c -> _hwidget_value <$> htmlCheckbox c)
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Double where
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just "Double")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- sfItemL $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV doubleWidget) c)
+    dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV doubleWidget) c)
     return dma
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Float where
@@ -167,7 +169,7 @@ instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Int where
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just "Int")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- sfItemL $ DynValidation <$> sfWidget id  (showText . fromAccVal) mFN wc (\c->_hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV intWidget) c)
+    dma <- item $ DynValidation <$> sfWidget id  (showText . fromAccVal) mFN wc (\c->_hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV intWidget) c)
     return dma
 
 
@@ -175,7 +177,7 @@ instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Integer where
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "Int")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- sfItemL $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV integerWidget) c)
+    dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV integerWidget) c)
     return dma
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Int8 where
@@ -210,14 +212,14 @@ instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) UTCTime where
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "UTCTime")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma<-sfItemL $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateTimeWidget) c)
+    dma<-item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateTimeWidget) c)
     return dma
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Day where
   buildA mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "Day")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- sfItemL $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateWidget) c)
+    dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateWidget) c)
     return dma
 
 -- uses generics to build instances
@@ -234,7 +236,7 @@ instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, 
     let values = [minBound..] :: [a]
         initial = fromMaybe (head values) mInitial
         wc = WidgetConfig RD.never initial attrsDyn
-    dma <- sfItemL $ DynValidation <$> sfWidget AccSuccess showText mFN wc (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
+    dma <- item $ DynValidation <$> sfWidget AccSuccess showText mFN wc (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
     return dma
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
