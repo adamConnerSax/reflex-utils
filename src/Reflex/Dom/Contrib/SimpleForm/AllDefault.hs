@@ -69,31 +69,45 @@ type DefaultConfigurationC t m =
    MonadWidgetExtraC t m,
    SimpleFormInstanceC t m)
 
+byFormType::FormType->a->a->a
+byFormType ft ifInteractive ifReadOnly = case ft of
+  Interactictive -> ifInteractive
+  ReadOnly -> ifReadOnly
+
 instance Default (CssConfiguration) where
-  def = CssConfiguration (oneClass "sf-form") emptyCss (oneClass "sf-observer") (oneClass "sf-item") emptyCss (oneClass "sf-valid") (oneClass "sf-invalid")
+  def = CssConfiguration
+    (byFormType (oneClass "sf-container") (oneClass "sf-observer"))
+    (const $ oneClass "sf-item")
+    (const $ oneClass "sf-valid")
+    (const $ oneClass "sf-invalid")
 
 
 
 instance Default (InputElementConfig) where
   def = InputElementConfig Nothing Nothing Nothing
 
-defFormItem::RD.DomBuilder t m=>SFLayoutF t m
-defFormItem w = do
-  itemStyle <- formItemStyle
-  liftLF (flexItem' itemStyle) w
+defLayoutWrapper::RD.DomBuilder t m=>FormType->SFLayoutF t m
+defLayoutWrapper _ w = do
+  classes <- wrapperClasses
+  divClass (toCssString classes) w
 
-defLayoutOriented::RD.DomBuilder t m=>LayoutOrientation->SFLayoutF t m
-defLayoutOriented LayoutHorizontal = liftLF flexRow
-defLayoutOriented LayoutVertical = liftLF flexCol
+defFormItem::RD.DomBuilder t m=>FormType->SFLayoutF t m
+defFormItem _ w = do
+  classes <- allItemClasses
+  liftLF (flexItem' classes) w
 
-defLayoutFill::RD.DomBuilder t m=>LayoutDirection->SFLayoutF t m
-defLayoutFill d = liftLF (flexFill d)
+defLayoutOriented::RD.DomBuilder t m=>FormType->LayoutOrientation->SFLayoutF t m
+defLayoutOriented _ LayoutHorizontal = liftLF flexRow
+defLayoutOriented _ LayoutVertical = liftLF flexCol
 
-defLayoutCentered::RD.DomBuilder t m=>LayoutOrientation->SFLayoutF t m
-defLayoutCentered o = liftLF (flexCenter o)
+defLayoutFill::RD.DomBuilder t m=>FormType->LayoutDirection->SFLayoutF t m
+defLayoutFill _ d = liftLF (flexFill d)
 
-defLayoutCollapsible::RD.DomBuilder t m=>T.Text->CollapsibleInitialState->SFLayoutF t m
-defLayoutCollapsible t is = liftLF (collapsibleWidget t is)
+defLayoutCentered::RD.DomBuilder t m=>FormType->LayoutOrientation->SFLayoutF t m
+defLayoutCentered _ o = liftLF (flexCenter o)
+
+defLayoutCollapsible::RD.DomBuilder t m=>FormType->T.Text->CollapsibleInitialState->SFLayoutF t m
+defLayoutCollapsible _ t is = liftLF (collapsibleWidget t is)
 
 instance RD.DomBuilder t m=>Default (LayoutConfiguration t m) where
   def = LayoutConfiguration defFormItem defLayoutOriented defLayoutFill defLayoutCentered defLayoutCollapsible
@@ -163,14 +177,14 @@ simpleFormBoxes = do
   ".sf-black-on-gray" ? cssSolidTextBox 0.1 gray black
   ".sf-white-on-gray" ? cssSolidTextBox 0.1 gray white
 
-isSimpleForm::Selector
-isSimpleForm = ".sf-form"
+isSimpleFormContainer::Selector
+isSimpleFormContainer = ".sf-container"
 
 isSimpleFormItem::Selector
 isSimpleFormItem = div # ".sf-item"
 
 simpleFormElements = do
-  isSimpleForm ? do
+  isSimpleFormContainer ? do
     fontSize (rem 1)
     border solid (px 1) black
     sym borderRadius (rem 0.2)

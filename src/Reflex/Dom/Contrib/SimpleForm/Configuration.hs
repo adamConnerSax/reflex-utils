@@ -30,10 +30,10 @@ module Reflex.Dom.Contrib.SimpleForm.Configuration
   , HasInputElementConfig(..)
   , HasSimpleFormConfiguration(..)
   , setInputConfig
-  , formItemStyle
-  , validInputStyle
-  , invalidInputStyle
-  , observerOnlyStyle
+  , wrapperClasses
+  , itemClasses
+  , validDataClasses
+  , invalidDataClasses
   , setToObserve
   , getFormType
   , sfItemL
@@ -85,22 +85,21 @@ type DynAttrs t = Dynamic t (Map Text Text)
 
 data LayoutConfiguration t m = LayoutConfiguration 
   {
-    formItem::SFLayoutF t m
-  , layoutOriented::LayoutOrientation->SFLayoutF t m
-  , layoutFill::LayoutDirection->SFLayoutF t m
-  , layoutCentered::LayoutOrientation->SFLayoutF t m
-  , layoutCollapsible::Text -> CollapsibleInitialState->SFLayoutF t m
+    layoutWrapper::FormType -> SFLayoutF t m
+  , layoutItem::FormType->SFLayoutF t m
+  , layoutOriented::FormType->LayoutOrientation->SFLayoutF t m
+  , layoutFill::FormType->LayoutDirection->SFLayoutF t m
+  , layoutCentered::FormType->LayoutOrientation->SFLayoutF t m
+  , layoutCollapsible::FormType->Text -> CollapsibleInitialState->SFLayoutF t m
   }
 
 data CssConfiguration = CssConfiguration
   {
-    _cssWrapper::CssClasses
-  , _cssForm::CssClasses
-  , _cssObserver::CssClasses
-  , _cssAllItems::CssClasses
-  , _cssAllInputs::CssClasses
-  , _cssValidInputs::CssClasses
-  , _cssInvalidInputs::CssClasses
+    _cssWrapper::FormType->CssClasses
+  , _cssAllItems::FormType->CssClasses
+--  , _cssAllData::FormType->CssClasses
+  , _cssValidData::FormType->CssClasses
+  , _cssInvalidData::FormType->CssClasses -- ??
   }
 
 data InputElementConfig = InputElementConfig
@@ -141,17 +140,28 @@ makeClassy ''SimpleFormConfiguration
 setInputConfig::Monad m=>InputElementConfig->SFLayoutF t m
 setInputConfig ic = local (\cfg -> cfg {_inputConfig = ic })
 
-formItemStyle::Monad m=>SFR t m CssClasses 
-formItemStyle = (_cssAllItems . _cssConfig) <$> ask
+getClasses::Monad m=>(CssConfiguration -> (FormType->CssClasses))->SFR t m CssClasses
+getClasses selector = do
+  fType <- _formType <$> ask
+  cssF <- (selector . _cssConfig) <$> ask
+  return $ cssF fType
+  
+wrapperClasses::Monad m=>SFR t m CssClasses
+wrapperClasses = getClasses _cssWrapper
 
-validInputStyle::Monad m=>SFR t m CssClasses 
-validInputStyle = (_cssValidInputs . _cssConfig) <$> ask
+itemClasses::Monad m=>SFR t m CssClasses 
+itemClasses = getClasses _cssAllItems
 
-invalidInputStyle::Monad m=>SFR t m CssClasses
-invalidInputStyle = (_cssInvalidInputs . _cssConfig) <$> ask 
+{-
+allDataClasses::Monad m=>SFR t m CssClasses 
+allDataClasses = getClasses _cssAllData
+-}
 
-observerOnlyStyle::Monad m=>SFR t m CssClasses
-observerOnlyStyle = (_cssObserver . _cssConfig) <$> ask
+validDataClasses::Monad m=>SFR t m CssClasses 
+validDataClasses = getClasses _cssValidData
+
+invalidDataClasses::Monad m=>SFR t m CssClasses
+invalidDataClasses = getClasses _cssInvalidData
 
 getFormType::Monad m=>SFR t m FormType
 getFormType = _formType <$> ask
@@ -161,30 +171,41 @@ setToObserve = local (\fc -> fc {_formType = ObserveOnly })
 --  fc <- getFormConfig
 --  setFormConfig fc{ formType = ObserveOnly }  w
 
+sfWrapper::Monad m=>SFLayoutF t m
+sfWrapper ra = do
+  fType <- _formType <$> ask
+  f <- layoutWrapper . _layoutConfig <$> ask
+  f fType ra  
+
 sfItem::Monad m=>SFLayoutF t m 
 sfItem ra = do
-  f <- formItem . _layoutConfig <$> ask
-  f ra
+  fType <- _formType <$> ask
+  f <- layoutItem . _layoutConfig <$> ask
+  f fType ra
 
 sfCenter::Monad m=>LayoutOrientation->SFLayoutF t m
 sfCenter o ra = do
+  fType <- _formType <$> ask
   f <- layoutCentered . _layoutConfig <$> ask
-  f o ra
+  f fType o ra
 
 sfFill::Monad m=>LayoutDirection->SFLayoutF t m
 sfFill d ra = do
+  fType <- _formType <$> ask
   f <- layoutFill . _layoutConfig <$> ask
-  f d ra
+  f fType d ra
 
 sfOrient::Monad m=>LayoutOrientation->SFLayoutF t m
 sfOrient o ra = do
+  fType <- _formType <$> ask
   f <- layoutOriented . _layoutConfig <$> ask
-  f o ra
+  f fType o ra
 
 sfCollapsible::Monad m=>Text->CollapsibleInitialState->SFLayoutF t m
 sfCollapsible t is ra = do
+  fType <- _formType <$> ask
   f <- layoutCollapsible . _layoutConfig <$> ask
-  f t is ra
+  f fType t is ra
   
 sfItemL::Monad m=>SFLayoutF t m
 sfItemL = sfFill LayoutRight . sfItem 

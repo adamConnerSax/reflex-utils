@@ -96,7 +96,9 @@ instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR t m) where
 --askSimpleFormR::SimpleFormR t m (SimpleFormConfiguration m)
 
 runSimpleFormR::Monad m=>SimpleFormConfiguration t m->SimpleFormR t m a->m (DynValidation t a)
-runSimpleFormR cfg sfra = runReaderT (unSF sfra) cfg
+runSimpleFormR cfg sfra =
+  let wrappedWidget = liftLF sfWrapper $ unSF sfra
+  runReaderT wrappedWidget $ cfg
 
 type SimpleFormC t m = (RD.DomBuilder t m, R.MonadHold t m {- , SimpleFormBuilderFunctions t m -})
 
@@ -106,6 +108,7 @@ switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
   let f = runSimpleFormR cfg . widgetGetter
   lift $ joinDynOfDynValidation <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)
 
+{-
 asSimpleForm::RD.DomBuilder t m=>SimpleFormConfiguration t m->m a->m a
 asSimpleForm cfg =
   let formClasses = _cssForm . _cssConfig $ cfg
@@ -123,7 +126,7 @@ asSimpleObserver cfg =
                 then id
                 else RD.divClass (toCssString wrapperClasses)
   in wrapper . RD.divClass (toCssString observerClasses)
-
+-}
 
 makeSimpleForm::(SimpleFormC t m, B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->Maybe a->m (DynValidation t a)
 makeSimpleForm cfg ma = asSimpleForm cfg $ runSimpleFormR cfg $ B.buildA Nothing ma
@@ -147,7 +150,7 @@ observeDynamic cfg aDyn = observeDynValidation cfg $ DynValidation $ fmap AccSuc
 observeDynValidation::(SimpleFormC t m,RD.PostBuild t m
                       ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->DynValidation t a->m (DynValidation t a)
 observeDynValidation cfg aDynM =
-  asSimpleObserver cfg $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
+  runSimpleFormR cfg . SimpleFormR . setToObserve $ do
     let makeForm = accValidation (return . dynValidationErr) (unSF . buildA Nothing . Just)
         builtDyn = fmap makeForm (unDynValidation aDynM)  -- Dynamic t (ReaderT e m (DynValidation t a))
     newDynEv <- RD.dyn builtDyn -- Event t (DynValidation t a)
@@ -157,7 +160,7 @@ observeDynValidation cfg aDynM =
 observeWidget::(SimpleFormC t m
                ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->m a->m (DynValidation t a)
 observeWidget cfg wa =
-  asSimpleObserver cfg $ runSimpleFormR cfg . SimpleFormR . setToObserve $ do
+  runSimpleFormR cfg . SimpleFormR . setToObserve $ do
     a <- lift wa
     unSF . buildA Nothing . Just $ a
 
@@ -169,7 +172,7 @@ observeFlow cfg flow initialA =
   runSimpleFormR cfg . SimpleFormR  $ do
     let initialWidget = flow initialA
         obF = observeWidget cfg
-    dva <- liftLF (asSimpleForm cfg) (unSF $ buildA Nothing (Just initialA)) -- DynValidation t a
+    dva <- (unSF $ buildA Nothing (Just initialA)) -- DynValidation t a
     dwb <- lift $ R.foldDynMaybe (\ma _ -> flow <$> ma) initialWidget (avToMaybe <$> R.updated (unDynValidation dva)) -- Dynamic t (m b)
     lift $ joinDynOfDynValidation <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
 
