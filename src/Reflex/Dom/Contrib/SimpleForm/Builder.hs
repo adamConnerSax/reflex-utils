@@ -93,12 +93,13 @@ instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR t m) where
     dmA <- unSF sfrA
     return $ dmF <*> dmA
 
---askSimpleFormR::SimpleFormR t m (SimpleFormConfiguration m)
-
 runSimpleFormR::Monad m=>SimpleFormConfiguration t m->SimpleFormR t m a->m (DynValidation t a)
-runSimpleFormR cfg sfra = do
-  let wrappedWidget = sfWrapper $ unSF sfra
-  runReaderT wrappedWidget cfg
+runSimpleFormR cfg sfra = runSimpleFormR' cfg sfra return
+--  let wrappedWidget = sfWrapper $ unSF sfra
+--  runReaderT wrappedWidget cfg
+
+runSimpleFormR'::Monad m=>SimpleFormConfiguration t m->SimpleFormR t m a->(DynValidation t a->m b)->m b
+runSimpleFormR' cfg sfra f = runReaderT (sfWrapper $ unSF sfra >>= lift . f) cfg
 
 type SimpleFormC t m = (RD.DomBuilder t m, R.MonadHold t m {- , SimpleFormBuilderFunctions t m -})
 
@@ -108,25 +109,6 @@ switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
   let f = runSimpleFormR cfg . widgetGetter
   lift $ joinDynOfDynValidation <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)
 
-{-
-asSimpleForm::RD.DomBuilder t m=>SimpleFormConfiguration t m->m a->m a
-asSimpleForm cfg =
-  let formClasses = _cssForm . _cssConfig $ cfg
-      wrapperClasses = _cssWrapper . _cssConfig $ cfg
-      wrapper = if (wrapperClasses == emptyCss)
-                then id
-                else RD.divClass (toCssString wrapperClasses)
-  in wrapper -- . RD.elClass "form" (toCssString formClasses)
-
-asSimpleObserver::RD.DomBuilder t m=>SimpleFormConfiguration t m->m a->m a
-asSimpleObserver cfg =
-  let observerClasses = _cssObserver . _cssConfig $ cfg
-      wrapperClasses = _cssWrapper . _cssConfig $ cfg
-      wrapper = if (wrapperClasses == emptyCss)
-                then id
-                else RD.divClass (toCssString wrapperClasses)
-  in wrapper . RD.divClass (toCssString observerClasses)
--}
 
 makeSimpleForm::(SimpleFormC t m, B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->Maybe a->m (DynValidation t a)
 makeSimpleForm cfg ma = runSimpleFormR cfg $ B.buildA Nothing ma
@@ -138,9 +120,12 @@ makeSimpleForm'::(SimpleFormC t m, RD.MonadHold t m
                  m (RD.Event t ())-> -- submit control
                  m (RD.Event t a)
 makeSimpleForm' cfg ma submitWidget = do
-  dva <- unDynValidation <$> makeSimpleForm cfg ma
-  submitEv <- submitWidget
-  return $ RD.attachPromptlyDynWithMaybe const (avToMaybe <$> dva) submitEv -- fires when control does but only if form entries are valid
+--  dva <- unDynValidation <$> makeSimpleForm cfg ma
+--  submitEv <- submitWidget
+  let f dva = do
+        submitEv <- submitWidget
+        return $ RD.attachPromptlyDynWithMaybe const (avToMaybe <$> (unDynValidation dva)) submitEv -- fires when control does but only if form entries are valid
+  runSimpleFormR' cfg (B.buildA Nothing ma) f
 
 
 observeDynamic::(SimpleFormC t m, RD.PostBuild t m
@@ -160,9 +145,8 @@ observeDynValidation cfg aDynM =
 observeWidget::(SimpleFormC t m
                ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->m a->m (DynValidation t a)
 observeWidget cfg wa =
-  runSimpleFormR (setToObserve cfg) . SimpleFormR $ do
-    a <- lift wa
-    unSF . buildA Nothing . Just $ a
+  runSimpleFormR (setToObserve cfg) . SimpleFormR $ lift wa >>= unSF . buildA Nothing . Just
+
 
 
 observeFlow::(SimpleFormC t m, MonadFix m
