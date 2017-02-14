@@ -54,7 +54,7 @@ import Reflex.Dom.Contrib.Layout.Types (CssClasses,LayoutOrientation(..),LayoutD
 import Reflex.Dom.Contrib.SimpleForm.DynValidation
 
 import qualified DataBuilder                     as B
-import Reflex (Dynamic)
+import Reflex (Dynamic,Event)
 
 import Control.Lens.TH
 import Control.Monad.Reader (ReaderT,ask,local)
@@ -104,7 +104,7 @@ data CssConfiguration = CssConfiguration
   , _cssInvalidData::FormType->CssClasses -- ??
   }
 
-data InputElementConfig = InputElementConfig
+data InputElementConfig t = InputElementConfig
   {
     _inputPlaceholder::Maybe Placeholder
   , _inputTitle::Maybe Title
@@ -124,7 +124,7 @@ data SimpleFormConfiguration t m = SimpleFormConfiguration
   , _builderFunctions::BuilderFunctions t m
   , _layoutConfig::LayoutConfiguration t m
   , _cssConfig::CssConfiguration
-  , _inputConfig::InputElementConfig
+  , _inputConfig::InputElementConfig t
   }
 
 type SFConfigChanger t m = SimpleFormConfiguration t m -> SimpleFormConfiguration t m 
@@ -139,7 +139,7 @@ makeClassy ''SimpleFormConfiguration
 
 -- these functions allow direct use from within the reader
 
-setInputConfig::Monad m=>InputElementConfig->SFLayoutF t m
+setInputConfig::Monad m=>InputElementConfig t->SFLayoutF t m
 setInputConfig ic = local (\cfg -> cfg {_inputConfig = ic })
 
 getClasses::Monad m=>(CssConfiguration -> (FormType->CssClasses))->SFR t m CssClasses
@@ -168,8 +168,6 @@ getFormType = _formType <$> ask
 
 setToObserve::SimpleFormConfiguration t m -> SimpleFormConfiguration t m
 setToObserve cfg = cfg {_formType = ObserveOnly }
---  fc <- getFormConfig
---  setFormConfig fc{ formType = ObserveOnly }  w
 
 sfWrapper::Monad m=>SFLayoutF t m
 sfWrapper ra = do

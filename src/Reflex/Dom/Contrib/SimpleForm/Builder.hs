@@ -69,7 +69,8 @@ import qualified Reflex.Dom                                  as RD
 import           Control.Arrow                               ((&&&))
 import           Control.Monad.Fix                           (MonadFix)
 import           Control.Monad.Morph
-import           Control.Monad.Reader                        (ask, runReaderT)
+import           Control.Monad.Reader                        (runReaderT,MonadReader(..))
+import           Control.Lens                                (view)
 import qualified Data.Map                                    as M
 import           Data.Maybe                                  (fromMaybe, isJust)
 import           Data.Monoid                                 ((<>))
@@ -83,7 +84,7 @@ import           Language.Haskell.TH
 -- This is necessary because this functor and applicative are different from that of SFRW
 newtype SimpleFormR t m a = SimpleFormR { unSF::SFRW t m a }
 
-instance (R.Reflex t, R.MonadHold t m)=>Functor (SimpleFormR t m) where
+instance (R.Reflex t, Functor m)=>Functor (SimpleFormR t m) where
   fmap f sfra = SimpleFormR $ fmap (fmap f) (unSF sfra)
 
 instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR t m) where
@@ -93,15 +94,37 @@ instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR t m) where
     dmA <- unSF sfrA
     return $ dmF <*> dmA
 
+{-
+instance (R.Reflex t, R.MonadHold t m)=>Monad (SimpleFormR t m) where
+  return = pure
+  ma >>= f = SimpleFormR $ do -- f::a->SimpleFormR t m b, we want DynValidation t a -> 
+    cfg <- ask
+    let sfrma = unSF ma -- ReaderT (SimpleFormConfiguration t m) (DynValidation t a)
+        f'  = fmap . fmap . f -- f'::ReaderT (SimpleFormConfiguration t m) (DynValidation t a) -> ReaderT (SimpleFormConfiguration t m) (DynValidation t (SimpleFormR t m b))
+    dvsfb <- unSF <$> f' sfrma -- DynValidation t (ReaderT (SimpleFormConfiguration t m) (DynValidation t b))
+    x <- traverse dvsfb -- (DynValidation t (DynValidation t b))
+    
+    let dvmdvb = fmap (flip runReaderT cfg) dvsfb -- DynValidation t (m (DynValidation t b))
+    
+    
+    (fmap $ (foldDyn dyn) . traverse . unDynValidation $ unSF ma >>= f' -- AccValidation $ (m (Event t (Dynamic t (AccValidation b))))
+
+
+instance (Monad m, R.Reflex t)=>MonadReader (SimpleFormConfiguration t m) (SimpleFormR t m) where
+  ask = SimpleFormR $ do
+    cfg <- ask
+    return (pure cfg)
+  local f = liftF (local f) 
+-}
+
+
 runSimpleFormR::Monad m=>SimpleFormConfiguration t m->SimpleFormR t m a->m (DynValidation t a)
 runSimpleFormR cfg sfra = runSimpleFormR' cfg sfra return
---  let wrappedWidget = sfWrapper $ unSF sfra
---  runReaderT wrappedWidget cfg
 
 runSimpleFormR'::Monad m=>SimpleFormConfiguration t m->SimpleFormR t m a->(DynValidation t a->m b)->m b
 runSimpleFormR' cfg sfra f = runReaderT (sfWrapper $ unSF sfra >>= lift . f) cfg
 
-type SimpleFormC t m = (RD.DomBuilder t m, R.MonadHold t m {- , SimpleFormBuilderFunctions t m -})
+type SimpleFormC t m = (RD.DomBuilder t m, R.MonadHold t m)
 
 switchingSFR::SimpleFormC t m=>(a->SimpleFormR t m b)->a->R.Event t a->SimpleFormR t m b
 switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = SimpleFormR $ do
@@ -120,8 +143,6 @@ makeSimpleForm'::(SimpleFormC t m, RD.MonadHold t m
                  m (RD.Event t ())-> -- submit control
                  m (RD.Event t a)
 makeSimpleForm' cfg ma submitWidget = do
---  dva <- unDynValidation <$> makeSimpleForm cfg ma
---  submitEv <- submitWidget
   let f dva = do
         submitEv <- submitWidget
         return $ RD.attachPromptlyDynWithMaybe const (avToMaybe <$> (unDynValidation dva)) submitEv -- fires when control does but only if form entries are valid
@@ -172,11 +193,10 @@ liftRAction ac sf = SimpleFormR $ ac >> unSF sf
 liftAction::Monad m=>m b->SimpleFormR t m a->SimpleFormR t m a
 liftAction ac = liftRAction (lift ac)
 
-
-sfRowDynAttr::Monad m=>{- SimpleFormBuilderFunctions t m=> -}DynAttrs t->SFLayoutF t m
+sfRowDynAttr::Monad m=>DynAttrs t->SFLayoutF t m
 sfRowDynAttr attrsDyn = sfItem . sfDynamicDiv attrsDyn . sfOrient LayoutHorizontal
 
-sfColDynAttr::Monad m=>{- SimpleFormBuilderFunctions t m=>-}DynAttrs t->SFLayoutF t m
+sfColDynAttr::Monad m=>DynAttrs t->SFLayoutF t m
 sfColDynAttr attrsDyn =   sfItem . sfDynamicDiv attrsDyn . sfOrient LayoutHorizontal
 
 fieldSet::RD.DomBuilder t m=>T.Text->SFLayoutF t m
@@ -193,22 +213,38 @@ titleAttr x = M.fromList [("title",x),("placeholder",x)]
 cssClassAttr::CssClasses->M.Map T.Text T.Text
 cssClassAttr x = "class" RD.=: toCssString x
 
-sfAttrs::(RD.MonadHold t m, RD.DomBuilder t m)
+{-
+makeValidDyn::R.Reflex t=>(a->Either e a)->DynValidation t a->R.Dynamic t Bool
+makeValidDyn vf dva =
+  let f x = case x of
+        AccSuccess y -> either (const False) (const True) $ vf y
+        AccFailure _ -> False
+  in f <$> unDynValidation dva
+
+makeValidEv::R.Reflex t=>(a->Either e a)->DynValidation t a->R.Event t Bool
+makeValidEv vf dva =
+  let f x = case x of
+        AccSuccess y -> either (const False) (const True) $ vf y
+        AccFailure _ -> False
+  in R.updated $ f <$> unDynValidation dva
+-}
+
+sfAttrs::(RD.MonadHold t m, RD.DomBuilder t m,MonadFix m)
          =>DynValidation t a->Maybe FieldName->Maybe T.Text->SFR t m (R.Dynamic t (M.Map T.Text T.Text))
 sfAttrs mDyn mFN mTypeS = sfAttrs' mDyn mFN mTypeS (CssClasses [])
 
-sfAttrs'::(RD.MonadHold t m, R.Reflex t)
+sfAttrs'::(RD.MonadHold t m, R.Reflex t,MonadFix m)
          =>DynValidation t a->Maybe FieldName->Maybe T.Text->CssClasses->SFR t m (R.Dynamic t (M.Map T.Text T.Text))
 sfAttrs' mDyn mFN mTypeS fixedCss = do
   validClasses <- validDataClasses
   invalidClasses <- invalidDataClasses
   let title = componentTitle mFN mTypeS
-      validAttrs = titleAttr title <> cssClassAttr (validClasses <> fixedCss)
+      validAttrs = titleAttr title <> cssClassAttr (validClasses <> fixedCss) 
       invalidAttrs = titleAttr title <> cssClassAttr (invalidClasses <> fixedCss)
-  return . RD.ffor (unDynValidation mDyn) $ \x -> case x of
-                                                    (AccSuccess _)-> validAttrs
-                                                    (AccFailure _)->invalidAttrs
-
+      f (AccSuccess _) = True
+      f (AccFailure _) = False
+      validDyn = f <$> (unDynValidation mDyn)
+  return . RD.ffor validDyn $ \x -> if x then validAttrs else invalidAttrs
 
 componentTitle::Maybe FieldName->Maybe T.Text->T.Text
 componentTitle mFN mType =
@@ -217,7 +253,7 @@ componentTitle mFN mType =
   in if isJust mFN && isJust mType then fnS <> "::" <> tnS else fnS <> tnS
 
 
-instance (R.Reflex t, R.MonadHold t m {-, SimpleFormBuilderFunctions t m -}) => B.Buildable (SimpleFormR t m) where
+instance (R.Reflex t, R.MonadHold t m)=> B.Buildable (SimpleFormR t m) where
   bFail msg = SimpleFormR $ do
     failF <- failureF . _builderFunctions <$> ask
     failF $ T.pack msg

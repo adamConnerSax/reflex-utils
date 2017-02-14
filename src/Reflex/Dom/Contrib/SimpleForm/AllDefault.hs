@@ -85,7 +85,7 @@ instance Default (CssConfiguration) where
 
 
 
-instance Default (InputElementConfig) where
+instance Default (InputElementConfig t) where
   def = InputElementConfig Nothing Nothing Nothing
 
 defLayoutWrapper::RD.DomBuilder t m=>FormType->SFLayoutF t m

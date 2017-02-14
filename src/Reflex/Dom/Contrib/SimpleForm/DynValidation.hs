@@ -22,6 +22,11 @@ maybeToAV::Maybe a->AccValidation SimpleFormErrors a
 maybeToAV Nothing = AccFailure [SFNothing]
 maybeToAV (Just a) = AccSuccess a
 
+mergeAccValidation::AccValidation e (AccValidation e a) -> AccValidation e a
+mergeAccValidation x = case x of
+  AccSuccess y -> y
+  AccFailure errs -> AccFailure errs 
+
 newtype DynValidation t a = DynValidation { unDynValidation::Dynamic t (AccValidation SimpleFormErrors a) }
 
 dynValidationNothing::Reflex t=>DynValidation t a
@@ -32,6 +37,16 @@ dynValidationErr = DynValidation . constDyn . AccFailure
 
 joinDynOfDynValidation::Reflex t =>Dynamic t (DynValidation t a) -> DynValidation t a
 joinDynOfDynValidation = DynValidation . join . fmap unDynValidation
+
+{- Dynamic t is not traversable ??
+joinDynValidation::Reflex t=>DynValidation t (DynValidation t a) -> DynValidation t a
+joinDynValidation x =
+  let x'    = sequenceA $ unDynValidation x -- AccValidation (Dynamic t (DynValidation t a))
+      x''   =  (join . fmap unDynValidation) <$> x' -- AccValidation (Dynamic t (AccValidation t a))
+      x'''  = sequenceA x'' -- Dynamic t (AccValidation (AccValidation a))
+      x'''' = fmap mergeAccValidation x'''
+  in DynValidation x''''
+-}
 
 instance Reflex t=>Functor (DynValidation t) where
   fmap f dva = DynValidation $ fmap (fmap f) (unDynValidation dva)

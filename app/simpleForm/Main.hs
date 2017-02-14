@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TemplateHaskell           #-}
 {-# LANGUAGE TypeFamilies              #-}
+{-# LANGUAGE RecursiveDo               #-}
 module Main where
 
 import           Control.Lens                                (view, (^.))
@@ -83,10 +84,10 @@ validAge::Age->Either T.Text Age
 validAge a@(Age x) = if (x >= 0) then Right a else Left "Age must be > 0"
 
 instance SimpleFormInstanceC t m => Builder (SimpleFormR t m) Age where
-  buildA mFn ma =
+  buildA mFn ma = SimpleFormR $ mdo
     let labelCfg = LabelConfig "Age" M.empty
         inputCfg = InputElementConfig (Just "35") (Just "Age") (Just labelCfg)
-    in liftF (setInputConfig inputCfg) $ buildValidated validAge unAge Age mFn ma
+    unSF $ liftF (setInputConfig inputCfg) $ buildValidated validAge unAge Age mFn ma
 
 newtype EmailAddress = EmailAddress { unEmailAddress::T.Text } deriving (Show)
 
@@ -121,10 +122,11 @@ instance SimpleFormInstanceC t m=>Builder (SimpleFormR t m) User where
 
 testUserForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m->m ()
 testUserForm cfg = do
+  let user = User (Name "Adam") (EmailAddress "adam@adam") (Age 45)
   el "p" $ text ""
   el "h2" $ text "From a simple data structure, Output is an event, fired when submit button is clicked but only if data is of right types and valid."
-  newUserEv <- flexFill LayoutRight $ makeSimpleForm' cfg Nothing (buttonNoSubmit' "submit")
-  curUserDyn <- foldDyn const (User (Name "") (EmailAddress "") (Age 0)) newUserEv
+  newUserEv <- flexFill LayoutRight $ makeSimpleForm' cfg (Just user) (buttonNoSubmit' "submit")
+  curUserDyn <- foldDyn const user newUserEv
   dynText (printUser <$> curUserDyn)
 
 printUser::User->T.Text

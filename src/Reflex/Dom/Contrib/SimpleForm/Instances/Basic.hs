@@ -78,7 +78,6 @@ sfWidget fDyn fString mFN wc widget = do
         Just val -> M.union (attr RD.=: val) <$> attrsDyn
   isObserver <- (==ObserveOnly) <$> getFormType
   inputCfg <- view inputConfig
---  cssCfg <- view cssConfig
   inputCss <- inputClasses
   let mTitleVal = maybe (T.pack <$> mFN) Just (_inputTitle inputCfg) -- if none specified and there's a fieldname, use it.
       addTitle = addToAttrs "title" mTitleVal
