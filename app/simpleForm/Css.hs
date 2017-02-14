@@ -26,5 +26,7 @@ bootstrapSFConfig = bootstrapCss $ def
 
 bootstrapCss::SFConfigChanger t m
 bootstrapCss =
-  let cssCfg = CssConfiguration (oneClass "container") emptyCss emptyCss (oneClass "form-group") (oneClass "form-control") emptyCss emptyCss
+  let cssCfg = CssConfiguration
+        (const $ oneClass "container")
+        (const $ oneClass "form-group") (const $ oneClass "form-control") (const emptyCss) (const emptyCss)
   in (\cfg -> cfg { _cssConfig = cssCfg })

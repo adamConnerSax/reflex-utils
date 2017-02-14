@@ -21,7 +21,8 @@ import           Reflex.Dom.Contrib.Layout.FlexLayout          (flexCenter,
 import           Reflex.Dom.Contrib.Layout.Types               (CssClasses (..), LayoutDirection (..),
                                                                 LayoutOrientation (..),
                                                                 emptyCss,
-                                                                oneClass)
+                                                                oneClass,
+                                                                toCssString)
 
 import           Reflex.Dom.Contrib.CssUtils                   (CssLinks (..))
 import           Reflex.Dom.Contrib.Layout.ClayUtils           (cssToBS)
@@ -71,13 +72,14 @@ type DefaultConfigurationC t m =
 
 byFormType::FormType->a->a->a
 byFormType ft ifInteractive ifReadOnly = case ft of
-  Interactictive -> ifInteractive
-  ReadOnly -> ifReadOnly
+  Interactive -> ifInteractive
+  ObserveOnly -> ifReadOnly
 
 instance Default (CssConfiguration) where
   def = CssConfiguration
-    (byFormType (oneClass "sf-container") (oneClass "sf-observer"))
+    (\ft->byFormType ft (oneClass "sf-container") (oneClass "sf-observer"))
     (const $ oneClass "sf-item")
+    (const emptyCss)
     (const $ oneClass "sf-valid")
     (const $ oneClass "sf-invalid")
 
@@ -89,11 +91,11 @@ instance Default (InputElementConfig) where
 defLayoutWrapper::RD.DomBuilder t m=>FormType->SFLayoutF t m
 defLayoutWrapper _ w = do
   classes <- wrapperClasses
-  divClass (toCssString classes) w
+  RD.divClass (toCssString classes) w
 
-defFormItem::RD.DomBuilder t m=>FormType->SFLayoutF t m
-defFormItem _ w = do
-  classes <- allItemClasses
+defLayoutItem::RD.DomBuilder t m=>FormType->SFLayoutF t m
+defLayoutItem _ w = do
+  classes <- itemClasses
   liftLF (flexItem' classes) w
 
 defLayoutOriented::RD.DomBuilder t m=>FormType->LayoutOrientation->SFLayoutF t m
@@ -110,7 +112,7 @@ defLayoutCollapsible::RD.DomBuilder t m=>FormType->T.Text->CollapsibleInitialSta
 defLayoutCollapsible _ t is = liftLF (collapsibleWidget t is)
 
 instance RD.DomBuilder t m=>Default (LayoutConfiguration t m) where
-  def = LayoutConfiguration defFormItem defLayoutOriented defLayoutFill defLayoutCentered defLayoutCollapsible
+  def = LayoutConfiguration defLayoutWrapper defLayoutItem defLayoutOriented defLayoutFill defLayoutCentered defLayoutCollapsible
 
 instance DefaultConfigurationC t m=> Default (SimpleFormConfiguration t m) where
   def = SimpleFormConfiguration Interactive def def def def
@@ -144,11 +146,8 @@ defSumF conWidgets mDefCon = do
       getSFRP cn = SFRPair cn . fromJust . M.lookup cn . M.fromList
       pft (x,y) = SFRPair x y
       defPair = maybe (pft $ head conWidgets) (`getSFRP` conWidgets) mDefCon
-  validClasses <- validInputStyle
-  observerClasses <- observerOnlyStyle
-  isObserver <- (==ObserveOnly) <$> getFormType
-  let classes = if isObserver then observerClasses else validClasses
-      attrsDyn = R.constDyn (cssClassAttr classes <> titleAttr "Constructor")
+  validClasses <- validDataClasses
+  let attrsDyn = R.constDyn (cssClassAttr validClasses <> titleAttr "Constructor")
       wc = WidgetConfig RD.never defPair attrsDyn
   sfRow $ do
     sfrpCW <- sfItemL $ (sfWidget id (T.pack . sfrpCN) Nothing wc $ \wc' -> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getSFRP` conWidgets) wc')

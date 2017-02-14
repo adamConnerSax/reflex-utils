@@ -250,7 +250,7 @@ buildTraversableSFA' crI buildOne _ mfa =
 buildTraversableSFA::forall t m b g fa.(SimpleFormInstanceC t m,
                       B.Builder (SimpleFormR t m) b,Traversable g)=>CRepI fa (g b)->BuildF t m fa 
 buildTraversableSFA crI md mfa = do
-  validClasses <- validInputStyle
+  validClasses <- validDataClasses
   let attrsDyn = R.constDyn $ cssClassAttr validClasses :: R.Dynamic t (M.Map T.Text T.Text)
   sfColDynAttr attrsDyn $ sfCollapsible "" CollapsibleStartsOpen $ buildTraversableSFA' crI (\x -> sfItemL . unSF . B.buildA x) md mfa
 

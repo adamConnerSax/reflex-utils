@@ -96,9 +96,9 @@ instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR t m) where
 --askSimpleFormR::SimpleFormR t m (SimpleFormConfiguration m)
 
 runSimpleFormR::Monad m=>SimpleFormConfiguration t m->SimpleFormR t m a->m (DynValidation t a)
-runSimpleFormR cfg sfra =
-  let wrappedWidget = liftLF sfWrapper $ unSF sfra
-  runReaderT wrappedWidget $ cfg
+runSimpleFormR cfg sfra = do
+  let wrappedWidget = sfWrapper $ unSF sfra
+  runReaderT wrappedWidget cfg
 
 type SimpleFormC t m = (RD.DomBuilder t m, R.MonadHold t m {- , SimpleFormBuilderFunctions t m -})
 
@@ -129,7 +129,7 @@ asSimpleObserver cfg =
 -}
 
 makeSimpleForm::(SimpleFormC t m, B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->Maybe a->m (DynValidation t a)
-makeSimpleForm cfg ma = asSimpleForm cfg $ runSimpleFormR cfg $ B.buildA Nothing ma
+makeSimpleForm cfg ma = runSimpleFormR cfg $ B.buildA Nothing ma
 
 makeSimpleForm'::(SimpleFormC t m, RD.MonadHold t m
                  , B.Builder (SimpleFormR t m) a)=>
@@ -150,7 +150,7 @@ observeDynamic cfg aDyn = observeDynValidation cfg $ DynValidation $ fmap AccSuc
 observeDynValidation::(SimpleFormC t m,RD.PostBuild t m
                       ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->DynValidation t a->m (DynValidation t a)
 observeDynValidation cfg aDynM =
-  runSimpleFormR cfg . SimpleFormR . setToObserve $ do
+  runSimpleFormR (setToObserve cfg) . SimpleFormR  $ do
     let makeForm = accValidation (return . dynValidationErr) (unSF . buildA Nothing . Just)
         builtDyn = fmap makeForm (unDynValidation aDynM)  -- Dynamic t (ReaderT e m (DynValidation t a))
     newDynEv <- RD.dyn builtDyn -- Event t (DynValidation t a)
@@ -160,7 +160,7 @@ observeDynValidation cfg aDynM =
 observeWidget::(SimpleFormC t m
                ,B.Builder (SimpleFormR t m) a)=>SimpleFormConfiguration t m->m a->m (DynValidation t a)
 observeWidget cfg wa =
-  runSimpleFormR cfg . SimpleFormR . setToObserve $ do
+  runSimpleFormR (setToObserve cfg) . SimpleFormR $ do
     a <- lift wa
     unSF . buildA Nothing . Just $ a
 
@@ -216,19 +216,14 @@ sfAttrs mDyn mFN mTypeS = sfAttrs' mDyn mFN mTypeS (CssClasses [])
 sfAttrs'::(RD.MonadHold t m, R.Reflex t)
          =>DynValidation t a->Maybe FieldName->Maybe T.Text->CssClasses->SFR t m (R.Dynamic t (M.Map T.Text T.Text))
 sfAttrs' mDyn mFN mTypeS fixedCss = do
-  validClasses <- validInputStyle
-  invalidClasses <- invalidInputStyle
-  observerClasses <- observerOnlyStyle
-  fType <- getFormType
+  validClasses <- validDataClasses
+  invalidClasses <- invalidDataClasses
   let title = componentTitle mFN mTypeS
       validAttrs = titleAttr title <> cssClassAttr (validClasses <> fixedCss)
       invalidAttrs = titleAttr title <> cssClassAttr (invalidClasses <> fixedCss)
-      observerAttr = titleAttr title <> cssClassAttr (observerClasses <> fixedCss)
-  lift  $ case fType of
-         ObserveOnly -> return $ R.constDyn observerAttr
-         Interactive -> return . RD.ffor (unDynValidation mDyn) $ \x -> case x of
-                                                             (AccSuccess _)-> validAttrs
-                                                             (AccFailure _)->invalidAttrs
+  return . RD.ffor (unDynValidation mDyn) $ \x -> case x of
+                                                    (AccSuccess _)-> validAttrs
+                                                    (AccFailure _)->invalidAttrs
 
 
 componentTitle::Maybe FieldName->Maybe T.Text->T.Text

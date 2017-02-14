@@ -45,7 +45,7 @@ import           Reflex.Dom.Contrib.Widgets.Common
 -- From this lib
 
 import qualified DataBuilder                           as B
-import           Reflex.Dom.Contrib.Layout.Types       (toCssString)
+import           Reflex.Dom.Contrib.Layout.Types       (emptyCss, toCssString)
 import           Reflex.Dom.Contrib.ReflexConstraints
 import           Reflex.Dom.Contrib.SimpleForm.Builder
 -- instances
@@ -64,7 +64,7 @@ readOnlyW f wc = do
   RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
   return da
 
-sfWidget::(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)=>
+sfWidget::forall t m a b.(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)=>
           (a->b)->
           (a->T.Text)->
           Maybe FieldName->
@@ -78,11 +78,13 @@ sfWidget fDyn fString mFN wc widget = do
         Just val -> M.union (attr RD.=: val) <$> attrsDyn
   isObserver <- (==ObserveOnly) <$> getFormType
   inputCfg <- view inputConfig
-  cssCfg <- view cssConfig
+--  cssCfg <- view cssConfig
+  inputCss <- inputClasses
   let mTitleVal = maybe (T.pack <$> mFN) Just (_inputTitle inputCfg) -- if none specified and there's a fieldname, use it.
       addTitle = addToAttrs "title" mTitleVal
       addPlaceHolder = addToAttrs "placeholder" (_inputPlaceholder inputCfg)
-      addInputClass = addToAttrs "class" (Just . toCssString . _cssAllInputs $ cssCfg)
+      mInputClasses = if inputCss == emptyCss then Nothing else Just (toCssString inputCss)
+      addInputClass = addToAttrs "class" mInputClasses
       wcAll = over widgetConfig_attributes addTitle wc
       wcInput = over widgetConfig_attributes (addPlaceHolder . addInputClass) wcAll
       labeledWidget iw = case _inputLabelConfig inputCfg of
@@ -94,7 +96,7 @@ fromAccVal::AccValidation e a->a
 fromAccVal (AccSuccess a) = a
 fromAccVal (AccFailure _) = undefined
 
-item::Monad m=>SFLayoutF t m 
+item::Monad m=>SFLayoutF t m
 item = sfItem
 
 instance R.Reflex t=>Functor (HtmlWidget t) where

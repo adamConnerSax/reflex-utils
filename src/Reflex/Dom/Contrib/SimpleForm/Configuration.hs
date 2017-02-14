@@ -32,6 +32,7 @@ module Reflex.Dom.Contrib.SimpleForm.Configuration
   , setInputConfig
   , wrapperClasses
   , itemClasses
+  , inputClasses
   , validDataClasses
   , invalidDataClasses
   , setToObserve
@@ -40,6 +41,7 @@ module Reflex.Dom.Contrib.SimpleForm.Configuration
   , sfItemR
   , sfRow
   , sfCol
+  , sfWrapper
   , sfItem
   , sfCenter
   , sfOrient
@@ -97,7 +99,7 @@ data CssConfiguration = CssConfiguration
   {
     _cssWrapper::FormType->CssClasses
   , _cssAllItems::FormType->CssClasses
---  , _cssAllData::FormType->CssClasses
+  , _cssAllInputs::FormType->CssClasses
   , _cssValidData::FormType->CssClasses
   , _cssInvalidData::FormType->CssClasses -- ??
   }
@@ -152,10 +154,8 @@ wrapperClasses = getClasses _cssWrapper
 itemClasses::Monad m=>SFR t m CssClasses 
 itemClasses = getClasses _cssAllItems
 
-{-
-allDataClasses::Monad m=>SFR t m CssClasses 
-allDataClasses = getClasses _cssAllData
--}
+inputClasses::Monad m=>SFR t m CssClasses 
+inputClasses = getClasses _cssAllInputs
 
 validDataClasses::Monad m=>SFR t m CssClasses 
 validDataClasses = getClasses _cssValidData
@@ -166,8 +166,8 @@ invalidDataClasses = getClasses _cssInvalidData
 getFormType::Monad m=>SFR t m FormType
 getFormType = _formType <$> ask
 
-setToObserve::Monad m=>SFLayoutF t m
-setToObserve = local (\fc -> fc {_formType = ObserveOnly })
+setToObserve::SimpleFormConfiguration t m -> SimpleFormConfiguration t m
+setToObserve cfg = cfg {_formType = ObserveOnly }
 --  fc <- getFormConfig
 --  setFormConfig fc{ formType = ObserveOnly }  w
 
