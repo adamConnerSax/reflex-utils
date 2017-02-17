@@ -151,7 +151,7 @@ defSumF conWidgets mDefCon = do
       wc = WidgetConfig RD.never defPair attrsDyn
   sfRow $ do
     sfrpCW <- sfItemL $ (sfWidget id (T.pack . sfrpCN) Nothing wc $ \wc' -> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getSFRP` conWidgets) wc')
-    unSF $ switchingSFR (SimpleFormR . sfrpV) defPair (R.updated sfrpCW)
+    unSF $ switchingSFR (makeSimpleFormR . sfrpV) defPair (R.updated sfrpCW)
 
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 

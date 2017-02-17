@@ -3,7 +3,7 @@ module Reflex.Dom.Contrib.SimpleForm.Instances
          sfWidget
        , buildReadMaybe
        , buildReadable
-       , buildValidated
+       , buildValidatedIso'
        , buildValidatedIso
        , SimpleFormInstanceC
        ) where

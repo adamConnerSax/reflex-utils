@@ -157,6 +157,7 @@ executable reflex-utils-layout
                      , exception-transformers
                      , ref-tf
                      , data-default
+                     , dataBuilder
                      , lens
                      , transformers
                      , mtl
@@ -190,6 +191,7 @@ executable reflex-utils-simpleForm-warp
                      , transformers
                      , mtl
                      , data-default
+                     , dataBuilder
                      , lens
                      , ref-tf
                      , file-embed
