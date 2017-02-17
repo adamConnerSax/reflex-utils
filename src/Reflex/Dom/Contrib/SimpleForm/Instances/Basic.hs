@@ -128,7 +128,7 @@ buildReadMaybe mFN ma = SimpleFormR $ mdo
 
 -- | String and Text
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) T.Text where
-  buildA mFN mInitial = SimpleFormR $ mdo
+  buildValidated va mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just "Text")
     let initial = fromMaybe "" mInitial
         wc = WidgetConfig RD.never initial attrsDyn
@@ -137,12 +137,12 @@ instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) T.Text where
 
 
 instance {-# OVERLAPPING #-} SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) String where
-  buildA mFN mInitial = T.unpack <$> buildA mFN (T.pack <$> mInitial)
+  buildValidated va mFN mInitial = T.unpack <$> buildValidated va mFN (T.pack <$> mInitial)
 
 
 {- Not clear what to do here! Default behavior is bad since Char is a huge enum.
 instance SimpleFormC e t m=>B.Builder (RFormWidget e t m) Char where
-  buildA md mInitial = RFormWidget $ do
+  buildValidated va md mInitial = RFormWidget $ do
     e <- ask
     attrsDyn <- makeSFAttrs "Char"
     lift $ item attrs0e $ _hwidget_value <$> readableWidget (WidgetConfig RD.never mInitial attrsDyn)
@@ -150,24 +150,24 @@ instance SimpleFormC e t m=>B.Builder (RFormWidget e t m) Char where
 
 -- We don't need this.  If we leave it out, the Enum instance will work an we get a dropdown instead of a checkbox.  Which might be better...
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Bool where
-  buildA mFN mInitial = SimpleFormR $ mdo
+  buildValidated va mFN mInitial = SimpleFormR $ mdo
     let initial = fromMaybe False mInitial
         wc = WidgetConfig RD.never initial attrsDyn
     attrsDyn <- sfAttrs dynValidationNothing mFN (Just $ "Bool")
     item $ DynValidation <$> (sfWidget AccSuccess showText mFN wc $ \c -> _hwidget_value <$> htmlCheckbox c)
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Double where
-  buildA mFN mInitial = SimpleFormR $ mdo
+  buildValidated va mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just "Double")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
     dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV doubleWidget) c)
     return dma
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Float where
-  buildA = buildReadable
+  buildValidated va = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Int where
-  buildA mFN mInitial = SimpleFormR $ mdo
+  buildValidated va mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just "Int")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
     dma <- item $ DynValidation <$> sfWidget id  (showText . fromAccVal) mFN wc (\c->_hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV intWidget) c)
@@ -175,49 +175,49 @@ instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Int where
 
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Integer where
-  buildA mFN mInitial = SimpleFormR $ mdo
+  buildValidated va mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "Int")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
     dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV integerWidget) c)
     return dma
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Int8 where
-  buildA = buildReadable
+  buildValidated va = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Int16 where
-  buildA = buildReadable
+  buildValidated va = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Int32 where
-  buildA = buildReadable
+  buildValidated va = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Int64 where
-  buildA = buildReadable
+  buildValidated va = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Word8 where
-  buildA = buildReadable
+  buildValidated va = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Word16 where
-  buildA = buildReadable
+  buildValidated va = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Word32 where
-  buildA = buildReadable
+  buildValidated va = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Word64 where
-  buildA = buildReadable
+  buildValidated va = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) ByteString where
-  buildA = buildReadable
+  buildValidated va = buildReadable
 
 --dateTime and date
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) UTCTime where
-  buildA mFN mInitial = SimpleFormR $ mdo
+  buildValidated va mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "UTCTime")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
     dma<-item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateTimeWidget) c)
     return dma
 
 instance SimpleFormInstanceC t m=>B.Builder (SimpleFormR t m) Day where
-  buildA mFN mInitial = SimpleFormR $ mdo
+  buildValidated va mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "Day")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
     dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateWidget) c)
@@ -232,7 +232,7 @@ instance (SimpleFormC t m,B.Builder (SimpleFormR t m) a,B.Builder (SimpleFormR t
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, Eq a)
                               =>B.Builder (SimpleFormR t m) a where
-  buildA mFN mInitial = SimpleFormR $ mdo
+  buildValidated va mFN mInitial = SimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN Nothing
     let values = [minBound..] :: [a]
         initial = fromMaybe (head values) mInitial
@@ -252,12 +252,12 @@ instance (SimpleFormC t m,
           B.Builder  (SimpleFormR t m)  b,
           B.Builder  (SimpleFormR t m)  c)
          =>B.Builder (SimpleFormR t m) (a,b,c) where
-  buildA mFN mTup = SimpleFormR $ do
+  buildValidated va mFN mTup = SimpleFormR $ do
     let (ma,mb,mc) = maybe (Nothing,Nothing,Nothing) (\(a,b,c)->(Just a, Just b, Just c)) mTup
     sfRow $ do
-      maW <- unSF $ B.buildA Nothing ma
-      mbW <- unSF $ B.buildA Nothing mb
-      mcW <- unSF $ B.buildA Nothing mc
+      maW <- unSF $ B.buildValidated va Nothing ma
+      mbW <- unSF $ B.buildValidated va Nothing mb
+      mcW <- unSF $ B.buildValidated va Nothing mc
       return $ (,,) <$> maW <*> mbW <*> mcW
 
 instance (SimpleFormC t m,
@@ -266,13 +266,13 @@ instance (SimpleFormC t m,
           B.Builder  (SimpleFormR t m)  c,
           B.Builder  (SimpleFormR t m)  d)
          =>B.Builder (SimpleFormR t m) (a,b,c,d) where
-  buildA mFN mTup = SimpleFormR $ do
+  buildValidated va mFN mTup = SimpleFormR $ do
     let (ma,mb,mc,md) = maybe (Nothing,Nothing,Nothing,Nothing) (\(a,b,c,d)->(Just a, Just b, Just c,Just d)) mTup
     sfRow $ do
-      maW <- unSF $ B.buildA Nothing ma
-      mbW <- unSF $ B.buildA Nothing mb
-      mcW <- unSF $ B.buildA Nothing mc
-      mdW <- unSF $ B.buildA Nothing md
+      maW <- unSF $ B.buildValidated va Nothing ma
+      mbW <- unSF $ B.buildValidated va Nothing mb
+      mcW <- unSF $ B.buildValidated va Nothing mc
+      mdW <- unSF $ B.buildValidated va Nothing md
       return  $ (,,,) <$> maW <*> mbW <*> mcW <*> mdW
 
 instance (SimpleFormC t m,
@@ -282,12 +282,12 @@ instance (SimpleFormC t m,
           B.Builder  (SimpleFormR t m)  d,
           B.Builder  (SimpleFormR t m)  e)
          =>B.Builder (SimpleFormR t m) (a,b,c,d,e) where
-  buildA mFN mTup = SimpleFormR $ do
+  buildValidated va mFN mTup = SimpleFormR $ do
     let (ma,mb,mc,md,me) = maybe (Nothing,Nothing,Nothing,Nothing,Nothing) (\(a,b,c,d,e)->(Just a, Just b, Just c, Just d, Just e)) mTup
     sfRow $ do
-      maW <- unSF $ B.buildA Nothing ma
-      mbW <- unSF $ B.buildA Nothing mb
-      mcW <- unSF $ B.buildA Nothing mc
-      mdW <- unSF $ B.buildA Nothing md
-      meW <- unSF $ B.buildA Nothing me
+      maW <- unSF $ B.buildValidated va Nothing ma
+      mbW <- unSF $ B.buildValidated va Nothing mb
+      mcW <- unSF $ B.buildValidated va Nothing mc
+      mdW <- unSF $ B.buildValidated va Nothing md
+      meW <- unSF $ B.buildValidated va Nothing me
       return $ (,,,,) <$> maW <*> mbW <*> mcW <*> mdW <*> meW
