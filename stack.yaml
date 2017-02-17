@@ -7,7 +7,7 @@ resolver: nightly-2017-02-03
 packages:
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
-    commit: "a4f7ad82c76c77efbb15a72b97953fe0c13c4ba3"
+    commit: "1ecfec429d5b11ab934e0f93d7ac852a2c9ea517"
   extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex

@@ -75,7 +75,7 @@ data FormType = Interactive | ObserveOnly deriving (Eq)
 
 data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)
 
-type SFR t m = ReaderT (SimpleFormConfiguration t m) m
+type SFR t m = ReaderT (SimpleFormConfiguration t m) m 
 type SFRW t m a = SFR t m (DynValidation t a)
 
 type SFLayoutF t m = forall a.(SFR t m a -> SFR t m a)
@@ -131,6 +131,10 @@ type SFConfigChanger t m = SimpleFormConfiguration t m -> SimpleFormConfiguratio
 
 data SimpleFormIncludedCss = SimpleFormIncludedCss { cssToEmbed::ByteString, cssToLink::CssLinks }
 
+type Validator a = a -> Either Text a
+
+data BuilderConfiguration t m a = BuilderConfiguration { formConfig::SimpleFormConfiguration t m, validationF::Validator a}
+
 --makeLenses ''LayoutConfiguration
 makeClassy ''CssConfiguration
 makeClassy ''InputElementConfig
@@ -140,11 +144,16 @@ makeClassy ''SimpleFormConfiguration
 -- these functions allow direct use from within the reader
 
 setInputConfig::Monad m=>InputElementConfig t->SFLayoutF t m
-setInputConfig ic = local (\cfg -> cfg {_inputConfig = ic })
+setInputConfig ic = let
+  f (SimpleFormConfiguration ft bf lc cc _) = SimpleFormConfiguration ft bf lc cc ic
+  in local f
+
+getSFC::Monad m=>SFR t m (SimpleFormConfiguration t m)
+getSFC = ask
 
 getClasses::Monad m=>(CssConfiguration -> (FormType->CssClasses))->SFR t m CssClasses
 getClasses selector = do
-  fType <- _formType <$> ask
+  fType <- _formType <$> getSFC
   cssF <- (selector . _cssConfig) <$> ask
   return $ cssF fType
   
@@ -164,45 +173,45 @@ invalidDataClasses::Monad m=>SFR t m CssClasses
 invalidDataClasses = getClasses _cssInvalidData
 
 getFormType::Monad m=>SFR t m FormType
-getFormType = _formType <$> ask
+getFormType = _formType <$> getSFC
 
 setToObserve::SimpleFormConfiguration t m -> SimpleFormConfiguration t m
 setToObserve cfg = cfg {_formType = ObserveOnly }
 
 sfWrapper::Monad m=>SFLayoutF t m
 sfWrapper ra = do
-  fType <- _formType <$> ask
+  fType <- _formType <$> getSFC
   f <- layoutWrapper . _layoutConfig <$> ask
   f fType ra  
 
 sfItem::Monad m=>SFLayoutF t m 
 sfItem ra = do
-  fType <- _formType <$> ask
+  fType <- _formType <$> getSFC
   f <- layoutItem . _layoutConfig <$> ask
   f fType ra
 
 sfCenter::Monad m=>LayoutOrientation->SFLayoutF t m
 sfCenter o ra = do
-  fType <- _formType <$> ask
+  fType <- _formType <$> getSFC
   f <- layoutCentered . _layoutConfig <$> ask
   f fType o ra
 
 sfFill::Monad m=>LayoutDirection->SFLayoutF t m
 sfFill d ra = do
-  fType <- _formType <$> ask
+  fType <- _formType <$> getSFC
   f <- layoutFill . _layoutConfig <$> ask
   f fType d ra
 
 sfOrient::Monad m=>LayoutOrientation->SFLayoutF t m
 sfOrient o ra = do
-  fType <- _formType <$> ask
-  f <- layoutOriented . _layoutConfig <$> ask
+  fType <- _formType <$> getSFC
+  f <- layoutOriented . _layoutConfig <$> getSFC
   f fType o ra
 
 sfCollapsible::Monad m=>Text->CollapsibleInitialState->SFLayoutF t m
 sfCollapsible t is ra = do
-  fType <- _formType <$> ask
-  f <- layoutCollapsible . _layoutConfig <$> ask
+  fType <- _formType <$> getSFC
+  f <- layoutCollapsible . _layoutConfig <$> getSFC
   f fType t is ra
   
 sfItemL::Monad m=>SFLayoutF t m
@@ -219,5 +228,5 @@ sfCol = sfItem . sfOrient LayoutVertical
 
 sfDynamicDiv::Monad m=>DynAttrs t->SFLayoutF t m
 sfDynamicDiv dynAttrs ra = do
-  f <- dynamicDiv . _builderFunctions <$> ask
+  f <- dynamicDiv . _builderFunctions <$> getSFC
   f dynAttrs ra

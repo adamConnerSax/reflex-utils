@@ -226,9 +226,13 @@ instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Day wher
     return dma
 
 -- uses generics to build instances
-instance (SimpleFormC t m,B.Builder (SFR t m) (DynValidation t) a)=>B.Builder (SFR t m) (DynValidation t) (Maybe a)
+instance (SimpleFormC t m
+         ,B.Builder (SFR t m) (DynValidation t) a
+         ,B.Validatable (DynValidation t) a)=>B.Builder (SFR t m) (DynValidation t) (Maybe a)
 
-instance (SimpleFormC t m,B.Builder (SFR t m) (DynValidation t) a,B.Builder (SFR t m) (DynValidation t) b)=>B.Builder (SFR t m) (DynValidation t) (Either a b)
+instance (SimpleFormC t m
+         ,B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a
+         ,B.Builder (SFR t m) (DynValidation t) b, B.Validatable (DynValidation t) b)=>B.Builder (SFR t m) (DynValidation t) (Either a b)
 
 
 -- | Enums become dropdowns
@@ -239,28 +243,28 @@ instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, 
     let values = [minBound..] :: [a]
         initial = fromMaybe (head values) mInitial
         wc = WidgetConfig RD.never initial attrsDyn
-    dma <- item $ DynValidation <$> sfWidget AccSuccess showText mFN wc (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
+    dma <- item . B.validatefv va $  DynValidation <$> sfWidget AccSuccess showText mFN wc (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
     return dma
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
 -- generics for (,) since mkDyn is not an optimization here
-instance (SimpleFormC t m,
-          B.Builder (SFR t m) (DynValidation t)  a,
-          B.Builder (SFR t m) (DynValidation t)  b)
+instance (SimpleFormC t m
+         , B.Builder (SFR t m) (DynValidation t)  a, B.Validatable (DynValidation t) a
+         , B.Builder (SFR t m) (DynValidation t)  b, B.Validatable (DynValidation t) b)
          =>B.Builder (SFR t m) (DynValidation t) (a,b)
 
-instance (SimpleFormC t m,
-          B.Builder (SFR t m) (DynValidation t)  a,
-          B.Builder (SFR t m) (DynValidation t)  b,
-          B.Builder (SFR t m) (DynValidation t)  c)
+instance (SimpleFormC t m
+         , B.Builder (SFR t m) (DynValidation t)  a, B.Validatable (DynValidation t) a
+         , B.Builder (SFR t m) (DynValidation t)  b, B.Validatable (DynValidation t) b
+         , B.Builder (SFR t m) (DynValidation t)  c, B.Validatable (DynValidation t) c)
          =>B.Builder (SFR t m) (DynValidation t) (a,b,c) where
   buildValidated va mFN mTup = makeSimpleFormR $ do
     let (ma,mb,mc) = maybe (Nothing,Nothing,Nothing) (\(a,b,c)->(Just a, Just b, Just c)) mTup
     sfRow $ do
-      maW <- unSF $ B.buildValidated va Nothing ma
-      mbW <- unSF $ B.buildValidated va Nothing mb
-      mcW <- unSF $ B.buildValidated va Nothing mc
-      return $ (,,) <$> maW <*> mbW <*> mcW
+      maW <- unSF $ B.buildA Nothing ma
+      mbW <- unSF $ B.buildA Nothing mb
+      mcW <- unSF $ B.buildA Nothing mc
+      return . B.validatefv va $ (,,) <$> maW <*> mbW <*> mcW
 
 instance (SimpleFormC t m,
           B.Builder (SFR t m) (DynValidation t)  a,
