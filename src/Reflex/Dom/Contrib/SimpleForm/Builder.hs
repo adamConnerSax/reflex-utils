@@ -95,7 +95,7 @@ makeSimpleFormR = Compose
 unSF::SimpleFormR t m a->SFRW t m a
 unSF = getCompose
 
-type BuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a)
+type BuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
 {-
 instance (R.Reflex t, Functor m)=>Functor (SimpleFormR t m) where
   fmap f sfra = SimpleFormR $ fmap (fmap f) (unSF sfra)
@@ -145,7 +145,8 @@ switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = makeSimpleFormR $ do
   lift $ joinDynOfDynValidation <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)
 
 
-makeSimpleForm::(SimpleFormC t m, BuilderC t m a)=>SimpleFormConfiguration t m->Maybe a->m (DynValidation t a)
+makeSimpleForm::(SimpleFormC t m,
+                 BuilderC t m a)=>SimpleFormConfiguration t m->Maybe a->m (DynValidation t a)
 makeSimpleForm cfg ma = runSimpleFormR cfg $ B.buildA Nothing ma
 
 makeSimpleForm'::(SimpleFormC t m, RD.MonadHold t m
