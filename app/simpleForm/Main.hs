@@ -87,11 +87,11 @@ instance Reflex t=>B.Validatable (DynValidation t) Age where
   validate = liftValidation ((>0) . unAge) (const "Age must be > 0")
 
 instance SimpleFormInstanceC t m => Builder (SFR t m) (DynValidation t) Age where
-  buildValidated va mFn ma = B.validateFV va .(fmap Age) $ makeSimpleFormR $ mdo
+  buildValidated va mFn ma = 
     let labelCfg = LabelConfig "Age" M.empty
         inputCfg = InputElementConfig (Just "35") (Just "Age") (Just labelCfg)
-        va = liftValidation (>0) (const "Age must be > 0")
-    unSF $ liftF (setInputConfig inputCfg) $ buildValidated va mFn ma
+        vInt = liftValidation (>0) (const "Age must be > 0")
+    in B.validateFV va . (fmap Age) $ liftF (setInputConfig inputCfg) $ buildValidated vInt mFn (unAge <$> ma)
 
 newtype EmailAddress = EmailAddress { unEmailAddress::T.Text } deriving (Show)
 
@@ -101,18 +101,18 @@ validEmail address = let
   in (T.length userPart >= 1) && (T.length domainPart >= 2)
 --  in if valid then Right ea else Left "Email address must be of the form a@b"
 
-instance B.Validatable (DynValidation t) EmailAddress where
+instance Reflex t=>B.Validatable (DynValidation t) EmailAddress where
   validate = liftValidation (validEmail . unEmailAddress) (const "Email address must be of the form a@b")
 
 instance SimpleFormInstanceC t m => Builder (SFR t m) (DynValidation t) EmailAddress where
-  buildValidated mFn ma =
+  buildValidated va mFn ma =
     let labelCfg = LabelConfig "Email" M.empty
         inputCfg = InputElementConfig (Just "yourname@emailprovider.com") (Just "Email") (Just labelCfg)
-        va = liftValidation validEmail (const "Email address must be of the form a@b")
-    in B.validateFV va $ liftF (setInputConfig inputCfg) $ buildValidated va mFn ma
+        vText = liftValidation validEmail (const "Email address must be of the form a@b")
+    in B.validateFV va . (fmap EmailAddress) $ liftF (setInputConfig inputCfg) $ buildValidated vText mFn (unEmailAddress <$> ma)
 
 newtype Name = Name { unName::T.Text } deriving (Show)
-instance B.Validatable (DynValidation t) Name -- uses default which is that everything is valid
+instance Reflex t=>B.Validatable (DynValidation t) Name -- uses default which is that everything is valid
 
 instance SimpleFormInstanceC t m => Builder (SFR t m) (DynValidation t)  Name where
   buildValidated va mFn ma =
@@ -126,7 +126,7 @@ data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Gen
 instance Generic User
 instance HasDatatypeInfo User
 instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) User where
-  buildValidated va mFN = liftF sfCol . gBuildA va mFN
+  buildValidated va mFN = liftF sfCol . gBuildValidated va mFN
 
 
 
@@ -182,12 +182,12 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 instance Generic A
 instance HasDatatypeInfo A
 instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) A where
-  buildValidated va mFN = liftF sfRow . gBuildA mFN va
+  buildValidated va mFN = liftF sfRow . gBuildValidated va mFN
 
 instance Generic B
 instance HasDatatypeInfo B
 instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) B where
-  buildValidated va mFN = liftF (fieldSet "B" . sfRow) . gBuildA va mFN
+  buildValidated va mFN = liftF (fieldSet "B" . sfRow) . gBuildValidated va mFN
 
 instance Generic MyMap
 instance HasDatatypeInfo MyMap
@@ -196,12 +196,12 @@ instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) MyMap
 instance Generic C
 instance HasDatatypeInfo C
 instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) C where
-  buildValidated va mFN = liftF (fieldSet "C" . sfCol) . gBuildA va mFN
+  buildValidated va mFN = liftF (fieldSet "C" . sfCol) . gBuildValidated va mFN
 
 -- More layout options are available if you write custom instances.
 -- handwritten single constructor instance
 instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) BRec where
-  buildValidated mFN mBRec = B.validateFV va . makeSimpleFormR $ do
+  buildValidated va mFN mBRec = B.validateFV va . makeSimpleFormR $ do
     let b1 = buildA Nothing (oneB <$> mBRec)
         b2 = liftF (sfCenter LayoutHorizontal) $ buildA Nothing (seqOfA <$> mBRec)
         b3 = liftF (sfCenter LayoutHorizontal) $ buildA Nothing (hashSetOfString <$> mBRec)
@@ -209,20 +209,27 @@ instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) BRec where
 
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
-buildDate::SimpleFormInstanceC t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SFR t m) (DynValidation t) DateOrDateTime
-buildDate mFN ms = MDWrapped matched ("Date",mFN) bldr where
+buildDate::SimpleFormInstanceC t m=>B.Validator (DynValidation t) DateOrDateTime->
+  Maybe FieldName->
+  Maybe DateOrDateTime->
+  MDWrapped (SFR t m) (DynValidation t) DateOrDateTime
+buildDate va mFN ms = MDWrapped matched ("Date",mFN) bldr where
 --  inputCfg = InputElementConfig (Just "1/1/2001") (Just "Date") Nothing
   (matched,mDay) = case ms of
     Just (D day) -> (True,Just day)
     _            -> (False, Nothing)
-  bldr = D <$> buildA Nothing mDay
+  bldr = B.validateFV va $ D <$> buildA Nothing mDay
 
-buildDateTime::SimpleFormInstanceC t m=>Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SFR t m) (DynValidation t) DateOrDateTime
-buildDateTime mFN ms = MDWrapped matched ("DateTime",mFN) bldr where
+buildDateTime::SimpleFormInstanceC t m=>
+  B.Validator (DynValidation t) DateOrDateTime ->
+  Maybe FieldName->
+  Maybe DateOrDateTime->
+  MDWrapped (SFR t m) (DynValidation t) DateOrDateTime
+buildDateTime va mFN ms = MDWrapped matched ("DateTime",mFN) bldr where
   (matched,mDateTime) = case ms of
     Just (DT dt) -> (True,Just dt)
     _            -> (False, Nothing)
-  bldr = DT <$> buildA Nothing mDateTime
+  bldr = B.validateFV va $ DT <$> buildA Nothing mDateTime
 
 instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) DateOrDateTime where
   buildValidated = B.buildAFromConList [buildDate,buildDateTime]

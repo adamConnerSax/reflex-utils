@@ -59,6 +59,8 @@ type BasicC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
 type SimpleFormInstanceC t m = (SimpleFormC t m, MonadWidgetExtraC t m, RD.PostBuild t m, MonadFix m)
 type VBuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
 
+instance {-# OVERLAPPABLE #-} R.Reflex t=>B.Validatable (DynValidation t) a
+
 readOnlyW::(BasicC t m, RD.PostBuild t m)=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
 readOnlyW f wc = do
   da <- R.foldDyn const (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
@@ -107,10 +109,10 @@ gWidgetMToAV::RD.DomBuilder t m=>GWidget t m (Maybe a)->GWidget t m (AccValidati
 gWidgetMToAV gwma wcav = fmap maybeToAV <$> gwma (avToMaybe <$> wcav)
 
 buildReadable::(SimpleFormInstanceC t m, Readable a, Show a)=>B.Validator (DynValidation t) a->Maybe FieldName->Maybe a->SimpleFormR t m a
-buildReadable va mFN ma = B.validateFV va . makeSimpleFormR $ mdo
+buildReadable va mFN ma = makeSimpleFormR $ mdo
   attrsDyn <- sfAttrs dma mFN Nothing
   let wc = WidgetConfig RD.never (maybeToAV ma) attrsDyn
-  dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV readableWidget) c)
+  dma <- item $ B.validatefv va $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV readableWidget) c)
   return dma
 
 readMaybeAV::Read a=>Maybe FieldName->T.Text->AccValidation SimpleFormErrors a
@@ -121,22 +123,21 @@ readMaybeAV mFN t =
       Just a -> AccSuccess a
 
 buildReadMaybe::(SimpleFormInstanceC t m, Read a, Show a)=>B.Validator (DynValidation t) a->Maybe FieldName->Maybe a->SimpleFormR t m a
-buildReadMaybe va mFN ma = B.validateFV va . makeSimpleFormR $ mdo
+buildReadMaybe va mFN ma = makeSimpleFormR $ mdo
   attrsDyn <- sfAttrs dma mFN Nothing
   let initial = maybe "" showText ma
       wc = WidgetConfig RD.never initial attrsDyn
-  dma <- item $ DynValidation <$> sfWidget (readMaybeAV mFN) showText mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c)
+  dma <- item $ B.validatefv va $ DynValidation <$> sfWidget (readMaybeAV mFN) showText mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c)
   return dma
 
 -- | String and Text
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) T.Text where
-  buildValidated va mFN mInitial = B.validateFV va . makeSimpleFormR $ mdo
+  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just "Text")
     let initial = fromMaybe "" mInitial
         wc = WidgetConfig RD.never initial attrsDyn
-    dma <- item $ DynValidation <$> sfWidget AccSuccess showText mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput "Text") c)
+    dma <- item $ B.validatefv va $ DynValidation <$> sfWidget AccSuccess showText mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput "Text") c)
     return dma
-
 
 instance {-# OVERLAPPING #-} SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) String where
   buildValidated va mFN mInitial =
@@ -161,28 +162,27 @@ instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Bool whe
     item $ DynValidation <$> (sfWidget AccSuccess showText mFN wc $ \c -> _hwidget_value <$> htmlCheckbox c)
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Double where
-  buildValidated va mFN mInitial = B.validateFV va . makeSimpleFormR $ mdo
+  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just "Double")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV doubleWidget) c)
+    dma <- item $ B.validatefv va $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV doubleWidget) c)
     return dma
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Float where
   buildValidated va = buildReadable va
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Int where
-  buildValidated va mFN mInitial = B.validateFV va . makeSimpleFormR $ mdo
+  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just "Int")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- item $ DynValidation <$> sfWidget id  (showText . fromAccVal) mFN wc (\c->_hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV intWidget) c)
+    dma <- item . B.validatefv va $ DynValidation <$> sfWidget id  (showText . fromAccVal) mFN wc (\c->_hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV intWidget) c)
     return dma
 
-
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Integer where
-  buildValidated va mFN mInitial = B.validateFV va . makeSimpleFormR $ mdo
+  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "Int")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV integerWidget) c)
+    dma <- item $ B.validatefv va $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV integerWidget) c)
     return dma
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Int8 where
@@ -214,17 +214,17 @@ instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) ByteStri
 
 --dateTime and date
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) UTCTime where
-  buildValidated va mFN mInitial = B.validateFV va . makeSimpleFormR $ mdo
+  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "UTCTime")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma<-item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateTimeWidget) c)
+    dma<-item $ B.validatefv va $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateTimeWidget) c)
     return dma
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Day where
-  buildValidated va mFN mInitial = B.validateFV va . makeSimpleFormR $ mdo
+  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN (Just $ "Day")
     let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- item $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateWidget) c)
+    dma <- item $ B.validatefv va $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateWidget) c)
     return dma
 
 -- uses generics to build instances
@@ -236,7 +236,7 @@ instance (SimpleFormC t m, VBuilderC t m a, VBuilderC t m b)=>B.Builder (SFR t m
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, Eq a)
                               =>B.Builder (SFR t m) (DynValidation t) a where
-  buildValidated va mFN mInitial = B.validateFV va . makeSimpleFormR $ mdo
+  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
     attrsDyn <- sfAttrs dma mFN Nothing
     let values = [minBound..] :: [a]
         initial = fromMaybe (head values) mInitial
@@ -255,7 +255,7 @@ instance (SimpleFormC t m, VBuilderC t m a, VBuilderC t m b, VBuilderC t m c)=>B
       maW <- unSF $ B.buildA Nothing ma
       mbW <- unSF $ B.buildA Nothing mb
       mcW <- unSF $ B.buildA Nothing mc
-      return  $ (,,) <$> maW <*> mbW <*> mcW
+      return $ (,,) <$> maW <*> mbW <*> mcW
 
 instance (SimpleFormC t m, VBuilderC t m a, VBuilderC t m b, VBuilderC t m c, VBuilderC t m d)
          =>B.Builder (SFR t m) (DynValidation t) (a,b,c,d) where
