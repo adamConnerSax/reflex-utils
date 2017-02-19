@@ -96,39 +96,6 @@ unSF::SimpleFormR t m a->SFRW t m a
 unSF = getCompose
 
 type BuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
-{-
-instance (R.Reflex t, Functor m)=>Functor (SimpleFormR t m) where
-  fmap f sfra = SimpleFormR $ fmap (fmap f) (unSF sfra)
-
-instance (R.Reflex t, R.MonadHold t m)=>Applicative (SimpleFormR t m) where
-  pure = SimpleFormR . return . pure
-  sfrF <*> sfrA = SimpleFormR $ do
-    dmF <- unSF sfrF
-    dmA <- unSF sfrA
-    return $ dmF <*> dmA
-
-instance (R.Reflex t, R.MonadHold t m)=>Monad (SimpleFormR t m) where
-  return = pure
-  ma >>= f = SimpleFormR $ do -- f::a->SimpleFormR t m b, we want DynValidation t a ->
-    cfg <- ask
-    let sfrma = unSF ma -- ReaderT (SimpleFormConfiguration t m) (DynValidation t a)
-        f'  = fmap . fmap . f -- f'::ReaderT (SimpleFormConfiguration t m) (DynValidation t a) -> ReaderT (SimpleFormConfiguration t m) (DynValidation t (SimpleFormR t m b))
-    dvsfb <- unSF <$> f' sfrma -- DynValidation t (ReaderT (SimpleFormConfiguration t m) (DynValidation t b))
-    x <- traverse dvsfb -- (DynValidation t (DynValidation t b))
-
-    let dvmdvb = fmap (flip runReaderT cfg) dvsfb -- DynValidation t (m (DynValidation t b))
-
-
-    (fmap $ (foldDyn dyn) . traverse . unDynValidation $ unSF ma >>= f' -- AccValidation $ (m (Event t (Dynamic t (AccValidation b))))
-
-
-instance (Monad m, R.Reflex t)=>MonadReader (SimpleFormConfiguration t m) (SimpleFormR t m) where
-  ask = SimpleFormR $ do
-    cfg <- ask
-    return (pure cfg)
-  local f = liftF (local f)
--}
-
 
 runSimpleFormR::Monad m=>SimpleFormConfiguration t m->SimpleFormR t m a->m (DynValidation t a)
 runSimpleFormR cfg sfra = runSimpleFormR' cfg sfra return

@@ -25,10 +25,11 @@ import           Control.Monad.Reader                  (lift)
 import qualified Data.Map                              as M
 import           Data.Maybe                            (fromMaybe)
 import           Data.Monoid                           ((<>))
-import           Data.Readable                         (Readable)
+import           Data.Readable                         (Readable, fromText)
 import qualified Data.Text                             as T
 import           Data.Validation                       (AccValidation (..))
 import           Text.Read                             (readMaybe)
+
 
 -- types for instances
 import           Data.ByteString                       (ByteString)
@@ -73,7 +74,7 @@ sfWidget::forall t m a b.(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix 
           (a->T.Text)->
           Maybe FieldName->
           WidgetConfig t a->
-          (WidgetConfig t a-> m (R.Dynamic t a))->
+          (WidgetConfig t a->m (R.Dynamic t a))->
           SFR t m (R.Dynamic t b)
 sfWidget fDyn fString mFN wc widget = do
   let addToAttrs::R.Reflex t=>T.Text->Maybe T.Text->RD.Dynamic t (M.Map T.Text T.Text)->RD.Dynamic t (M.Map T.Text T.Text)
@@ -95,6 +96,15 @@ sfWidget fDyn fString mFN wc widget = do
         Just (LabelConfig t attrs) -> RD.elAttr "label" attrs  $ (RD.el "span" $ RD.text t) >> iw
   lift . labeledWidget $ (fmap fDyn <$> (if isObserver then readOnlyW fString wcAll else widget wcInput))
 
+sfWidget'::(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)=>
+  R.Event t a->b->(a->b)->(b->DynValidation t a)->(b->T.Text)->Maybe FieldName->Maybe T.Text->
+  (WidgetConfig t b->m (R.Dynamic t b))->SimpleFormR t m a
+sfWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = makeSimpleFormR $ mdo
+  attrsDyn <- sfAttrs dva mFN mTypeName
+  let wc = WidgetConfig (toWT <$> updateEv) initialWV attrsDyn
+  dva <- item $ joinDynOfDynValidation <$> sfWidget validateWT showWT mFN wc widget
+  return dva
+
 fromAccVal::AccValidation e a->a
 fromAccVal (AccSuccess a) = a
 fromAccVal (AccFailure _) = undefined
@@ -108,36 +118,31 @@ instance R.Reflex t=>Functor (HtmlWidget t) where
 gWidgetMToAV::RD.DomBuilder t m=>GWidget t m (Maybe a)->GWidget t m (AccValidation SimpleFormErrors a)
 gWidgetMToAV gwma wcav = fmap maybeToAV <$> gwma (avToMaybe <$> wcav)
 
-buildReadable::(SimpleFormInstanceC t m, Readable a, Show a)=>B.Validator (DynValidation t) a->Maybe FieldName->Maybe a->SimpleFormR t m a
-buildReadable va mFN ma = makeSimpleFormR $ mdo
-  attrsDyn <- sfAttrs dma mFN Nothing
-  let wc = WidgetConfig RD.never (maybeToAV ma) attrsDyn
-  dma <- item $ B.validatefv va $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV readableWidget) c)
-  return dma
+textWidgetValue::SimpleFormInstanceC t m=>Maybe FieldName->WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
+textWidgetValue mFN c = _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
 
-readMaybeAV::Read a=>Maybe FieldName->T.Text->AccValidation SimpleFormErrors a
-readMaybeAV mFN t =
-  let prefix = T.pack (fromMaybe "N/A" mFN) <> ": "  in
-    case readMaybe $ T.unpack t of
-      Nothing -> AccFailure [SFNoParse (prefix <> t)]
-      Just a -> AccSuccess a
+parseError::Maybe FieldName->T.Text->T.Text
+parseError mFN x = T.pack (fromMaybe "N/A" mFN) <> ": " <> x
+
+parseAndValidate::R.Reflex t=>Maybe FieldName->T.Text->(T.Text -> Maybe a)->B.Validator (DynValidation t) a->DynValidation t a
+parseAndValidate mFN t parse va =
+  case parse t of
+    Nothing -> dynValidationErr [SFNoParse $ parseError mFN t]
+    Just y -> va y
+
+buildReadable::(SimpleFormInstanceC t m, Readable a, Show a)=>B.Validator (DynValidation t) a->Maybe FieldName->Maybe a->SimpleFormR t m a
+buildReadable va mFN ma =
+  let vfwt x = parseAndValidate mFN x fromText va
+  in sfWidget' R.never (maybe "" showText ma) showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
 buildReadMaybe::(SimpleFormInstanceC t m, Read a, Show a)=>B.Validator (DynValidation t) a->Maybe FieldName->Maybe a->SimpleFormR t m a
-buildReadMaybe va mFN ma = makeSimpleFormR $ mdo
-  attrsDyn <- sfAttrs dma mFN Nothing
-  let initial = maybe "" showText ma
-      wc = WidgetConfig RD.never initial attrsDyn
-  dma <- item $ B.validatefv va $ DynValidation <$> sfWidget (readMaybeAV mFN) showText mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c)
-  return dma
+buildReadMaybe va mFN ma =
+  let vfwt x = parseAndValidate mFN x (readMaybe . T.unpack) va
+  in sfWidget' R.never (maybe "" showText ma) showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
 -- | String and Text
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) T.Text where
-  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just "Text")
-    let initial = fromMaybe "" mInitial
-        wc = WidgetConfig RD.never initial attrsDyn
-    dma <- item $ B.validatefv va $ DynValidation <$> sfWidget AccSuccess showText mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput "Text") c)
-    return dma
+  buildValidated va mFN mInitial = sfWidget' R.never (maybe "" id mInitial) id va id mFN Nothing $ textWidgetValue mFN
 
 instance {-# OVERLAPPING #-} SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) String where
   buildValidated va mFN mInitial =
