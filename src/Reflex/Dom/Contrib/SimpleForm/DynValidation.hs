@@ -1,10 +1,12 @@
 module Reflex.Dom.Contrib.SimpleForm.DynValidation where
 
 import           Control.Monad     (join)
+--import           Data.Functor.Compose (Compose (..))
 import           Data.Text         (Text)
 import           Data.Validation   (AccValidation (..))
 import           DataBuilder.Types (MonadLike (..))
 import           Reflex            (Dynamic, Reflex, constDyn, zipDynWith)
+
 
 data SimpleFormError  = SFNothing | SFNoParse Text | SFInvalid Text deriving (Show,Eq)
 
@@ -28,6 +30,15 @@ mergeAccValidation x = case x of
   AccFailure errs -> AccFailure errs
 
 newtype DynValidation t a = DynValidation { unDynValidation::Dynamic t (AccValidation SimpleFormErrors a) }
+-- NB: this is isomorphic to Compose (Dynamic t) (AccValidation SimpleFormErrors a)
+{-
+type  DynValidation t a = Compose (Dynamic t) (AccValidation a)
+unDynValidation::DynValidation t a->Dynamic t (AccValidation a)
+unDynValidation = getCompose
+
+makeDynValidation::Dynamic t (AccValidation a) -> DynValidation t a
+makeDynValidation = Compose
+-}
 
 dynValidationNothing::Reflex t=>DynValidation t a
 dynValidationNothing = DynValidation $ constDyn (AccFailure [SFNothing])
@@ -54,6 +65,7 @@ instance Reflex t=>Functor (DynValidation t) where
 instance Reflex t=>Applicative (DynValidation t) where
   pure = DynValidation . constDyn . AccSuccess
   dvf <*> dva = DynValidation $ zipDynWith (<*>) (unDynValidation dvf) (unDynValidation dva)
+
 
 instance Reflex t=>MonadLike (DynValidation t) where
   pureLike = pure

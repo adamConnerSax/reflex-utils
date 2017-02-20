@@ -114,7 +114,7 @@ switchingSFR widgetGetter widgetHolder0 newWidgetHolderEv = makeSimpleFormR $ do
 
 makeSimpleForm::(SimpleFormC t m,
                  BuilderC t m a)=>SimpleFormConfiguration t m->Maybe a->m (DynValidation t a)
-makeSimpleForm cfg ma = runSimpleFormR cfg $ B.buildA Nothing ma
+makeSimpleForm cfg  = runSimpleFormR cfg . B.buildA Nothing
 
 makeSimpleForm'::(SimpleFormC t m, RD.MonadHold t m
                  , BuilderC t m a)=>
@@ -131,7 +131,7 @@ makeSimpleForm' cfg ma submitWidget = do
 
 observeDynamic::(SimpleFormC t m, RD.PostBuild t m
                 ,BuilderC t m a)=>SimpleFormConfiguration t m->R.Dynamic t a->m (DynValidation t a)
-observeDynamic cfg aDyn = observeDynValidation cfg $ DynValidation $ fmap AccSuccess aDyn
+observeDynamic cfg  = observeDynValidation cfg . DynValidation . fmap AccSuccess
 
 observeDynValidation::(SimpleFormC t m,RD.PostBuild t m
                       ,BuilderC t m a)=>SimpleFormConfiguration t m->DynValidation t a->m (DynValidation t a)
@@ -146,7 +146,6 @@ observeDynValidation cfg aDynM =
 observeWidget::(SimpleFormC t m ,BuilderC t m a)=>SimpleFormConfiguration t m->m a->m (DynValidation t a)
 observeWidget cfg wa =
   runSimpleFormR (setToObserve cfg) . makeSimpleFormR $ lift wa >>= unSF . B.buildA Nothing . Just
-
 
 
 observeFlow::(SimpleFormC t m, MonadFix m

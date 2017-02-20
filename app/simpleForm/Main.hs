@@ -7,10 +7,10 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE RecursiveDo               #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TemplateHaskell           #-}
 {-# LANGUAGE TypeFamilies              #-}
-{-# LANGUAGE RecursiveDo               #-}
 module Main where
 
 import           Control.Lens                                (view, (^.))
@@ -70,10 +70,10 @@ import           Language.Javascript.JSaddle.Warp            (run)
 #endif
 
 --import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
+import           DataBuilder                                 as B
 import           Reflex.Dom.Contrib.SimpleForm
 import           Reflex.Dom.Contrib.SimpleForm.Configuration
 import           Reflex.Dom.Contrib.SimpleForm.Instances     (SimpleFormInstanceC)
-import DataBuilder as B -- TODO: not need this import at the app level
 
 import           Css
 
@@ -81,13 +81,13 @@ import           Css
 newtype Age = Age { unAge::Int } deriving (Show)
 
 liftValidation::Reflex t=>(a->Bool)->(a->T.Text)->B.Validator (DynValidation t) a
-liftValidation test msg = (\a -> DynValidation . constDyn $ if test a then AccSuccess a else AccFailure [SFInvalid (msg a)]) 
+liftValidation test msg = (\a -> DynValidation . constDyn $ if test a then AccSuccess a else AccFailure [SFInvalid (msg a)])
 
 instance Reflex t=>B.Validatable (DynValidation t) Age where
   validate = liftValidation ((>0) . unAge) (const "Age must be > 0")
 
 instance SimpleFormInstanceC t m => Builder (SFR t m) (DynValidation t) Age where
-  buildValidated va mFn ma = 
+  buildValidated va mFn ma =
     let labelCfg = LabelConfig "Age" M.empty
         inputCfg = InputElementConfig (Just "35") (Just "Age") (Just labelCfg)
         vInt = liftValidation (>0) (const "Age must be > 0")
@@ -127,8 +127,6 @@ instance Generic User
 instance HasDatatypeInfo User
 instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) User where
   buildValidated va mFN = liftF sfCol . gBuildValidated va mFN
-
-
 
 testUserForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m->m ()
 testUserForm cfg = do
@@ -210,21 +208,15 @@ instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) BRec where
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
 buildDate::SimpleFormInstanceC t m=>B.Validator (DynValidation t) DateOrDateTime->
-  Maybe FieldName->
-  Maybe DateOrDateTime->
-  MDWrapped (SFR t m) (DynValidation t) DateOrDateTime
+  Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SFR t m) (DynValidation t) DateOrDateTime
 buildDate va mFN ms = MDWrapped matched ("Date",mFN) bldr where
---  inputCfg = InputElementConfig (Just "1/1/2001") (Just "Date") Nothing
   (matched,mDay) = case ms of
     Just (D day) -> (True,Just day)
     _            -> (False, Nothing)
   bldr = B.validateFV va $ D <$> buildA Nothing mDay
 
-buildDateTime::SimpleFormInstanceC t m=>
-  B.Validator (DynValidation t) DateOrDateTime ->
-  Maybe FieldName->
-  Maybe DateOrDateTime->
-  MDWrapped (SFR t m) (DynValidation t) DateOrDateTime
+buildDateTime::SimpleFormInstanceC t m=>B.Validator (DynValidation t) DateOrDateTime ->
+  Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SFR t m) (DynValidation t) DateOrDateTime
 buildDateTime va mFN ms = MDWrapped matched ("DateTime",mFN) bldr where
   (matched,mDateTime) = case ms of
     Just (DT dt) -> (True,Just dt)

@@ -105,18 +105,12 @@ sfWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = makeS
   dva <- item $ joinDynOfDynValidation <$> sfWidget validateWT showWT mFN wc widget
   return dva
 
-fromAccVal::AccValidation e a->a
-fromAccVal (AccSuccess a) = a
-fromAccVal (AccFailure _) = undefined
 
 item::Monad m=>SFLayoutF t m
 item = sfItem
 
 instance R.Reflex t=>Functor (HtmlWidget t) where
   fmap f (HtmlWidget v c kp kd ku hf) = HtmlWidget (f <$> v) (f <$> c) kp kd ku hf
-
-gWidgetMToAV::RD.DomBuilder t m=>GWidget t m (Maybe a)->GWidget t m (AccValidation SimpleFormErrors a)
-gWidgetMToAV gwma wcav = fmap maybeToAV <$> gwma (avToMaybe <$> wcav)
 
 textWidgetValue::SimpleFormInstanceC t m=>Maybe FieldName->WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
 textWidgetValue mFN c = _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
@@ -160,35 +154,19 @@ instance SimpleFormC e t m=>B.Builder (RFormWidget e t m) Char where
 
 -- We don't need this.  If we leave it out, the Enum instance will work an we get a dropdown instead of a checkbox.  Which might be better...
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Bool where
-  buildValidated va mFN mInitial = B.validateFV va . makeSimpleFormR $ mdo
-    let initial = fromMaybe False mInitial
-        wc = WidgetConfig RD.never initial attrsDyn
-    attrsDyn <- sfAttrs dynValidationNothing mFN (Just $ "Bool")
-    item $ DynValidation <$> (sfWidget AccSuccess showText mFN wc $ \c -> _hwidget_value <$> htmlCheckbox c)
+  buildValidated va mFN mInitial = sfWidget' R.never (fromMaybe False mInitial) id va showText mFN Nothing $ (\c -> _hwidget_value <$> htmlCheckbox c)
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Double where
-  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just "Double")
-    let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- item $ B.validatefv va $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV doubleWidget) c)
-    return dma
+  buildValidated = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Float where
-  buildValidated va = buildReadable va
+  buildValidated = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Int where
-  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just "Int")
-    let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- item . B.validatefv va $ DynValidation <$> sfWidget id  (showText . fromAccVal) mFN wc (\c->_hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV intWidget) c)
-    return dma
+  buildValidated = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Integer where
-  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just $ "Int")
-    let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- item $ B.validatefv va $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV integerWidget) c)
-    return dma
+  buildValidated = buildReadable
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Int8 where
   buildValidated  = buildReadable
@@ -219,18 +197,19 @@ instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) ByteStri
 
 --dateTime and date
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) UTCTime where
-  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just $ "UTCTime")
-    let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma<-item $ B.validatefv va $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateTimeWidget) c)
-    return dma
+  buildValidated va mFN mInitial =
+    let vfwt x = case x of
+          Nothing -> dynValidationErr [SFNoParse "Couldn't parse as UTCTime."]
+          Just y -> va y
+    in sfWidget' R.never mInitial Just vfwt showText mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
+
 
 instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Day where
-  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN (Just $ "Day")
-    let wc = WidgetConfig RD.never (maybeToAV mInitial) attrsDyn
-    dma <- item $ B.validatefv va $ DynValidation <$> sfWidget id (showText . fromAccVal) mFN wc (\c -> _hwidget_value <$> restrictWidget blurOrEnter (gWidgetMToAV dateWidget) c)
-    return dma
+  buildValidated va mFN mInitial =
+    let vfwt x = case x of
+          Nothing -> dynValidationErr [SFNoParse "Couldn't parse as Day."]
+          Just y -> va y
+    in sfWidget' R.never mInitial Just vfwt showText mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
 
 -- uses generics to build instances
 instance (SimpleFormC t m, VBuilderC t m a)=>B.Builder (SFR t m) (DynValidation t) (Maybe a)
@@ -241,13 +220,11 @@ instance (SimpleFormC t m, VBuilderC t m a, VBuilderC t m b)=>B.Builder (SFR t m
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, Eq a)
                               =>B.Builder (SFR t m) (DynValidation t) a where
-  buildValidated va mFN mInitial = makeSimpleFormR $ mdo
-    attrsDyn <- sfAttrs dma mFN Nothing
+  buildValidated va mFN mInitial =
     let values = [minBound..] :: [a]
         initial = fromMaybe (head values) mInitial
-        wc = WidgetConfig RD.never initial attrsDyn
-    dma <- item . B.validatefv va $  DynValidation <$> sfWidget AccSuccess showText mFN wc (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
-    return dma
+    in sfWidget' RD.never initial id va showText mFN Nothing $ (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
+
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
 -- generics for (,) since mkDyn is not an optimization here

@@ -87,7 +87,6 @@ buildAdjustableContainer sfAdj va mFN mfa = B.validateFV va . makeSimpleFormR  $
   case fType of
     ObserveOnly ->  buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfa
     Interactive ->  buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfa
---    else buildSFContainer (sfAI sfAdj) (buildTraversableSFA idRep) mFN mfa
 
 {-
 -- default behavior of button in a form is to submit the form
