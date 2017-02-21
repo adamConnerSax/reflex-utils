@@ -1,13 +1,13 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: nightly-2017-02-03
+resolver: lts-8.2
 
 # Local packages, usually specified by relative directory name
 packages:
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
-    commit: "1ecfec429d5b11ab934e0f93d7ac852a2c9ea517"
+    commit: "b2a4542c32025a04782f3d578e7a3d16c1e27d36"
   extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex
