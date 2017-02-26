@@ -8,20 +8,24 @@
 {-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE TupleSections         #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
 -- All the basic (primitive types, tuples, etc.) are in here
+import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
 import Reflex.Dom.Contrib.SimpleForm.Instances.Basic (SimpleFormInstanceC,VBuilderC)
 import Reflex.Dom.Contrib.SimpleForm.Instances.Extras (buildValidatedDynamic)
 import Reflex.Dom.Contrib.SimpleForm.Builder
 import Reflex.Dom.Contrib.SimpleForm.DynValidation (accValidation)
 import Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
+
 -- reflex imports
 import qualified Reflex as R 
 import qualified Reflex.Dom as RD
 import Reflex.Dom ((=:))
 
 import Control.Monad (join)
+import Control.Monad.Fix (MonadFix)
 import Control.Monad.Reader (lift)
 import Control.Monad.State (StateT, runStateT, get, put)
 import Control.Monad.Morph (hoist)
@@ -38,7 +42,7 @@ import qualified Data.Set as S
 import Data.Hashable (Hashable)
 import qualified Data.HashMap.Lazy as HML
 import qualified Data.HashSet as HS
-
+import Data.Maybe (fromMaybe)
 -- my libs
 import qualified DataBuilder as B
 
@@ -326,17 +330,18 @@ buildDeletable dI _ mgb =
 
 
 -- List Based
---buildListBasedContainer::(SimpleFormInstanceC t m, VBuilderC t m b, Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
+-- buildListBasedContainer::(SimpleFormInstanceC t m, VBuilderC t m b, Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
 
 
-data LBCWidgetState k v = LBCWidgetState (M.Map k v)
+newtype LBCWidgetState k v = LBCWidgetState { unLBCWidgetState::M.Map k v }
 data LBCWidgetUpdate k v = ChangedItem k v | DeleteItem k | AddItem k v | EditKey k k
 
-lcbUpdate::Ord k=>LBCWidgetUpdate k v->LBCWidgetState k v->LBCWidgetState k v
-lcbUpdate (ChangedItem key val) (LBCWidgetState m) = LBCWidgetState $ M.adjust (const val) key m
-lcbUpdate (DeleteItem key) (LBCWidgetState m) = LBCWidgetState $ M.delete key m
-lcbUpdate (AddItem key val) (LBCWidgetState m) = LBCWidgetState $ M.insert key val m
-lcbUpdate (EditKey oldKey newKey) (LBCWidgetState m) = LBCWidgetState $ maybe m (\x -> M.delete oldKey $ M.insert newKey x m ) (M.lookup oldKey m) 
+
+lbcUpdate::Ord k=>LBCWidgetUpdate k v->LBCWidgetState k v->LBCWidgetState k v
+lbcUpdate (ChangedItem key val) (LBCWidgetState m) = LBCWidgetState $ M.adjust (const val) key m
+lbcUpdate (DeleteItem key) (LBCWidgetState m) = LBCWidgetState $ M.delete key m
+lbcUpdate (AddItem key val) (LBCWidgetState m) = LBCWidgetState $ M.insert key val m
+lbcUpdate (EditKey oldKey newKey) (LBCWidgetState m) = LBCWidgetState $ maybe m (\x -> M.delete oldKey $ M.insert newKey x m ) (M.lookup oldKey m) 
 
 
 editOne::(SimpleFormInstanceC t m, VBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
@@ -344,6 +349,31 @@ editOne valDyn selDyn = do
   let widgetAttrs = (\x -> if x then ("display" =: "visible") else ("display" =: "none")) <$> selDyn
   resDynAV <- RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ buildValidatedDynamic B.validate Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
   let resDyn = accValidation (const Nothing) Just <$> resDynAV -- Dynamic t (Maybe v)
-  return . R.fmapMaybe id . R.updated $ resDyn 
-    
+  return . R.fmapMaybe id $ R.updated resDyn 
+
+-- Can we get rid of k0? Dynamically size?
+selectableKeyList::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)=>Int->k->(k->v->T.Text)->R.Dynamic t (LBCWidgetState k v)->m (R.Dynamic t k)
+selectableKeyList maxSelectSize k0 labelF lbcStateDyn = do
+  let keyMapDyn = M.mapWithKey labelF . unLBCWidgetState  <$> lbcStateDyn
+      numKeysDyn = M.size <$> keyMapDyn
+      sizeAttrDyn = (\n -> let n' = max maxSelectSize (n+1) in ("size" =: (T.pack $ show n'))) <$> numKeysDyn
+      config = RD.DropdownConfig R.never sizeAttrDyn
+  RD._dropdown_value <$> RD.dropdown k0 keyMapDyn config
+
+
+buildLBEditableMap::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
+buildLBEditableMap mFN mMap = sfRow $ mdo
+  let map0 = fromMaybe M.empty mMap
+      k0 = if M.null map0 then "N/A" else head . M.keys $ map0
+      labelF k _ = T.pack $ show k
+      editedToCI (k,v) = ChangedItem k v
+      editF _ = editOne
+  lbcStateDyn <- R.foldDyn lbcUpdate (LBCWidgetState map0) lbcUpdateEv
+  dynSelection <- sfCol $ selectableKeyList 10 k0 labelF lbcStateDyn
+  editedEv <- sfCol $ fmap editedToCI <$> RD.selectViewListWithKey dynSelection (unLBCWidgetState <$> lbcStateDyn) editF
+  let lbcUpdateEv = R.leftmost [editedEv] -- silly now but we will have more events
+  return $ DynValidation $ AccSuccess . unLBCWidgetState <$> lbcStateDyn
+
+  
+  
   
