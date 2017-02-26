@@ -351,15 +351,51 @@ editOne valDyn selDyn = do
   let resDyn = accValidation (const Nothing) Just <$> resDynAV -- Dynamic t (Maybe v)
   return . R.fmapMaybe id $ R.updated resDyn 
 
--- Can we get rid of k0? Dynamically size?
+
 selectableKeyList::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)=>Int->k->(k->v->T.Text)->R.Dynamic t (LBCWidgetState k v)->m (R.Dynamic t k)
 selectableKeyList maxSelectSize k0 labelF lbcStateDyn = do
-  let keyMapDyn = M.mapWithKey labelF . unLBCWidgetState  <$> lbcStateDyn
-      numKeysDyn = M.size <$> keyMapDyn
-      sizeAttrDyn = (\n -> let n' = max maxSelectSize (n+1) in ("size" =: (T.pack $ show n'))) <$> numKeysDyn
-      config = RD.DropdownConfig R.never sizeAttrDyn
+  let mDyn = unLBCWidgetState  <$> lbcStateDyn
+      sizeF n = max maxSelectSize (n+1)
+      makeDDMap labelF m = 
+      lookupF = M.lookup
+--      numKeysDyn = M.size <$> keyMapDyn
+--      sizeAttrDyn = (\n -> let n' = max maxSelectSize (n+1) in ("size" =: (T.pack $ show n'))) <$> numKeysDyn
+--      config = RD.DropdownConfig R.never sizeAttrDyn
   RD._dropdown_value <$> RD.dropdown k0 keyMapDyn config
 
+
+simpleDropdown::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m)=>(b->M.Map T.Text T.Text)->(T.Text->b->Maybe a)->(Int->Int)->Dynamic t b->m (Dynamic t (Maybe a))
+simpleDropdown makeStringMap lookupByString sizeF mDyn = do
+  let ddMapDyn = makeStringMap <$> mDyn
+      attrsDyn = ddAttrsDyn sizeF ddMapDyn
+      ddConfig = DropdownConfig never ddAttrsDyn
+      mapToDefault::M.Map T.Text a->T.Text
+      mapToDefault m = if M.null m then "" else head . M.keys $ m
+      mkDropdownWithDefault defaultChoice =  dropdown defaultChoice ddMapDyn ddConfig
+      newDropdownEvent = mkDropdownWithDefault . mapToDefault <$> (updated ddMapDyn)
+      newMaybeAEvent = ffor newDropdownEvent $ \mDropdown -> do
+        (Dropdown valueDyn _) <- mDropdown
+        return $ R.zipDynWith lookupByString valueDyn mDyn
+  join <$> widgetHold (return $ constDyn Nothing) newMaybeAEvent
+
+hiddenCSS::M.Map T.Text T.Text
+hiddenCSS  = "style" =: "display: none"
+visibleCSS::M.Map T.Text T.Text
+visibleCSS = "style" =: "display: inline"
+
+ddAttrsDyn::Reflex t=>Dynamic t (M.Map k a) -> (Int->Int)->Dynamic t AttributeMap
+ddAttrsDyn sizeF = fmap (\m->if M.null m then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show . sizeF $ M.size m)))
+
+
+selectableKeyListWidget::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)=>Int->(k->v->T.Text)->R.Dynamic t (LBCWidgetState k v)->m (R.Dynamic t k)
+selectableKeyListWidget maxSelectSize labelF lcbStateDyn = do
+  let widget maxSize lF (LBCWidgetState m) = do
+        let emptyWidget = RD.el "h1" $ RD.text "No elements in container!"
+            nonEmptyWidget = do
+              let k0 = head . M.keys $ m'
+              selectableKeyList maxSize k0 lF 
+              
+  
 
 buildLBEditableMap::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
 buildLBEditableMap mFN mMap = sfRow $ mdo
