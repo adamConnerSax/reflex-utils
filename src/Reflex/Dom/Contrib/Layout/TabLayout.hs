@@ -9,6 +9,7 @@ module Reflex.Dom.Contrib.Layout.TabLayout
        (
          tabCssBS
        , TabInfo(..)
+       , StaticTabConfig(..)
        , staticTabbedLayout
        , dynamicTabbedLayout
        ) where
