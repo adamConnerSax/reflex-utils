@@ -17,7 +17,7 @@ module Reflex.Dom.Contrib.Layout.TabLayout
 
 import Reflex.Dom.Contrib.Layout.ClayUtils
 import Reflex.Dom.Contrib.Layout.FlexLayout
-import Reflex.Dom.Contrib.Layout.Types (CssClass(..),toCssString)
+import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..),toCssString)
 import qualified Reflex as R
 import Reflex.Dynamic ()
 import qualified Reflex.Dom as RD
@@ -120,9 +120,11 @@ instance Ord (TabInfo t m a) where
 
 -- NB, if you use other than the defaults you will need to add css to manage functionality
 -- Might be easier to wrap tab in a class and then write styling from there.
+-- This is not a good solution for nested tabs unless you style them all.
 data StaticTabConfig = StaticTabConfig
                        {
-                         tabControlClass::CssClass -- surrounds the entire control.  Allows styling and provides scope                       
+                         tabSpecificClass::CssClass -- goes in every element for targeting css
+                       , tabControlClass::CssClass -- surrounds the entire control.  Allows styling and provides scope                       
                        , tabPaneClass::CssClass  -- for the div around each pane
                        , tabRowClass::CssClass
                        , indicatorOnClass::CssClass  -- for the tab indicator when the tab is selected
@@ -130,23 +132,26 @@ data StaticTabConfig = StaticTabConfig
                        }
 
 instance Default StaticTabConfig where
-  def = StaticTabConfig (CssClass "tabbed-area") (CssClass "tab-pane") (CssClass "tab-row") (CssClass "selected") (CssClass "unselected")
+  def = StaticTabConfig (CssClass "") (CssClass "tabbed-area") (CssClass "tab-pane") (CssClass "tab-row") (CssClass "selected") (CssClass "unselected")
                        
 staticTabbedLayout::(MonadIO (R.PushM t),RD.DomBuilder t m, RD.PostBuild t m, MonadFix m,
                       RD.MonadHold t m,Traversable f)=>StaticTabConfig->TabInfo t m a->f (TabInfo t m a)->m (f a)
 staticTabbedLayout config curTab tabs = do
   let curTabchecked tab = if tab==curTab then "checked" RD.=: "" else M.empty
+      tabClass c = "class" RD.=: (toCssString $ CssClasses [tabSpecificClass config,c])
       tabInput tab = RD.elAttr "input" (("id" RD.=: (tabID tab))
                                         <> ("type" RD.=: "radio")
                                         <> ("name" RD.=: "grp")
                                         <> curTabchecked tab) RD.blank 
-      makeLabelAttrs tab ct = attrsIf ("for" RD.=: tabID tab) ("class" RD.=: (toCssString $ indicatorOnClass config)) ("class" RD.=: (toCssString $ indicatorOffClass config)) ((==tab) <$> ct)
-      makeTabAttrs tab ct = attrsIf ("class" RD.=: (toCssString $ tabPaneClass config)) ("style" RD.=: "display: block") ("style" RD.=: "display: none") ((==tab) <$> ct)
+      makeLabelAttrs tab ct = attrsIf ("for" RD.=: tabID tab) (tabClass $ indicatorOnClass config) (tabClass $ indicatorOffClass config) ((==tab) <$> ct)
+      makeTabAttrs tab ct = attrsIf (tabClass $ tabPaneClass config) ("style" RD.=: "display: block") ("style" RD.=: "display: none") ((==tab) <$> ct)
       tabLabelEv tab ct = fmap (const tab) . (RD.domEvent RD.Click . fst) <$> (RD.elDynAttr' "label" (makeLabelAttrs tab ct) $ RD.text (tabName tab))
       tabEv tab ct = flexItem (tabInput tab >> tabLabelEv tab ct)
       contentDiv ctDyn tab = RD.elDynAttr "div" (makeTabAttrs tab ctDyn) (tabWidget tab)
-  RD.divClass (toCssString $ tabControlClass config) $ flexCol $ mdo
-    curTabEv <- RD.leftmost . F.toList <$> (RD.divClass (toCssString $ tabRowClass config) $ flexRow (traverse (`tabEv` curTabDyn) tabs)) -- make the tab bar
+      tabControlClasses = CssClasses [tabSpecificClass config, tabControlClass config]
+  RD.divClass (toCssString tabControlClasses) $ flexCol $ mdo
+    let tabRowClasses = CssClasses [tabSpecificClass config, tabRowClass config]
+    curTabEv <- RD.leftmost . F.toList <$> (RD.divClass (toCssString tabRowClasses) $ flexRow (traverse (`tabEv` curTabDyn) tabs)) -- make the tab bar
     curTabDyn <- R.foldDyn const curTab curTabEv 
     flexRow $ traverse (contentDiv curTabDyn) tabs -- and now the tabs
 
