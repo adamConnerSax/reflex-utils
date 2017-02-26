@@ -12,12 +12,14 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
 -- All the basic (primitive types, tuples, etc.) are in here
 import Reflex.Dom.Contrib.SimpleForm.Instances.Basic (SimpleFormInstanceC,VBuilderC)
+import Reflex.Dom.Contrib.SimpleForm.Instances.Extras (buildValidatedDynamic)
 import Reflex.Dom.Contrib.SimpleForm.Builder
+import Reflex.Dom.Contrib.SimpleForm.DynValidation (accValidation)
 import Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
 -- reflex imports
 import qualified Reflex as R 
 import qualified Reflex.Dom as RD
-
+import Reflex.Dom ((=:))
 
 import Control.Monad (join)
 import Control.Monad.Reader (lift)
@@ -317,42 +319,31 @@ buildDeletable dI _ mgb =
       let f gb' = do
             (dmgb',(evs,_)) <- runStateT (unSSFR $ traverse (SSFR . liftLF' sfRow  . buildOneDeletable dI Nothing . Just) gb') ([],initialS dI)
             return  (dmgb',R.leftmost evs)
---      (ddmgb,dEv) <- join $ R.splitDyn <$> RD.widgetHold (f gb) (f <$> newgbEv)
       (ddmgb,dEv) <- R.splitDynPure <$> RD.widgetHold (f gb) (f <$> newgbEv)
       let dmgb = join (unDynValidation <$> ddmgb)
           newgbEv = R.attachPromptlyDynWithMaybe (\mgb' key-> delete dI key <$> (avToMaybe mgb')) dmgb (R.switchPromptlyDyn dEv)
       return $ DynValidation dmgb
 
-{- This fails with ambiguous types, because TR and E are not injective.  Why doesn't ScopedTypeVariables help?
-class SFAppendable fa where
-  type Tr fa :: * -> *
-  type E fa :: *
-  toT'::fa -> Tr fa (E fa)
-  fromT'::Tr fa (E fa) -> fa 
-  emptyT' :: Tr fa (E fa)
-  insertT' :: E fa -> Tr fa (E fa) -> Tr fa (E fa)
 
-buildSFContainer'::(SimpleFormC t m, SFAppendable fa, B.Builder (SimpleFormR t m) (E fa), Traversable (Tr fa))
-                   =>BuildF t m (Tr fa (E fa))->BuildF t m fa
-buildSFContainer' buildTr md mfa = do
-  validClasses <- validItemStyle
-  invalidClasses <- invalidItemStyle
-  buttonClasses <- buttonStyle
-  mdo
-    attrsDyn <- sfAttrs dmla md Nothing
-    let initial::Maybe (Tr fa (E fa)) 
-        initial = maybe (Just emptyT') (Just . toT') mfa 
-    dmla <- formCol' attrsDyn $ mdo
-      dmla' <- R.joinDyn <$> RD.widgetHold (buildTr md initial) newSFREv -- SFRW t m (Dynamic t (g b))
-      addEv <- formRow $ do
-        let emptyA = unSF $ B.buildA md Nothing 
-        dma <- itemL $ RD.joinDyn <$> RD.widgetHold (emptyA) (fmap (const emptyA) $ R.updated dmla')
-        clickEv <-  itemR . lift $ buttonClass "+" (toCssString buttonClasses)-- need attributes for styling??
-        return $ R.attachDynWithMaybe (\ma _ -> ma) dma clickEv -- only fires if button is clicked when a is a Just.
-      let insert::Maybe (Tr fa (E fa))->Maybe (E fa)->Maybe (Tr fa (E fa))
-          insert maa a = insertT' <$> (Just a) <*> maa 
-          newTrEv = R.attachDynWithMaybe insert dmla' addEv -- Event t (tr a), only fires if traverable is not Nothing
-          newSFREv = fmap (buildTr md . Just) newTrEv -- Event t (SFRW t m (g b)))
-      return dmla'
-    lift $ R.mapDyn (\ml -> fromT' <$> ml) dmla
--}
+-- List Based
+--buildListBasedContainer::(SimpleFormInstanceC t m, VBuilderC t m b, Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
+
+
+data LBCWidgetState k v = LBCWidgetState (M.Map k v)
+data LBCWidgetUpdate k v = ChangedItem k v | DeleteItem k | AddItem k v | EditKey k k
+
+lcbUpdate::Ord k=>LBCWidgetUpdate k v->LBCWidgetState k v->LBCWidgetState k v
+lcbUpdate (ChangedItem key val) (LBCWidgetState m) = LBCWidgetState $ M.adjust (const val) key m
+lcbUpdate (DeleteItem key) (LBCWidgetState m) = LBCWidgetState $ M.delete key m
+lcbUpdate (AddItem key val) (LBCWidgetState m) = LBCWidgetState $ M.insert key val m
+lcbUpdate (EditKey oldKey newKey) (LBCWidgetState m) = LBCWidgetState $ maybe m (\x -> M.delete oldKey $ M.insert newKey x m ) (M.lookup oldKey m) 
+
+
+editOne::(SimpleFormInstanceC t m, VBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
+editOne valDyn selDyn = do
+  let widgetAttrs = (\x -> if x then ("display" =: "visible") else ("display" =: "none")) <$> selDyn
+  resDynAV <- RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ buildValidatedDynamic B.validate Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
+  let resDyn = accValidation (const Nothing) Just <$> resDynAV -- Dynamic t (Maybe v)
+  return . R.fmapMaybe id . R.updated $ resDyn 
+    
+  
