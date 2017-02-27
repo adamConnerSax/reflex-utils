@@ -77,6 +77,8 @@ import           Reflex.Dom.Contrib.SimpleForm.Instances     (SimpleFormInstance
 
 import           Css
 
+import qualified System.Process as SP
+
 --It's easy to add validation (via newtype wrapper)
 newtype Age = Age { unAge::Int } deriving (Show)
 
@@ -302,7 +304,10 @@ main = run simpleFormMain
 
 #ifdef USE_WARP
 main::IO ()
-main = run 3702 simpleFormMain
+main = do
+  let port :: Int = 3702
+  pHandle <- SP.spawnProcess "open" ["http://localhost:" ++ show port]
+  run port simpleFormMain
 #endif
 
 #ifdef USE_GHCJS

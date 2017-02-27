@@ -42,7 +42,7 @@ import qualified Data.Set as S
 import Data.Hashable (Hashable)
 import qualified Data.HashMap.Lazy as HML
 import qualified Data.HashSet as HS
-import Data.Maybe (fromMaybe,fromJust)
+import Data.Maybe (fromMaybe,catMaybes,fromJust)
 import Data.Monoid ((<>))
 -- my libs
 import qualified DataBuilder as B
@@ -336,19 +336,31 @@ buildDeletable dI _ mgb =
 
 --data LBCItemState = Visible | Hidden 
 
-data LBCWidgetState k v = LBCWidgetState { lbcSelection::Maybe k, lbcMap::M.Map (Maybe k) v }
-data LBCWidgetUpdate k v = ChangeSelection (Maybe k) | ChangeValue k v | DeleteItem k | AddItem k v | EditKey k k 
-
+{-
+data LBCWidgetState k v = LBCWidgetState { lbcSelection::Maybe k, lbcMap::M.Map (Maybe k) (Maybe v) }
+data LBCWidgetUpdate k v = ChangeSelection (Maybe k) | ChangeValue k v | DeleteItem k | AddItem k v | EditKey k k
 
 lbcUpdate::(Eq k,Ord k)=>LBCWidgetUpdate k v->LBCWidgetState k v->LBCWidgetState k v
 lbcUpdate (ChangeSelection mKey) (LBCWidgetState s m) = let s' = if M.member mKey m then mKey else s in LBCWidgetState s' m
-lbcUpdate (ChangeValue key val) (LBCWidgetState s m) = let m'=M.adjust (const val) (Just key) m in LBCWidgetState s m'
+lbcUpdate (ChangeValue key val) (LBCWidgetState s m) = let m'=M.adjust (const $ Just val) (Just key) m in LBCWidgetState s m'
 lbcUpdate (DeleteItem key) (LBCWidgetState s m) = let (m',s') = (M.delete (Just key) m',if s==(Just key) then Nothing else s) in LBCWidgetState s' m'
-lbcUpdate (AddItem key val) (LBCWidgetState s m) = let m' = M.insert (Just key) val m in LBCWidgetState s m' 
+lbcUpdate (AddItem key val) (LBCWidgetState s m) = let m' = M.insert (Just key) (Just val) m in LBCWidgetState s m' 
 lbcUpdate (EditKey oldKey newKey) (LBCWidgetState s m) =
   let s' = if s == Just oldKey then Just newKey else s
       m' = maybe m (\x -> M.delete (Just oldKey) $ M.insert (Just newKey) x m ) (M.lookup (Just oldKey) m)
   in LBCWidgetState s' m'
+-}
+
+newtype LBCMap k v = LBCMap { lbcMap::M.Map (Maybe k) (Maybe v) }
+newtype LBCSelection k = LBCSelection { lbcSelection::Maybe k }
+
+data LBCSelectionUpdate k = SelectionUpdate (Maybe k) 
+updateSelection::LBCSelectionUpdate k->LBCSelection k->LBCSelection k
+updateSelection (SelectionUpdate mk) _ = LBCSelection mk -- this no longer checks if mk is in map so we need to make sure
+
+data LBCMapUpdate k v = MapChangeValue k v
+updateMap::Ord k=>LBCMapUpdate k v->LBCMap k v->LBCMap k v
+updateMap (MapChangeValue k v) (LBCMap m) = LBCMap $ M.adjust (const $ Just v) (Just k) m
 
 
 editOne::(SimpleFormInstanceC t m, VBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
@@ -369,38 +381,43 @@ buildLBEditableMap mFN mMap = sfRow $ mdo
   let map0 = fromMaybe M.empty mMap
       mk0 = if M.null map0 then Nothing else Just . head $ M.keys map0
       labelF k _ = T.pack $ show k
-      editedToCI (Nothing,v) = ChangeSelection Nothing -- shouldn't happen
-      editedToCI (Just k, v) = ChangeValue k v
-      editF _ = editOne
-  lbcStateDyn <- R.foldDyn lbcUpdate (LBCWidgetState mk0 (toMaybeMap map0)) R.never --lbcUpdateEv
-  let selectionDyn = lbcSelection <$> lbcStateDyn
-      mapDyn = lbcMap <$> lbcStateDyn 
-  selectEv <- sfCol $ selectableKeyList 10 labelF lbcStateDyn
--- editedEv <- sfCol $ fmap editedToCI <$> RD.selectViewListWithKey selectionDyn mapDyn editF
---  let lbcUpdateEv = R.never --R.leftmost [selectEv,editedEv]
+      editedToCI (Nothing,_) = Nothing -- shouldn't happen
+      editedToCI (Just k, v) = Just $ MapChangeValue k v
+      editF Nothing _ _ = return R.never
+      editF (Just _) valDyn selDyn = editOne (fromJust <$> valDyn) selDyn -- will be okay but relies on getting LBCState manipulation right
+  lbcMapDyn <- R.foldDyn updateMap (LBCMap $ toMaybeMap map0) mapUpdateEv
+  lbcSelDyn <- R.foldDyn updateSelection (LBCSelection mk0) selUpdateEv
+  let selectionDyn = lbcSelection <$> lbcSelDyn
+      mapDyn = lbcMap <$> lbcMapDyn 
+  selectEv <- sfCol $ selectableKeyList 10 labelF lbcMapDyn
+  editedEv <- sfCol $ R.fmapMaybe editedToCI <$> RD.selectViewListWithKey selectionDyn mapDyn editF
+  let selUpdateEv = R.leftmost [selectEv]
+      mapUpdateEv = R.leftmost [editedEv]
 -- TODO: this (the fromMaybeMap) is expensive since it rebuilds the map on all updates
   return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
 
-toMaybeMap::Ord k=>M.Map k v->M.Map (Maybe k) v
-toMaybeMap = M.fromList . fmap (\(k,v)->(Just k,v)) . M.toList 
+toMaybeMap::Ord k=>M.Map k v->M.Map (Maybe k) (Maybe v)
+toMaybeMap = M.insert Nothing Nothing . M.fromList . fmap (\(k,v)->(Just k,Just v)) . M.toList 
 
-fromMaybeMap::Ord k=>M.Map (Maybe k) v -> M.Map k v
-fromMaybeMap = M.fromList . fmap (\(Just k, v)->(k,v)) . M.toList . M.delete Nothing --ick
+fromMaybeMap::Ord k=>M.Map (Maybe k) (Maybe v) -> M.Map k v
+fromMaybeMap = M.fromList . catMaybes . fmap (\(mk, mv)-> (,) <$> mk <*> mv) . M.toList 
 
-selectableKeyList::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)
+selectableKeyList::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k, Show k)
   =>Int -- max size for dropdown
   ->(k->v->T.Text) -- function to label the map entries
-  ->R.Dynamic t (LBCWidgetState k v)  -- the map and current selection
-  ->m (R.Event t (LBCWidgetUpdate k v)) 
-selectableKeyList maxDDSize labelF curStateDyn = do
-  let mDyn = lbcMap  <$> curStateDyn
-      sizeF n = max maxDDSize (n+1)
+  ->R.Dynamic t (LBCMap k v)  -- the map
+  ->m (R.Event t (LBCSelectionUpdate k)) 
+selectableKeyList maxDDSize labelF curMapDyn = do
+  let mDyn = lbcMap <$> curMapDyn
+      sizeF n = min maxDDSize (n+1)
       sizeDyn = M.size <$> mDyn
       ddAttrs = ddAttrsDyn sizeF sizeDyn
-      labelF' mk v = maybe "" (flip labelF v) mk
-      ddMap = M.mapWithKey labelF' <$> mDyn
+      labelF' Nothing _ = ""
+      labelF' _ Nothing = ""
+      labelF' (Just k) (Just v) = labelF k v
+      ddMap = R.traceDyn "ddMap: " $ M.mapWithKey labelF' <$> mDyn
       config = RD.DropdownConfig R.never ddAttrs
-  fmap ChangeSelection . RD._dropdown_change <$> RD.dropdown Nothing ddMap config    
+  fmap SelectionUpdate . R.traceEvent "selectEv: " . RD._dropdown_change <$> RD.dropdown Nothing ddMap config    
   
 ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
 ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))

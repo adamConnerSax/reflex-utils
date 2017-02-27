@@ -196,6 +196,7 @@ executable reflex-utils-simpleForm-warp
                      , ref-tf
                      , file-embed
                      , clay
+                     , process
                      , text
                      , bytestring
                      , containers
