@@ -439,7 +439,7 @@ buildLBEditableMap mFN mMap = sfRow $ mdo
   lbcMapEvBeh <- R.hold R.never (f <$> editedEv)  -- Behavior t (Event t (Map k v))
   let lbcMapEv = R.traceEventWith (const "switching") $ R.switch lbcMapEvBeh
   lbcMapDyn <- R.traceDynWith (const "lbcMapDyn") <$> R.holdDyn (LBCMap $ toMaybeMap map0) lbcMapEv
-  editedEv <- sfCol $ R.traceEventWith (const "editEv") <$> editWidgets (lbcMap <$> lbcMapDyn)
+  editedEv <- sfCol $ R.traceEventWith (const "editedEv") <$> editWidgets (lbcMap <$> lbcMapDyn)
 -- TODO: this (the fromMaybeMap) is expensive since it rebuilds the map on all updates
   return . DynValidation $ (AccSuccess . fromMaybeMap . lbcMap <$> lbcMapDyn)
 
