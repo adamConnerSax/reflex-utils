@@ -385,16 +385,22 @@ buildLBEditableMap mFN mMap = sfRow $ mdo
       editedToCI (Just k, v) = Just $ MapChangeValue k v
       editF Nothing _ _ = return R.never
       editF (Just _) valDyn selDyn = editOne (fromJust <$> valDyn) selDyn -- will be okay but relies on getting LBCState manipulation right
+--      map0Dyn = R.constDyn $ toMaybeMap map0
+      editWidgets x = R.fmapMaybe editedToCI <$> RD.selectViewListWithKey selectionDyn x editF
   lbcMapDyn <- R.foldDyn updateMap (LBCMap $ toMaybeMap map0) mapUpdateEv
+  let mapDyn = lbcMap <$> lbcMapDyn
   lbcSelDyn <- R.foldDyn updateSelection (LBCSelection mk0) selUpdateEv
   let selectionDyn = lbcSelection <$> lbcSelDyn
-      mapDyn = lbcMap <$> lbcMapDyn 
   selectEv <- sfCol $ selectableKeyList 10 labelF lbcMapDyn
-  editedEv <- sfCol $ R.fmapMaybe editedToCI <$> RD.selectViewListWithKey selectionDyn mapDyn editF
+  editedEv' <- sfCol $ editWidgets mapDyn
+  postBuild <- RD.getPostBuild
+  let newEditedEv = R.leftmost [postBuild,() <$ R.updated mapDyn]
+  editedEv <- R.switch <$> R.hold R.never (editedEv' <$ newEditedEv)
+--  let newMap = updateMap editedEv' <$> mapDyn -- Dynamic t (LBCMap k v)
   let selUpdateEv = R.leftmost [selectEv]
       mapUpdateEv = R.leftmost [editedEv]
 -- TODO: this (the fromMaybeMap) is expensive since it rebuilds the map on all updates
-  return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
+  return . DynValidation $ (AccSuccess . fromMaybeMap . lbcMap <$> lbcMapDyn)
 
 toMaybeMap::Ord k=>M.Map k v->M.Map (Maybe k) (Maybe v)
 toMaybeMap = M.insert Nothing Nothing . M.fromList . fmap (\(k,v)->(Just k,Just v)) . M.toList 
