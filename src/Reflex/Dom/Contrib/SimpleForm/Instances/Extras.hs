@@ -51,25 +51,11 @@ buildValidatedDynamic va mFN mda = B.validateFV va . makeSimpleFormR $
           builtDynM = (unSF . builder . Just) <$> aDyn -- Dynamic t (ReaderT e m (DynValidation t a))
           valDynM = builtDynM -- Dynamic t (ReaderT e m (DynValidation t a))
       newDynEv <- RD.dyn valDynM -- Event t (DynValidation a)
-      joinDynOfDynValidation <$> R.foldDyn (\_ x-> x) startDynM newDynEv -- DynValidation t a
+      joinDynOfDynValidation <$> R.holdDyn startDynM newDynEv -- DynValidation t a
 
   
 instance (SimpleFormC t m, RD.PostBuild t m, MonadFix m, VBuilderC t m a)=>Builder (SFR t m) (DynValidation t) (R.Dynamic t a) where
   buildValidated va mFN mda = B.validateFV va $ R.constDyn <$> buildValidatedDynamic B.validate mFN mda
-  {-
-  buildValidated va mFN mda = B.validateFV va . makeSimpleFormR $
-    case mda of
-      Nothing -> return dynValidationNothing
-      Just aDyn -> do
-        let builder::Maybe a->SimpleFormR t m a
-            builder = B.buildA mFN
-            startDynM = DynValidation $ AccSuccess <$> aDyn
-            builtDynM = (unSF . builder . Just) <$> aDyn -- Dynamic t (ReaderT e m (DynValidation t a))
-            valDynM = builtDynM -- Dynamic t (ReaderT e m (DynValidation t a))
-        newDynEv <- RD.dyn valDynM -- Event t (DynValidation a)
-        dValidation <- joinDynOfDynValidation <$> R.foldDyn (\_ x-> x) startDynM newDynEv -- DynValidation t a
-        return $ fmap R.constDyn dValidation -- ??
--}
 
 newtype MWidget m a = MWidget { unMW::m a }
 
