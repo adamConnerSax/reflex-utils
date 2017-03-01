@@ -395,8 +395,8 @@ buildLBEditableMap' mFN mMap = sfRow $ mdo
   return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
 
 
-buildLBEditableMap''::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
-buildLBEditableMap'' mFN mMap = sfRow $ mdo
+buildLBEditableMap'''::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
+buildLBEditableMap''' mFN mMap = sfRow $ mdo
   let map0 = fromMaybe M.empty mMap
       mk0 = if M.null map0 then Nothing else Just . head $ M.keys map0
       labelF k _ = T.pack $ show k
@@ -410,14 +410,39 @@ buildLBEditableMap'' mFN mMap = sfRow $ mdo
   let selectionDyn = lbcSelection <$> lbcSelDyn
   selectEv <- sfCol $ selectableKeyList 10 labelF lbcMapDyn
   let selUpdateEv = R.leftmost [selectEv]
+
   let lbcMap0Dyn = R.constDyn $ LBCMap (toMaybeMap map0)
   let f x = (updateMap x) <$> lbcMapDyn -- LBCMU -> Dynamic t (LBCMap k v)
-  lbcMapDynDyn <- R.holdDyn lbcMap0Dyn (f <$> editedEv)  -- Event t (Dynamic t (Map k v))
+  lbcMapDynDyn <- R.holdDyn lbcMap0Dyn (f <$> editedEv)  -- Dynamic t (Dynamic t (Map k v))
   let lbcMapDyn = join lbcMapDynDyn
   editedEv <- sfCol $ editWidgets (lbcMap <$> lbcMapDyn)
 -- TODO: this (the fromMaybeMap) is expensive since it rebuilds the map on all updates
   return . DynValidation $ (AccSuccess . fromMaybeMap . lbcMap <$> lbcMapDyn)
 
+
+buildLBEditableMap''::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
+buildLBEditableMap'' mFN mMap = sfRow $ mdo
+  let map0 = fromMaybe M.empty mMap
+      mk0 = if M.null map0 then Nothing else Just . head $ M.keys map0
+      labelF k _ = T.pack $ show k
+      editedToCI (Nothing,_) = Nothing -- shouldn't happen
+      editedToCI (Just k, v) = Just $ MapChangeValue k v
+      editF Nothing _ _ = return R.never
+      editF (Just _) valDyn selDyn = editOne (fromJust <$> valDyn) selDyn -- will be okay but relies on getting LBCState manipulation right
+      editWidgets x = R.fmapMaybe editedToCI <$> RD.selectViewListWithKey selectionDyn x editF
+
+  lbcSelDyn <- R.foldDyn updateSelection (LBCSelection mk0) selUpdateEv
+  let selectionDyn = lbcSelection <$> lbcSelDyn
+  selectEv <- sfCol $ selectableKeyList 10 labelF lbcMapDyn
+  let selUpdateEv = R.leftmost [selectEv]
+  
+  let f x = (updateMap x) <$> R.updated lbcMapDyn -- LBCMapUpdate k v -> Event t (LBCMap k v)
+  lbcMapEvBeh <- R.hold R.never (f <$> editedEv)  -- Behavior t (Event t (Map k v))
+  let lbcMapEv = R.traceEventWith (const "switching") $ R.switch lbcMapEvBeh
+  lbcMapDyn <- R.traceDynWith (const "lbcMapDyn") <$> R.holdDyn (LBCMap $ toMaybeMap map0) lbcMapEv
+  editedEv <- sfCol $ R.traceEventWith (const "editedEv") <$> editWidgets (lbcMap <$> lbcMapDyn)
+-- TODO: this (the fromMaybeMap) is expensive since it rebuilds the map on all updates
+  return . DynValidation $ (AccSuccess . fromMaybeMap . lbcMap <$> lbcMapDyn)
 
 buildLBEditableMap::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
 buildLBEditableMap mFN mMap = sfRow $ mdo
@@ -428,20 +453,24 @@ buildLBEditableMap mFN mMap = sfRow $ mdo
       editedToCI (Just k, v) = Just $ MapChangeValue k v
       editF Nothing _ _ = return R.never
       editF (Just _) valDyn selDyn = editOne (fromJust <$> valDyn) selDyn -- will be okay but relies on getting LBCState manipulation right
---      editWidgets::M.Map (Maybe k) (Maybe v) -> m (Event t (k,a))
       editWidgets x = R.fmapMaybe editedToCI <$> RD.selectViewListWithKey selectionDyn x editF
+
   lbcSelDyn <- R.foldDyn updateSelection (LBCSelection mk0) selUpdateEv
   let selectionDyn = lbcSelection <$> lbcSelDyn
   selectEv <- sfCol $ selectableKeyList 10 labelF lbcMapDyn
   let selUpdateEv = R.leftmost [selectEv]
---  let lbcMap0Dyn = R.constDyn $ LBCMap (toMaybeMap map0)
-  let f x = (updateMap x) <$> R.updated lbcMapDyn -- LBCMU -> Event t (LBCMap k v)
-  lbcMapEvBeh <- R.hold R.never (f <$> editedEv)  -- Behavior t (Event t (Map k v))
-  let lbcMapEv = R.traceEventWith (const "switching") $ R.switch lbcMapEvBeh
-  lbcMapDyn <- R.traceDynWith (const "lbcMapDyn") <$> R.holdDyn (LBCMap $ toMaybeMap map0) lbcMapEv
-  editedEv <- sfCol $ R.traceEventWith (const "editedEv") <$> editWidgets (lbcMap <$> lbcMapDyn)
+
+  let x0 = editWidgets <$> mapDynDyn -- Dynamic t (m (Event t LBCMapUpdate))
+  x1 <- RD.dyn x0 -- Event t (Event t LBCMapUpdate)
+  x2 <- R.hold R.never x1 -- Behavior (Event t LBCMapUpdate)
+  let x3 = R.switch x2 -- Event t LBCMapUpdate
+      f x = (updateMap x) <$> (LBCMap <$> R.constDyn (toMaybeMap map0)) -- LBCMapUpdate -> Dynamic t LBCMap
+      x4 = f <$> x3 -- Event t (Dynamic t LBCMap)
+  mapDynDyn <- R.holdDyn (R.constDyn $ toMaybeMap map0) (fmap lbcMap <$> x4)
+  let mapDyn = join mapDynDyn
+      lbcMapDyn = LBCMap <$> mapDyn
 -- TODO: this (the fromMaybeMap) is expensive since it rebuilds the map on all updates
-  return . DynValidation $ (AccSuccess . fromMaybeMap . lbcMap <$> lbcMapDyn)
+  return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
 
 editOne::(SimpleFormInstanceC t m, VBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
 editOne valDyn selDyn = do
