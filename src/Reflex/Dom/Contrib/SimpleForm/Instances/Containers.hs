@@ -370,8 +370,8 @@ visibleCSS::M.Map T.Text T.Text
 visibleCSS = "style" =: "display: inline"
 
 
-buildLBEditableMap'::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
-buildLBEditableMap' mFN mMap = sfRow $ mdo
+buildLBEditableMap''''::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
+buildLBEditableMap'''' mFN mMap = sfRow $ mdo
   let map0 = fromMaybe M.empty mMap
       mk0 = if M.null map0 then Nothing else Just . head $ M.keys map0
       labelF k _ = T.pack $ show k
@@ -385,14 +385,18 @@ buildLBEditableMap' mFN mMap = sfRow $ mdo
   let selectionDyn = lbcSelection <$> lbcSelDyn
   selectEv <- sfCol $ selectableKeyList 10 labelF lbcMapDyn
   let selUpdateEv = R.leftmost [selectEv]
-  lbcMapDyn <- R.foldDyn updateMap (LBCMap $ toMaybeMap map0) mapUpdateEv
+--  lbcMapDyn <- R.foldDyn updateMap (LBCMap $ toMaybeMap map0) mapUpdateEv
   let mapDyn = lbcMap <$> lbcMapDyn
   comboEv <- sfCol . RD.dyn $ editWidgets <$> mapDyn -- Event t (Event t (k,a))
   editedEvBeh <- R.hold R.never comboEv --Behavior t (Event t (k,a))
   let editedEv = R.traceEventWith (const "editedEv") $ R.switch editedEvBeh --Event t (k,a)
       mapUpdateEv = R.leftmost [editedEv]
+      mapEv = R.attachWith (flip updateMap) (R.current lbcMapDyn) mapUpdateEv
+  lbcMapDyn <- R.holdDyn (LBCMap $ toMaybeMap map0) mapEv
 -- TODO: this (the fromMaybeMap) is expensive since it rebuilds the map on all updates
   return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
+
+      
 
 
 buildLBEditableMap'''::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
@@ -444,8 +448,8 @@ buildLBEditableMap'' mFN mMap = sfRow $ mdo
 -- TODO: this (the fromMaybeMap) is expensive since it rebuilds the map on all updates
   return . DynValidation $ (AccSuccess . fromMaybeMap . lbcMap <$> lbcMapDyn)
 
-buildLBEditableMap::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
-buildLBEditableMap mFN mMap = sfRow $ mdo
+buildLBEditableMap'::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
+buildLBEditableMap' mFN mMap = sfRow $ mdo
   let map0 = fromMaybe M.empty mMap
       mk0 = if M.null map0 then Nothing else Just . head $ M.keys map0
       labelF k _ = T.pack $ show k
@@ -464,6 +468,7 @@ buildLBEditableMap mFN mMap = sfRow $ mdo
   x1 <- RD.dyn x0 -- Event t (Event t LBCMapUpdate)
   x2 <- R.hold R.never x1 -- Behavior (Event t LBCMapUpdate)
   let x3 = R.switch x2 -- Event t LBCMapUpdate
+  
       f x = (updateMap x) <$> (LBCMap <$> R.constDyn (toMaybeMap map0)) -- LBCMapUpdate -> Dynamic t LBCMap
       x4 = f <$> x3 -- Event t (Dynamic t LBCMap)
   mapDynDyn <- R.holdDyn (R.constDyn $ toMaybeMap map0) (fmap lbcMap <$> x4)
@@ -471,6 +476,46 @@ buildLBEditableMap mFN mMap = sfRow $ mdo
       lbcMapDyn = LBCMap <$> mapDyn
 -- TODO: this (the fromMaybeMap) is expensive since it rebuilds the map on all updates
   return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
+
+buildLBEditableMap::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
+buildLBEditableMap mFN mMap = sfRow $ mdo
+  let map0 = fromMaybe M.empty mMap
+      mk0 = if M.null map0 then Nothing else Just . head $ M.keys map0
+      labelF k _ = T.pack $ show k
+      editedToCI (Nothing,_) = Nothing -- shouldn't happen
+      editedToCI (Just k, v) = Just $ MapChangeValue k v
+      editF Nothing _ = return R.never
+      editF (Just val) selDyn = editOneSimple val selDyn -- will be okay but relies on getting LBCState manipulation right
+      editWidgets x = R.fmapMaybe editedToCI <$> myWidgetList selectionDyn x editF
+
+  lbcSelDyn <- R.foldDyn updateSelection (LBCSelection mk0) selUpdateEv
+  let selectionDyn = lbcSelection <$> lbcSelDyn
+  selectEv <- sfCol $ selectableKeyList 10 labelF lbcMapDyn
+  let selUpdateEv = R.leftmost [selectEv]
+
+  let mapped = editWidgets <$> mapDyn
+  dyned <- RD.dyn mapped
+  held <- R.hold R.never dyned
+  let switched = R.switch held -- Event LBCMapUpdate
+      mapEv = R.attachWith (flip updateMap) (R.current lbcMapDyn) switched
+  mapDyn <- R.holdDyn (toMaybeMap map0) (lbcMap <$> mapEv)
+  let lbcMapDyn = LBCMap <$> mapDyn 
+  return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
+
+
+myWidgetList::(R.Reflex t,Monad m,Eq k)=>R.Dynamic t k->M.Map k v->(v->R.Dynamic t Bool->m (R.Event t a))->m (R.Event t (k,a))
+myWidgetList selDyn kvMap widgetF = do
+  let selWidgetF keyDyn f (key,val) = fmap (key,) <$> f val ((==key) <$> keyDyn)
+      listOfWidgets = selWidgetF selDyn widgetF <$> M.toList kvMap
+  listOfEvents <- sequence listOfWidgets    
+  return $ R.leftmost listOfEvents
+
+editOneSimple::(SimpleFormInstanceC t m, VBuilderC t m v)=>v->R.Dynamic t Bool->SFR t m (R.Event t v)
+editOneSimple val selDyn = do
+  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
+  resDynAV <-  RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ B.buildA Nothing (Just val)) -- Dynamic t (AccValidation) val
+  let resDyn = accValidation (const Nothing) Just <$> resDynAV -- Dynamic t (Maybe v)
+  return $ R.traceEventWith (const "editOneSimple") $ R.fmapMaybe id $ R.updated resDyn 
 
 editOne::(SimpleFormInstanceC t m, VBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
 editOne valDyn selDyn = do
