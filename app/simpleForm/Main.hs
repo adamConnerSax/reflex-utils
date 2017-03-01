@@ -240,13 +240,14 @@ testComplexForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfigu
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (Just c)
+  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (Just testMap)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
+{-  
   el "p" $ text "Observed C:"
   el "p" blank
   _ <- flexFill LayoutRight $ observeDynValidation cfg cDynM
-
+-}
   return ()
 
 complexFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration t m -> TabInfo t m ()
