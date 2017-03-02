@@ -256,7 +256,6 @@ executable reflex-utils-forRyan-warp
     buildable: False
   hs-source-dirs:      app/forRyan
   main-is:             Main.hs
-  other-modules:       Css
   ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
   if flag(warp)
    cpp-options: -DUSE_WARP -DUSE_JSADDLE
@@ -269,6 +268,9 @@ executable reflex-utils-forRyan-warp
                      , reflex-dom
                      , reflex-dom-contrib
                      , ghcjs-dom
+                     , containers
+                     , text
+                     , process
   default-language:    Haskell2010
 
 
