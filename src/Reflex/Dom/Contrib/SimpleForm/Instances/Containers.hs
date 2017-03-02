@@ -396,6 +396,14 @@ buildLBEditableMap mFN mMap = sfRow $ mdo
   return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
 
 
+selectableWidget::(RD.DomBuilder t m,RD.PostBuild t m, RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, Read v, Show v)
+  =>R.Dynamic t v
+  ->R.Dynamic t Bool
+  ->m (R.Event t v)
+selectableWidget valDyn selDyn = do
+  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
+  RD.elDynAttr "div" widgetAttrs $ editWidget valDyn
+
 editWidget::(RD.DomBuilder t m, RD.PostBuild t m, RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, Show v, Read v)
   =>R.Dynamic t v
   -> m (R.Event t v)
@@ -406,14 +414,19 @@ editWidget vDyn = do
       config = RD.def {RD._textInputConfig_setValue = R.leftmost [initialEv,newvEv] }
   R.fmapMaybe (readMaybe . T.unpack) . RD._textInput_input <$> RD.textInput config
 
-selectableWidget::(RD.DomBuilder t m,RD.PostBuild t m, RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, Read v, Show v)
-  =>R.Dynamic t v
-  ->R.Dynamic t Bool
-  ->m (R.Event t v)
-selectableWidget valDyn selDyn = do
+editOne::(SimpleFormInstanceC t m, VBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
+editOne valDyn selDyn = do
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
-  RD.elDynAttr "div" widgetAttrs $ editWidget valDyn
+  resDynAV <-  RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ buildValidatedDynamic B.validate Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
+  let resDyn = accValidation (const Nothing) Just <$> resDynAV -- Dynamic t (Maybe v)
+  return $ R.traceEventWith (const "editOne") $ R.fmapMaybe id $ R.updated resDyn 
 
+editOne'::(SimpleFormInstanceC t m, VBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
+editOne' vDyn selDyn = do
+  let editDyn = flip editOneSimple selDyn <$> vDyn
+  editEvEv <- RD.dyn editDyn
+  editBeh <- R.hold R.never editEvEv
+  return $ R.switch editBeh
 
 editOneSimple::(SimpleFormInstanceC t m, VBuilderC t m v)=>v->R.Dynamic t Bool->SFR t m (R.Event t v)
 editOneSimple val selDyn = do
@@ -421,13 +434,6 @@ editOneSimple val selDyn = do
   resDynAV <-  RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ B.buildA Nothing (Just val)) -- Dynamic t (AccValidation) val
   let resDyn = accValidation (const Nothing) Just <$> resDynAV -- Dynamic t (Maybe v)
   return $ R.traceEventWith (const "editOneSimple") $ R.fmapMaybe id $ R.updated resDyn 
-
-editOne::(SimpleFormInstanceC t m, VBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
-editOne valDyn selDyn = do
-  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
-  resDynAV <-  RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ buildValidatedDynamic B.validate Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
-  let resDyn = accValidation (const Nothing) Just <$> resDynAV -- Dynamic t (Maybe v)
-  return $ R.traceEventWith (const "editOne") $ R.fmapMaybe id $ R.updated resDyn 
 
 
 toMaybeMap::Ord k=>M.Map k v->M.Map (Maybe k) (Maybe v)

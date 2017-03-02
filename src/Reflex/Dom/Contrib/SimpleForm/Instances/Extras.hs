@@ -16,6 +16,7 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Extras
 
 import           Control.Lens                          (view)
 import           Control.Lens.Iso                      (Iso', from, iso)
+import Control.Monad (join)
 import           Control.Monad.Fix                     (MonadFix)
 import           Control.Monad.Reader                  (lift)
 import qualified Data.Text                             as T
@@ -40,18 +41,26 @@ instance (SimpleFormC t m,EquivRep a b, B.Builder (SimpleFormR t m) b)=>Builder 
   buildA mFN ma = from <$> buildA mFN (to <$> ma)
 -}
 
+buildValidatedDynamic'::forall t m a.(SimpleFormC t m, RD.PostBuild t m, MonadFix m, VBuilderC t m a)=>B.Validator (DynValidation t) a -> Maybe FieldName -> Maybe (R.Dynamic t a) -> SimpleFormR t m a
+buildValidatedDynamic' va mFN mda = B.validateFV va . makeSimpleFormR $ do
+  let inputDyn = maybe (R.constDyn Nothing) (fmap Just) mda -- Dynamic t (Maybe a)
+      builderDyn = unSF . B.buildA mFN <$> inputDyn -- Dynamic t (SFRW t m a)
+  builderDVEv <- fmap unDynValidation <$> RD.dyn builderDyn --Event t (Dynamic t (AccValidation t a))
+  avDyn <- join <$> R.holdDyn (maybeToAV <$> inputDyn) builderDVEv -- Dynamic t (Dynamic t (AccValidation t a))
+  return $ DynValidation avDyn
+
+
 buildValidatedDynamic::forall t m a.(SimpleFormC t m, RD.PostBuild t m, MonadFix m, VBuilderC t m a)=>B.Validator (DynValidation t) a -> Maybe FieldName -> Maybe (R.Dynamic t a) -> SimpleFormR t m a
-buildValidatedDynamic va mFN mda = B.validateFV va . makeSimpleFormR $
-  case mda of
-    Nothing -> return dynValidationNothing
-    Just aDyn -> do
-      let builder::Maybe a->SimpleFormR t m a
-          builder = B.buildA mFN
-          startDynM = DynValidation $ AccSuccess <$> aDyn
-          builtDynM = (unSF . builder . Just) <$> aDyn -- Dynamic t (ReaderT e m (DynValidation t a))
-          valDynM = builtDynM -- Dynamic t (ReaderT e m (DynValidation t a))
-      newDynEv <- RD.dyn valDynM -- Event t (DynValidation a)
-      joinDynOfDynValidation <$> R.holdDyn startDynM newDynEv -- DynValidation t a
+buildValidatedDynamic va mFN mda = B.validateFV va . makeSimpleFormR $ do
+  let inputDyn = maybe (R.constDyn Nothing) (fmap Just) mda -- Dynamic t (Maybe a)
+      builderDyn = unSF . B.buildA mFN <$> inputDyn -- Dynamic t (SFRW t m a)
+  postbuild <- RD.getPostBuild
+  builderEvEv <- fmap (R.updated . unDynValidation) <$> RD.dyn builderDyn --Event t (Event t (AccValidation a))
+  builderEvBeh <- R.hold R.never builderEvEv -- Behavior t (Event t (AccValidation a))
+  let builderEv = R.switch builderEvBeh -- Event t (AccValidation a)
+      initialEv = R.attachWith const (R.current (maybeToAV <$> inputDyn)) postbuild
+  avDyn <- R.holdDyn (AccFailure [SFNothing]) $ R.leftmost [builderEv] --,initialEv]
+  return $ DynValidation avDyn
 
   
 instance (SimpleFormC t m, RD.PostBuild t m, MonadFix m, VBuilderC t m a)=>Builder (SFR t m) (DynValidation t) (R.Dynamic t a) where
