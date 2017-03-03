@@ -161,7 +161,7 @@ instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) ReadableTy
   buildValidated = buildReadMaybe
 
 
-{-
+
 --We'll put these all in a Sum type to show how the form building handles that
 data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType | AA Age deriving (Show,GHC.Generic)
 
@@ -232,7 +232,7 @@ instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) DateOrDate
 b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
 b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
--}
+
 testMap::M.Map T.Text Int
 testMap = M.fromList [("A",1),("B",2),("C",3)]
 
@@ -240,14 +240,13 @@ testComplexForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfigu
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (Just testMap)
+  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (Just c)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
-{-
   el "p" $ text "Observed C:"
   el "p" blank
   _ <- flexFill LayoutRight $ observeDynValidation cfg cDynM
--}
+
   return ()
 
 complexFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration t m -> TabInfo t m ()

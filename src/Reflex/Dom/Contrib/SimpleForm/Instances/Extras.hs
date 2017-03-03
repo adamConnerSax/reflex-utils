@@ -54,11 +54,12 @@ buildValidatedDynamic::forall t m a.(SimpleFormC t m, RD.PostBuild t m, MonadFix
 buildValidatedDynamic va mFN mda = B.validateFV va . makeSimpleFormR $ do
   let inputDyn = maybe (R.constDyn Nothing) (fmap Just) mda -- Dynamic t (Maybe a)
       builderDyn = unSF . B.buildA mFN <$> inputDyn -- Dynamic t (SFRW t m a)
-  postbuild <- RD.getPostBuild
+
   builderEvEv <- fmap (R.updated . unDynValidation) <$> RD.dyn builderDyn --Event t (Event t (AccValidation a))
   builderEvBeh <- R.hold R.never builderEvEv -- Behavior t (Event t (AccValidation a))
-  let builderEv = R.switch builderEvBeh -- Event t (AccValidation a)
-      initialEv = R.attachWith const (R.current (maybeToAV <$> inputDyn)) postbuild
+  let builderEv = R.traceEventWith (const "builderEv") $ R.switch builderEvBeh -- Event t (AccValidation a)
+--  postbuild <- RD.getPostBuild
+--  let initialEv = R.attachWith const (R.current (maybeToAV <$> inputDyn)) postbuild
   avDyn <- R.holdDyn (AccFailure [SFNothing]) $ R.leftmost [builderEv] --,initialEv]
   return $ DynValidation avDyn
 

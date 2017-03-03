@@ -1,0 +1,18 @@
+Small
+1. Re-unite state types and do all changes (selection and map) through one state type?
+2. Figure out more graceful way of handling the "Nothing" case so that the dropdown doesn't have the blank representing nothing
+3. Put add/delete buttons on ListBasedEditable
+4. Add a "change key" option?  It would have to remove the old and add it as a new one with a new key?
+
+Medium
+1. Make other containers work in this framework.
+   a. All need to be made into maps?
+   b. Flexibility in displayed keys?
+
+
+Large/Hard
+1. Make all Dynamics in/Events out or
+2. Make a separate chain of Dynamics in/Dynamics out instances for performance.
+
+These would both need to use the event setting option on the base widget configs. Don't quite see how yet.
+
