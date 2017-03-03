@@ -3,6 +3,7 @@ Small
 2. Figure out more graceful way of handling the "Nothing" case so that the dropdown doesn't have the blank representing nothing
 3. Put add/delete buttons on ListBasedEditable
 4. Add a "change key" option?  It would have to remove the old and add it as a new one with a new key?
+5. Initial states??
 
 Medium
 1. Make other containers work in this framework.
@@ -11,8 +12,22 @@ Medium
 
 
 Large/Hard
-1. Make all Dynamics in/Events out or
-2. Make a separate chain of Dynamics in/Dynamics out instances for performance.
+1. All instances Maybe (Dynamic t a) -> SimpleFormR t m a [Dynamics in, Dynamics out]
 
-These would both need to use the event setting option on the base widget configs. Don't quite see how yet.
+
+Questions:
+
+1.  Any way to make it Dynamics in, Events out?  Without Events being applicative, I don't see how:
+
+combineEv::(a->b->c)->Event a->Event b->Event c
+combineEv f aEv bEv = ?
+
+2. Combining dynamics with DMap functions is more efficient than Applicatives.  How to use this?  We could just redo the Generics piece of databuilder specifically for dynamics.  Any way to generalize databuilder for a different combining function?  
+
+Notes:
+
+1. Splitting dynamics via the functor instance is the most efficent.  So no need to optimize that way.
+
+
+
 
