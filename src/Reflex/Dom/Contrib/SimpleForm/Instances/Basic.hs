@@ -273,8 +273,6 @@ instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, 
 -- generics for (,) since mkDyn is not an optimization here
 instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
 
-
-
 instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c)=>FormBuilder t m (a,b,c) where
   buildForm va mFN mTupDyn = validateForm va . makeSimpleFormR $ sfRow $ do
       maW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
