@@ -49,16 +49,6 @@ dynValidationErr = DynValidation . constDyn . AccFailure
 joinDynOfDynValidation::Reflex t =>Dynamic t (DynValidation t a) -> DynValidation t a
 joinDynOfDynValidation = DynValidation . join . fmap unDynValidation
 
-{- Dynamic t is not traversable ??
-joinDynValidation::Reflex t=>DynValidation t (DynValidation t a) -> DynValidation t a
-joinDynValidation x =
-  let x'    = sequenceA $ unDynValidation x -- AccValidation (Dynamic t (DynValidation t a))
-      x''   =  (join . fmap unDynValidation) <$> x' -- AccValidation (Dynamic t (AccValidation t a))
-      x'''  = sequenceA x'' -- Dynamic t (AccValidation (AccValidation a))
-      x'''' = fmap mergeAccValidation x'''
-  in DynValidation x''''
--}
-
 instance Reflex t=>Functor (DynValidation t) where
   fmap f dva = DynValidation $ fmap (fmap f) (unDynValidation dva)
 

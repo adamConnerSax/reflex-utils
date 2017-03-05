@@ -6,23 +6,13 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecursiveDo           #-}
+--{-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
-module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
+module Reflex.Dom.Contrib.SimpleForm.Instances.BasicDynamic
        (
-         sfWidget
-       , sfWidget'
-       , buildReadMaybe
-       , buildReadable
-       , BasicC
-       , SimpleFormInstanceC
-       , VBuilderC
-       , showText
-       , parseError
-       , parseAndValidate
-       , textWidgetValue
-       , item
+         buildDynReadMaybe
+       , buildDynReadable
        ) where
 
 import           Control.Lens                          (over, view, (^.))
@@ -56,93 +46,42 @@ import qualified DataBuilder                           as B
 import           Reflex.Dom.Contrib.Layout.Types       (emptyCss, toCssString)
 import           Reflex.Dom.Contrib.ReflexConstraints
 import           Reflex.Dom.Contrib.SimpleForm.Builder
+import           Reflex.Dom.Contrib.SimpleForm.Instances.Basic
 -- instances
 
---some helpers
-showText::Show a=>a->T.Text
-showText = T.pack . show
 
-type BasicC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
-type SimpleFormInstanceC t m = (SimpleFormC t m, MonadWidgetExtraC t m, RD.PostBuild t m, MonadFix m)
-type VBuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
+-- turn a Dynamic into an Event with an initial firing to represent the value at postbuild.  Should we sample and return (a,Event t a)?
+mDynToInputEv::(R.Reflex t,RD.PostBuild t m)=>Maybe (R.Dynamic t a)-> m (R.Event t a)
+mDynToInputEv mDyn = do
+  postbuild <- RD.getPostBuild
+  let startValueEv x = R.attachWith const x postbuild
+      comboEv d = R.leftmost [startValueEv (R.current d), R.updated d]
+      updateEv = maybe R.never comboEv mDyn      
+  return updateEv -- this might cause loops from the startValueEv??
 
-instance {-# OVERLAPPABLE #-} R.Reflex t=>B.Validatable (DynValidation t) a
-
-readOnlyW::(BasicC t m, RD.PostBuild t m)=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
-readOnlyW f wc = do
-  da <- R.foldDyn const (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
-  let ds = f <$> da
-  RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
-  return da
-
-sfWidget::forall t m a b.(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)=>
-          (a->b)->
-          (a->T.Text)->
-          Maybe FieldName->
-          WidgetConfig t a->
-          (WidgetConfig t a->m (R.Dynamic t a))->
-          SFR t m (R.Dynamic t b)
-sfWidget fDyn fString mFN wc widget = do
-  let addToAttrs::R.Reflex t=>T.Text->Maybe T.Text->RD.Dynamic t (M.Map T.Text T.Text)->RD.Dynamic t (M.Map T.Text T.Text)
-      addToAttrs attr mVal attrsDyn = case mVal of
-        Nothing -> attrsDyn
-        Just val -> M.union (attr RD.=: val) <$> attrsDyn
-  isObserver <- (==ObserveOnly) <$> getFormType
-  inputCfg <- view inputConfig
-  inputCss <- inputClasses
-  let mTitleVal = maybe (T.pack <$> mFN) Just (_inputTitle inputCfg) -- if none specified and there's a fieldname, use it.
-      addTitle = addToAttrs "title" mTitleVal
-      addPlaceHolder = addToAttrs "placeholder" (_inputPlaceholder inputCfg)
-      mInputClasses = if inputCss == emptyCss then Nothing else Just (toCssString inputCss)
-      addInputClass = addToAttrs "class" mInputClasses
-      wcAll = over widgetConfig_attributes addTitle wc
-      wcInput = over widgetConfig_attributes (addPlaceHolder . addInputClass) wcAll
-      labeledWidget iw = case _inputLabelConfig inputCfg of
-        Nothing -> iw
-        Just (LabelConfig t attrs) -> RD.elAttr "label" attrs  $ (RD.el "span" $ RD.text t) >> iw
-  lift . labeledWidget $ (fmap fDyn <$> (if isObserver then readOnlyW fString wcAll else widget wcInput))
-
-sfWidget'::(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)=>
-  R.Event t a->b->(a->b)->(b->DynValidation t a)->(b->T.Text)->Maybe FieldName->Maybe T.Text->
-  (WidgetConfig t b->m (R.Dynamic t b))->SimpleFormR t m a
-sfWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = makeSimpleFormR $ mdo
-  attrsDyn <- sfAttrs dva mFN mTypeName
-  let wc = WidgetConfig (toWT <$> updateEv) initialWV attrsDyn
-  dva <- item $ joinDynOfDynValidation <$> sfWidget validateWT showWT mFN wc widget
-  return dva
-
-
-item::Monad m=>SFLayoutF t m
-item = sfItem
-
-instance R.Reflex t=>Functor (HtmlWidget t) where
-  fmap f (HtmlWidget v c kp kd ku hf) = HtmlWidget (f <$> v) (f <$> c) kp kd ku hf
-
-textWidgetValue::SimpleFormInstanceC t m=>Maybe FieldName->WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
-textWidgetValue mFN c = _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
-
-parseError::Maybe FieldName->T.Text->T.Text
-parseError mFN x = T.pack (fromMaybe "N/A" mFN) <> ": " <> x
-
-parseAndValidate::R.Reflex t=>Maybe FieldName->T.Text->(T.Text -> Maybe a)->B.Validator (DynValidation t) a->DynValidation t a
-parseAndValidate mFN t parse va =
-  case parse t of
-    Nothing -> dynValidationErr [SFNoParse $ parseError mFN t]
-    Just y -> va y
-
-buildReadable::(SimpleFormInstanceC t m, Readable a, Show a)=>B.Validator (DynValidation t) a->Maybe FieldName->Maybe a->SimpleFormR t m a
-buildReadable va mFN ma =
+buildDynReadable::(SimpleFormInstanceC t m, Readable a, Show a)
+  =>B.Validator (DynValidation t) a
+  ->Maybe FieldName
+  ->Maybe (R.Dynamic t a)
+  ->SimpleFormR t m a
+buildDynReadable va mFN maDyn = makeSimpleFormR $ do
   let vfwt x = parseAndValidate mFN x fromText va
-  in sfWidget' R.never (maybe "" showText ma) showText vfwt showText mFN Nothing $ textWidgetValue mFN
+  inputEv <- mDynToInputEv maDyn
+  unSF $ sfWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
-buildReadMaybe::(SimpleFormInstanceC t m, Read a, Show a)=>B.Validator (DynValidation t) a->Maybe FieldName->Maybe a->SimpleFormR t m a
-buildReadMaybe va mFN ma =
+buildDynReadMaybe::(SimpleFormInstanceC t m, Read a, Show a)=>B.Validator (DynValidation t) a->Maybe FieldName->Maybe (R.Dynamic t a)->SimpleFormR t m a
+buildDynReadMaybe va mFN maDyn = makeSimpleFormR $ do
   let vfwt x = parseAndValidate mFN x (readMaybe . T.unpack) va
-  in sfWidget' R.never (maybe "" showText ma) showText vfwt showText mFN Nothing $ textWidgetValue mFN
+  inputEv <- mDynToInputEv maDyn
+  unSF $ sfWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
+{-
 -- | String and Text
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) T.Text where
-  buildValidated va mFN mInitial = sfWidget' R.never (maybe "" id mInitial) id va id mFN Nothing $ textWidgetValue mFN
+instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) (Dynamic t T.Text) where
+  buildValidated va mFN mInitialDyn = do
+    postbuild <- getPostBuild
+    
+    sfWidget' R.never (maybe "" id mInitial) id va id mFN Nothing $ textWidgetValue mFN
 
 instance {-# OVERLAPPING #-} SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) String where
   buildValidated va mFN mInitial =
@@ -267,3 +206,4 @@ instance (SimpleFormC t m, VBuilderC t m a, VBuilderC t m b, VBuilderC t m c, VB
       mdW <- unSF $ B.buildA Nothing md
       meW <- unSF $ B.buildA Nothing me
       return $ (,,,,) <$> maW <*> mbW <*> mcW <*> mdW <*> meW
+-}

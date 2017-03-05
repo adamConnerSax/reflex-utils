@@ -18,7 +18,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , makeSimpleForm
        , makeSimpleForm'
        , observeDynamic
---       , observeDynValidation
+       , observeDynValidation
        , observeWidget
        , observeFlow
        , SimpleFormR
