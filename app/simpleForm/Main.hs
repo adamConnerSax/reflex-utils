@@ -11,6 +11,7 @@
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TemplateHaskell           #-}
 {-# LANGUAGE TypeFamilies              #-}
+{-# LANGUAGE UndecidableInstances      #-}
 module Main where
 
 import           Control.Lens                                (view, (^.))
@@ -82,18 +83,18 @@ import qualified System.Process                              as SP
 --It's easy to add validation (via newtype wrapper)
 newtype Age = Age { unAge::Int } deriving (Show)
 
-liftValidation::Reflex t=>(a->Bool)->(a->T.Text)->B.Validator (DynValidation t) a
-liftValidation test msg = (\a -> DynValidation . constDyn $ if test a then AccSuccess a else AccFailure [SFInvalid (msg a)])
+liftValidation::(a->Bool)->(a->T.Text)->FormValidator a
+liftValidation test msg = (\a -> if test a then AccSuccess a else AccFailure [SFInvalid (msg a)])
 
-instance Reflex t=>B.Validatable (DynValidation t) Age where
-  validate = liftValidation ((>0) . unAge) (const "Age must be > 0")
+instance B.Validatable SFValidation Age where
+  validator = liftValidation ((>0) . unAge) (const "Age must be > 0")
 
-instance SimpleFormInstanceC t m => Builder (SFR t m) (DynValidation t) Age where
-  buildValidated va mFn ma =
+instance SimpleFormInstanceC t m => FormBuilder t m Age where
+  buildForm va mFn maDyn =
     let labelCfg = LabelConfig "Age" M.empty
         inputCfg = InputElementConfig (Just "35") (Just "Age") (Just labelCfg)
         vInt = liftValidation (>0) (const "Age must be > 0")
-    in B.validateFV va . (fmap Age) $ liftF (setInputConfig inputCfg) $ buildValidated vInt mFn (unAge <$> ma)
+    in validateForm va . (fmap Age) $ liftF (setInputConfig inputCfg) $ buildForm vInt mFn (fmap unAge <$> maDyn)
 
 newtype EmailAddress = EmailAddress { unEmailAddress::T.Text } deriving (Show)
 
@@ -103,32 +104,32 @@ validEmail address = let
   in (T.length userPart >= 1) && (T.length domainPart >= 2)
 --  in if valid then Right ea else Left "Email address must be of the form a@b"
 
-instance Reflex t=>B.Validatable (DynValidation t) EmailAddress where
-  validate = liftValidation (validEmail . unEmailAddress) (const "Email address must be of the form a@b")
+instance Validatable SFValidation EmailAddress where
+  validator = liftValidation (validEmail . unEmailAddress) (const "Email address must be of the form a@b")
 
-instance SimpleFormInstanceC t m => Builder (SFR t m) (DynValidation t) EmailAddress where
-  buildValidated va mFn ma =
+instance SimpleFormInstanceC t m => FormBuilder t m EmailAddress where
+  buildForm va mFn maDyn =
     let labelCfg = LabelConfig "Email" M.empty
         inputCfg = InputElementConfig (Just "yourname@emailprovider.com") (Just "Email") (Just labelCfg)
         vText = liftValidation validEmail (const "Email address must be of the form a@b")
-    in B.validateFV va . (fmap EmailAddress) $ liftF (setInputConfig inputCfg) $ buildValidated vText mFn (unEmailAddress <$> ma)
+    in validateForm va . (fmap EmailAddress) $ liftF (setInputConfig inputCfg) $ buildForm vText mFn (fmap unEmailAddress <$> maDyn)
 
 newtype Name = Name { unName::T.Text } deriving (Show)
-instance Reflex t=>B.Validatable (DynValidation t) Name -- uses default which is that everything is valid
+instance B.Validatable SFValidation Name -- uses default which is that everything is valid
 
-instance SimpleFormInstanceC t m => Builder (SFR t m) (DynValidation t)  Name where
-  buildValidated va mFn ma =
+instance SimpleFormInstanceC t m => FormBuilder t m Name where
+  buildForm va mFn maDyn =
     let labelCfg = LabelConfig "Name" M.empty
         inputCfg = InputElementConfig (Just "John Doe") (Just "Name") (Just labelCfg)
-    in B.validateFV va $ liftF (setInputConfig inputCfg) $ Name <$> buildA mFn (unName <$> ma)
+    in validateForm va $ liftF (setInputConfig inputCfg) $ Name <$> buildForm' mFn (fmap unName <$> maDyn)
 
 -- a simple structure
 data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Generic,Show)
 
 instance Generic User
 instance HasDatatypeInfo User
-instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) User where
-  buildValidated va mFN = liftF sfCol . gBuildValidated va mFN
+instance SimpleFormInstanceC t m=>FormBuilder t m User where
+  buildForm va mFN = liftF sfCol . fgvToSimpleFormR . gBuildValidated va mFN
 
 testUserForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m->m ()
 testUserForm cfg = do
@@ -157,9 +158,8 @@ data DateOrDateTime = D Day | DT UTCTime deriving (Show)
 
 -- Anything with a Read instance can be built using buildReadMaybe
 data ReadableType = RTI Int | RTS String deriving (Show,Read)
-instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) ReadableType where
-  buildValidated = buildReadMaybe
-
+instance SimpleFormInstanceC t m=>FormBuilder t m ReadableType where
+  buildForm = buildDynReadMaybe
 
 
 --We'll put these all in a Sum type to show how the form building handles that
@@ -181,52 +181,56 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 
 instance Generic A
 instance HasDatatypeInfo A
-instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) A where
-  buildValidated va mFN = liftF sfRow . gBuildValidated va mFN
+instance SimpleFormInstanceC t m=>FormBuilder t m A where
+  buildForm va mFN = liftF sfRow . fgvToSimpleFormR . gBuildValidated va mFN
 
 instance Generic B
 instance HasDatatypeInfo B
-instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) B where
-  buildValidated va mFN = liftF (fieldSet "B" . sfRow) . gBuildValidated va mFN
+instance SimpleFormInstanceC t m=>FormBuilder t m B where
+  buildForm va mFN = liftF (fieldSet "B" . sfRow) . fgvToSimpleFormR . gBuildValidated va mFN
 
 instance Generic MyMap
 instance HasDatatypeInfo MyMap
-instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) MyMap
+instance SimpleFormInstanceC t m=>FormBuilder t m MyMap
 
 instance Generic C
 instance HasDatatypeInfo C
-instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) C where
-  buildValidated va mFN = liftF (fieldSet "C" . sfCol) . gBuildValidated va mFN
+instance SimpleFormInstanceC t m=>FormBuilder t m C where
+  buildForm va mFN = liftF (fieldSet "C" . sfCol) . fgvToSimpleFormR . gBuildValidated va mFN
 
 -- More layout options are available if you write custom instances.
 -- handwritten single constructor instance
-instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) BRec where
-  buildValidated va mFN mBRec = B.validateFV va . makeSimpleFormR $ do
-    let b1 = buildA Nothing (oneB <$> mBRec)
-        b2 = liftF (sfCenter LayoutHorizontal) $ buildA Nothing (seqOfA <$> mBRec)
-        b3 = liftF (sfCenter LayoutHorizontal) $ buildA Nothing (hashSetOfString <$> mBRec)
+instance SimpleFormInstanceC t m=>FormBuilder t m BRec where
+  buildForm va mFN mBRecDyn = validateForm va . makeSimpleFormR $ do
+    let b1 = buildForm' Nothing (fmap oneB <$> mBRecDyn)
+        b2 = liftF (sfCenter LayoutHorizontal) $ buildForm' Nothing (fmap seqOfA <$> mBRecDyn)
+        b3 = liftF (sfCenter LayoutHorizontal) $ buildForm' Nothing (fmap hashSetOfString <$> mBRecDyn)
     sfRow . unSF $ (BRec <$> b1 <*> b2 <*> b3)
 
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
-buildDate::SimpleFormInstanceC t m=>B.Validator (DynValidation t) DateOrDateTime->
-  Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SFR t m) (DynValidation t) DateOrDateTime
-buildDate va mFN ms = MDWrapped matched ("Date",mFN) bldr where
-  (matched,mDay) = case ms of
-    Just (D day) -> (True,Just day)
-    _            -> (False, Nothing)
-  bldr = B.validateFV va $ D <$> buildA Nothing mDay
+buildDate::SimpleFormInstanceC t m=>FormValidator DateOrDateTime->
+  Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (MDWrapped (SFR t m) (Dynamic t) SFValidation DateOrDateTime)
+buildDate va mFN msDyn =
+  let f ms = MDWrapped matched ("Date",mFN) bldr where
+        (matched,mDay) = case ms of
+                           Just (D day) -> (True,Just day)
+                           _            -> (False, Nothing)
+        bldr = simpleFormRToFGV $ validateForm va $ D <$> buildForm' Nothing (constDyn <$> mDay)
+  in f <$> msDyn
+  
+buildDateTime::SimpleFormInstanceC t m=>FormValidator DateOrDateTime ->
+  Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (MDWrapped (SFR t m) (Dynamic t) SFValidation DateOrDateTime)
+buildDateTime va mFN msDyn =
+  let f ms = MDWrapped matched ("DateTime",mFN) bldr where
+        (matched,mDateTime) = case ms of
+                                Just (DT dt) -> (True,Just dt)
+                                _            -> (False, Nothing)
+        bldr = simpleFormRToFGV $ validateForm va $ DT <$> buildForm' Nothing (constDyn <$> mDateTime)
+  in f <$> msDyn
 
-buildDateTime::SimpleFormInstanceC t m=>B.Validator (DynValidation t) DateOrDateTime ->
-  Maybe FieldName->Maybe DateOrDateTime->MDWrapped (SFR t m) (DynValidation t) DateOrDateTime
-buildDateTime va mFN ms = MDWrapped matched ("DateTime",mFN) bldr where
-  (matched,mDateTime) = case ms of
-    Just (DT dt) -> (True,Just dt)
-    _            -> (False, Nothing)
-  bldr = B.validateFV va $ DT <$> buildA Nothing mDateTime
-
-instance SimpleFormInstanceC t m=>Builder (SFR t m) (DynValidation t) DateOrDateTime where
-  buildValidated = B.buildAFromConList [buildDate,buildDateTime]
+instance SimpleFormInstanceC t m=>FormBuilder t m DateOrDateTime where
+  buildForm = makeSimpleFormR . fmap DynValidation . B.unFGV $ B.buildAFromConList [buildDate,buildDateTime]
 
 -- put some data in for demo purposes
 b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]

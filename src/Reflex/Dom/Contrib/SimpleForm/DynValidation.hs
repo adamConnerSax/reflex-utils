@@ -47,6 +47,9 @@ makeDynValidation = Compose
 dynValidationNothing::Reflex t=>DynValidation t a
 dynValidationNothing = DynValidation $ constDyn (AccFailure [SFNothing])
 
+constDynValidation::Reflex t=>a->DynValidation t a
+constDynValidation a  = DynValidation $ constDyn (AccSuccess a)
+
 dynValidationErr::Reflex t=>SimpleFormErrors->DynValidation t a
 dynValidationErr = DynValidation . constDyn . AccFailure
 

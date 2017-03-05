@@ -6,6 +6,6 @@ module Reflex.Dom.Contrib.SimpleForm
        ) where
 import           Reflex.Dom.Contrib.SimpleForm.AllDefault
 import           Reflex.Dom.Contrib.SimpleForm.Builder
-import           Reflex.Dom.Contrib.SimpleForm.Instances  (buildReadMaybe,buildReadable,
-                                                           buildValidatedIso', buildValidatedIso, SimpleFormInstanceC,BasicC,VBuilderC)
+import           Reflex.Dom.Contrib.SimpleForm.Instances  (buildDynReadMaybe,buildDynReadable,
+                                                           SimpleFormInstanceC,BasicC,VFormBuilderC)
 

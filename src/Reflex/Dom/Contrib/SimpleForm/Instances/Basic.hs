@@ -9,7 +9,7 @@
 {-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE UndecidableInstances  #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
+
 module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        (
          sfWidget

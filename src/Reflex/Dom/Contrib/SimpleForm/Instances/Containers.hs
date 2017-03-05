@@ -9,6 +9,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
 -- All the basic (primitive types, tuples, etc.) are in here
@@ -88,13 +89,15 @@ data SFDeletableI (g :: * -> *) (b :: *) (k :: *) (s :: *) = SFDeletableI
 data SFAdjustableI fa g b k s= SFAdjustableI { sfAI::SFAppendableI fa g b, sfDI::SFDeletableI g b k s }
 
 
+
 buildAdjustableContainer::(SimpleFormInstanceC t m, VFormBuilderC t m b,Traversable g)
-                          =>SFAdjustableI fa g b k s->FormValidator fa->Maybe FieldName->Maybe (R.Dynamic fa)->SimpleFormR t m fa
+                          =>SFAdjustableI fa g b k s->FormValidator fa->Maybe FieldName->Maybe (R.Dynamic t fa)->SimpleFormR t m fa
 buildAdjustableContainer sfAdj va mFN mfaDyn = validateForm va . makeSimpleFormR  $ do
   fType <- getFormType
   case fType of
     ObserveOnly ->  buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfaDyn
     Interactive ->  buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfaDyn
+
 
 {-
 -- default behavior of button in a form is to submit the form
@@ -124,7 +127,8 @@ buttonNoSubmit' t = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "button" ("type"
 containerActionButton::(RD.PostBuild t m, RD.DomBuilder t m)=>T.Text -> m (RD.Event t ())
 containerActionButton = buttonNoSubmit'
 
-buildReadOnlyContainer::(SimpleFormInstanceC t m, VBuilderC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m fa
+
+buildReadOnlyContainer::(SimpleFormInstanceC t m, VFormBuilderC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m fa
 buildReadOnlyContainer = buildTraversableSFA  
 
 
@@ -140,8 +144,8 @@ listSFA = SFAppendableI idRep [] listAppend L.length
 listSFD::SFDeletableI [] a Int Int
 listSFD = SFDeletableI (\_ n->n) 0 (+1) listDeleteAt
 
-instance (SimpleFormInstanceC t m,VBuilderC t m a)=>B.Builder (SFR t m) (DynValidation t) [a] where
-  buildValidated = buildAdjustableContainer (SFAdjustableI listSFA listSFD)
+instance (SimpleFormInstanceC t m,VFormBuilderC t m a)=>FormBuilder t m [a] where
+  buildForm = buildAdjustableContainer (SFAdjustableI listSFA listSFD)
 
 
 mapSFA::Ord k=>SFAppendableI (M.Map k v) (M.Map k) (k,v)
@@ -151,8 +155,8 @@ mapSFD::Ord k=>SFDeletableI (M.Map k) (k,v) k ()
 mapSFD = SFDeletableI (\(k,_) _ ->k) () id M.delete
 
 
-instance (B.Validatable SFValidation a, B.Validatable SFValidation b)=>B.Validatable SFDynValidation (a,b) where
-  validate (a,b) = (,) <$> validate a <$> validate b
+instance (B.Validatable SFValidation a, B.Validatable SFValidation b)=>B.Validatable SFValidation (a,b) where
+  validator (a,b) = (,) <$> B.validator a <*> B.validator b
 {-    let g::B.Validatable SFValidation c=>c->AccValidation SimpleFormErrors c
         g = B.validate
         f ava avb = (,) <$> ava <*> avb
@@ -160,9 +164,9 @@ instance (B.Validatable SFValidation a, B.Validatable SFValidation b)=>B.Validat
 -}
 
 instance (SimpleFormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a,Show k)=>FormBuilder t m (M.Map k a) where
---  buildValidated = buildAdjustableContainer (SFAdjustableI mapSFA mapSFD)
-  buildForm va mFN ma = B.validateFV va . makeSimpleFormR $ buildLBEditableMap mFN ma
-  
+  buildForm = buildAdjustableContainer (SFAdjustableI mapSFA mapSFD)
+--  buildForm va mFN ma = validateForm va . makeSimpleFormR $ buildLBEditableMap mFN ma
+
 intMapSFA::SFAppendableI (IM.IntMap v) IM.IntMap (IM.Key,v)
 intMapSFA = SFAppendableI (CRepI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList $ snd <$> IM.toList m)) mempty (\(k,x) m->IM.insert k x m) IM.size
 
@@ -214,7 +218,7 @@ instance (SimpleFormInstanceC t m, Eq a, Hashable a, VFormBuilderC t m a)=>FormB
 
 
 -- the various container builder components
-type BuildF t m a = Maybe FieldName->Maybe (Dynamic a)->SFRW t m a
+type BuildF t m a = Maybe FieldName->Maybe (R.Dynamic t a)->SFRW t m a
 
 -- This feels like a lot of machinery just to get removables...but it does work...
 newtype SSFR s t m a = SSFR { unSSFR::StateT s (SFR t m) (DynValidation t a) }
@@ -243,41 +247,41 @@ widgetToggleDyn::(RD.DomBuilder t m, R.MonadHold t m)=>Bool->R.Event t Bool -> m
 widgetToggleDyn startCond condEv trueW falseW = join <$> widgetToggle startCond condEv trueW falseW
 
 -- unstyled, for use within other instances which will deal with the styling.
-buildTraversableSFA'::(SimpleFormInstanceC t m,VBuilderFormC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m b->BuildF t m fa
+-- this needs redoing using a distribute function to avoid the widgetHold
+buildTraversableSFA'::(SimpleFormInstanceC t m, VFormBuilderC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m b->BuildF t m fa
 buildTraversableSFA' crI buildOne _ mfaDyn =
   case mfaDyn of
     Nothing -> return dynValidationNothing
     Just faDyn -> do
-      postbuild <- getPostBuild
-      let buildStatic fa = unSF $ fromRep crI <$> traverse (liftF sfRow . makeSimpleFormR . buildOne Nothing . Just) (toRep crI fa)
+      postbuild <- RD.getPostBuild
+      let buildStatic fa = unSF $ fromRep crI <$> traverse (liftF sfRow . makeSimpleFormR . buildOne Nothing . Just . R.constDyn) (toRep crI fa)
           startWidgetEv = buildStatic <$> R.attachWith const (R.current faDyn) postbuild
           newWidgetEv   = R.updated $ buildStatic <$> faDyn -- Dynamic t (SFRW t m fa)
-      RD.widgetHold (return dynValidationNothing) (R.leftmost [startWidgetEv, newWidgetEv]    
---      eventResult <- fmap unDynValidation <$> RD.dyn dynResult -- Event t (Dynamic t (SFValidation fa))        
---      unSF $ fromRep crI <$> traverse (liftF sfRow . makeSimpleFormR . buildOne Nothing . Just) (toRep crI <$> faDyn)
-
+      joinDynOfDynValidation <$> RD.widgetHold (return dynValidationNothing) (R.leftmost [startWidgetEv, newWidgetEv])
 
 -- styled, in case we ever want an editable container without add/remove
-buildTraversableSFA::forall t m b g fa.(SimpleFormInstanceC t m, VBuilderFormC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m fa 
+buildTraversableSFA::forall t m b g fa.(SimpleFormInstanceC t m, VFormBuilderC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m fa 
 buildTraversableSFA crI md mfa = do
   validClasses <- validDataClasses
   let attrsDyn = R.constDyn $ cssClassAttr validClasses :: R.Dynamic t (M.Map T.Text T.Text)
   sfColDynAttr attrsDyn $ sfCollapsible "" CollapsibleStartsOpen $ buildTraversableSFA' crI (\x -> sfItemL . unSF . buildForm' x) md mfa
 
+
 -- TODO: need a new version to do widgetHold over whole thing if collapsible depends on size
 buildSFContainer::(SimpleFormInstanceC t m, VFormBuilderC t m b, Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
 buildSFContainer aI buildTr mFN mfaDyn = mdo
   attrsDyn <- sfAttrs dmfa mFN Nothing
-  let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
+  let initial = Just $ maybe (R.constDyn $ emptyT aI) (fmap (toT aI)) mfaDyn
+      newInputEv = maybe R.never R.updated mfaDyn -- Event t fa
   dmfa <- sfColDynAttr attrsDyn $ sfCollapsible "" CollapsibleStartsOpen $ mdo
     dmfa' <- unSF $ fromT aI <$> (makeSimpleFormR $ joinDynOfDynValidation <$> RD.widgetHold (buildTr mFN initial) newSFREv)
-    let udmfa' = unDynValidation dmfa'
-        sizeDM = fmap (sizeFa aI) dmfa'
-        newSizeEv = R.updated . R.uniqDyn $ unDynValidation sizeDM
-        resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> accValidation (const Nothing) (const $ avToMaybe mFa) ms) udmfa' newSizeEv
+    let udmfa' = unDynValidation dmfa' -- Dynamic t (SFValidation fa)
+        sizeDM = fmap (sizeFa aI) dmfa' -- Dynamic t (SFValidation Int)
+        newSizeEv = R.updated . R.uniqDyn $ unDynValidation sizeDM -- Event t (SFValidation Int)
+        resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> accValidation (const Nothing) (const $ avToMaybe mFa) ms) udmfa' newSizeEv -- Event t (SFValidation fa)
           
     addEv <- sfRow $  do
-      let emptyB = unSF $ B.buildA Nothing Nothing
+      let emptyB = unSF $ buildForm' Nothing Nothing
       -- we have to clear it once it's used. For now we replace it with a new one.
       dmb <- sfItemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
       clickEv <-  sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "+" 
@@ -285,15 +289,16 @@ buildSFContainer aI buildTr mFN mfaDyn = mdo
         
     let insert vfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> vfa'  
         newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
-        newSFREv = fmap (buildTr mFN . Just . toT aI) (R.leftmost [newFaEv,resizedFaEv]) -- Event t (SFRW t m (g b))
+        newSFREv = fmap (buildTr mFN . Just . R.constDyn . toT aI) (R.leftmost [newFaEv,resizedFaEv,newInputEv]) -- Event t (SFRW t m (g b))
     return dmfa'
   return dmfa
 
 
-buildSFContainer'::(SimpleFormInstanceC t m,VBuilderC t m b,Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
-buildSFContainer' aI buildTr mFN mfa = mdo
+buildSFContainer'::(SimpleFormInstanceC t m,VFormBuilderC t m b,Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
+buildSFContainer' aI buildTr mFN mfaDyn = mdo
   attrsDyn <- sfAttrs dmfa mFN Nothing
-  let initial = Just $ maybe (emptyT aI) (toT aI) mfa 
+  let initial = Just $ maybe (R.constDyn $ emptyT aI) (fmap (toT aI)) mfaDyn
+      newInputEv = maybe R.never R.updated mfaDyn -- Event t fa
   dmfa <- sfColDynAttr attrsDyn $ mdo
     dmfa' <- unSF $ fromT aI <$> (makeSimpleFormR $ joinDynOfDynValidation <$> RD.widgetHold (buildTr mFN initial) newSFREv)
     let udmfa' = unDynValidation dmfa'
@@ -302,43 +307,53 @@ buildSFContainer' aI buildTr mFN mfa = mdo
         resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> accValidation (const Nothing) (const $ avToMaybe mFa) ms) udmfa' newSizeEv
           
     addEv <- sfRow $  do
-      let emptyB = unSF $ B.buildA Nothing Nothing
+      let emptyB = unSF $ buildForm' Nothing Nothing
       -- we have to clear it once it's used. For now we replace it with a new one.
       dmb <- sfItemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
       clickEv <-  sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "+" 
       return $ R.attachPromptlyDynWithMaybe (\a b -> avToMaybe a) (unDynValidation dmb)  clickEv -- only fires if button is clicked when mb is a Just.
         
-    let insert mfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> mfa'  
+    let insert vfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> vfa'  
         newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
-        newSFREv = fmap (buildTr mFN . Just . toT aI) (R.leftmost [newFaEv,resizedFaEv]) -- Event t (SFRW t m (g b))
+        newSFREv = fmap (buildTr mFN . Just . R.constDyn . toT aI) (R.leftmost [newFaEv,resizedFaEv,newInputEv]) -- Event t (SFRW t m (g b))
     return dmfa'
   return dmfa
 
-buildOneDeletable::(SimpleFormInstanceC t m, VBuilderC t m b)
-                   =>SFDeletableI g b k s->Maybe FieldName->Maybe b->StateT ([R.Event t k],s) (SFR t m) (DynValidation t b)
-buildOneDeletable dI mFN ma = liftLF' sfRow $ do     
+buildOneDeletable::(SimpleFormInstanceC t m, VFormBuilderC t m b)
+                   =>SFDeletableI g b k s->Maybe FieldName->Maybe (R.Dynamic t b)->StateT ([R.Event t k],s) (SFR t m) (DynValidation t b)
+buildOneDeletable dI mFN mbDyn = liftLF' sfRow $ do     
     (evs,curS) <- get
-    dma <- lift . sfItemL . unSF $ B.buildA mFN ma
+    dmb <- lift . sfItemL . unSF $ buildForm' mFN mbDyn
     ev  <- lift . sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "-" 
-    let ev' = R.attachPromptlyDynWithMaybe (\va' _ -> getKey dI <$> (avToMaybe va') <*> Just curS) (unDynValidation dma) ev
+    let ev' = R.attachPromptlyDynWithMaybe (\va' _ -> getKey dI <$> (avToMaybe va') <*> Just curS) (unDynValidation dmb) ev
     put (ev':evs,updateS dI curS)
-    return dma
+    return dmb
 
 
-buildDeletable::(SimpleFormInstanceC t m, VBuilderC t m b, Traversable g)=>SFDeletableI g b k s->BuildF t m (g b)
-buildDeletable dI _ mgb = 
-  case mgb of
+
+buildDeletable::forall t m b g k s.(SimpleFormInstanceC t m, VFormBuilderC t m b, Traversable g)=>SFDeletableI g b k s->BuildF t m (g b)
+buildDeletable dI _ mgbDyn = 
+  case mgbDyn of
     Nothing -> return dynValidationNothing
-    Just gb -> mdo
-      let f gb' = do
-            (dmgb',(evs,_)) <- runStateT (unSSFR $ traverse (SSFR . liftLF' sfRow  . buildOneDeletable dI Nothing . Just) gb') ([],initialS dI)
-            return  (dmgb',R.leftmost evs)
-      (ddmgb,dEv) <- R.splitDynPure <$> RD.widgetHold (f gb) (f <$> newgbEv)
+    Just gbDyn -> mdo
+      postbuild <- RD.getPostBuild
+      let buildStatic x = runStateT (unSSFR $ traverse (SSFR . liftLF' sfRow  . buildOneDeletable dI Nothing . Just . R.constDyn) x) ([],initialS dI)
+      let f::(SimpleFormInstanceC t m, VFormBuilderC t m b, Traversable g)=>R.Dynamic t (g b)->SFR t m (DynValidation t (g b),(R.Dynamic t (RD.Event t k)))
+          f gbDyn' = do
+            let startWidgetEv = buildStatic <$> R.attachWith const (R.current gbDyn') postbuild
+                newWidgetEv = R.updated $ buildStatic <$> gbDyn'
+            (ddmgb',stateDyn) <- R.splitDynPure <$> RD.widgetHold (return $ (dynValidationNothing, ([],initialS dI))) (R.leftmost [startWidgetEv, newWidgetEv])
+            let dmgb' = joinDynOfDynValidation ddmgb'
+--            (dmgb',(evs,_)) <- runStateT (unSSFR $ traverse (SSFR . liftLF' sfRow  . buildOneDeletable dI Nothing . Just) gb') ([],initialS dI)
+            return  (dmgb',R.leftmost . fst <$> stateDyn) -- DynValidation t gb,Dynamic t (Event t k)
+      (ddmgb,ddEv) <- R.splitDynPure <$> RD.widgetHold (f gbDyn) (f . R.constDyn <$> newgbEv)
       let dmgb = join (unDynValidation <$> ddmgb)
-          newgbEv = R.attachPromptlyDynWithMaybe (\mgb' key-> delete dI key <$> (avToMaybe mgb')) dmgb (R.switchPromptlyDyn dEv)
+          dEv = join ddEv
+--      dEv <- RD.switch <$> R.hold R.never (R.updated $ join ddEv) -- ??
+      let newgbEv = R.attachPromptlyDynWithMaybe (\mgb' key-> delete dI key <$> (avToMaybe mgb')) dmgb (R.switchPromptlyDyn dEv)
       return $ DynValidation dmgb
 
-
+{-
 -- List Based
 -- buildListBasedContainer::(SimpleFormInstanceC t m, VBuilderC t m b, Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
 
@@ -545,4 +560,4 @@ slvWrapper selDyn mapDyn widgetF =  do
 
   
   
-  
+-}  

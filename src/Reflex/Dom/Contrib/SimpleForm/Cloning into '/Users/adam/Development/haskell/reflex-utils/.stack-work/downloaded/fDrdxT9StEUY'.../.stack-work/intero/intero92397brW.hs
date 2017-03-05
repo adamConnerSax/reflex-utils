@@ -22,9 +22,12 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , observeWidget
        , observeFlow
        , SimpleFormR
+       , fgvToSimpleFormR
+       , simpleFormRToFGV
        , FormValidator
        , validateForm
        , FormBuilder(..)
+       , buildForm'
        , makeSimpleFormR
        , unSF
        , VFormBuilderC
@@ -99,6 +102,12 @@ makeSimpleFormR = Compose
 
 unSF::SimpleFormR t m a->SFRW t m a
 unSF = getCompose
+
+fgvToSimpleFormR::Functor m=>B.FGV (SFR t m) (R.Dynamic t) SFValidation a -> SimpleFormR t m a
+fgvToSimpleFormR = makeSimpleFormR . fmap DynValidation . B.unFGV
+
+simpleFormRToFGV::Functor m=>SimpleFormR t m a -> B.FGV (SFR t m) (R.Dynamic t) SFValidation a
+simpleFormRToFGV = B.FGV . fmap unDynValidation . unSF 
 
 type BuilderC t m a = (B.Builder (SFR t m) (R.Dynamic t) (SFValidation) a, B.Validatable (SFValidation) a)
 
