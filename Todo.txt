@@ -26,6 +26,8 @@ combineEv f aEv bEv = ?
 
 2. Combining dynamics with DMap functions is more efficient than Applicatives.  How to use this?  We could just redo the Generics piece of databuilder specifically for dynamics.  Any way to generalize databuilder for a different combining function?  (something with sig (a->b->c)->Dynamic a->Dynamic b->Dynamic c or using DMaps?)
 
+3.  Can I generalize distributeDynamicListPure using Generics and DMaps?  Would that involve the ST monad?  
+
 Notes:
 
 1. Splitting dynamics via the functor instance is the most efficent.  So no need to optimize that way.

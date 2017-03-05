@@ -13,8 +13,8 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
 -- All the basic (primitive types, tuples, etc.) are in here
 import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
-import Reflex.Dom.Contrib.SimpleForm.Instances.Basic (SimpleFormInstanceC,VBuilderC)
-import Reflex.Dom.Contrib.SimpleForm.Instances.Extras (buildValidatedDynamic)
+import Reflex.Dom.Contrib.SimpleForm.Instances.Basic (SimpleFormInstanceC)
+--import Reflex.Dom.Contrib.SimpleForm.Instances.Extras (buildValidatedDynamic)
 import Reflex.Dom.Contrib.SimpleForm.Builder
 import Reflex.Dom.Contrib.SimpleForm.DynValidation (accValidation)
 import Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
@@ -88,9 +88,9 @@ data SFDeletableI (g :: * -> *) (b :: *) (k :: *) (s :: *) = SFDeletableI
 data SFAdjustableI fa g b k s= SFAdjustableI { sfAI::SFAppendableI fa g b, sfDI::SFDeletableI g b k s }
 
 
-buildAdjustableContainer::(SimpleFormInstanceC t m, VBuilderC t m b,Traversable g)
-                          =>SFAdjustableI fa g b k s->B.Validator (DynValidation t) fa->Maybe FieldName->Maybe fa->SimpleFormR t m fa
-buildAdjustableContainer sfAdj va mFN mfa = B.validateFV va . makeSimpleFormR  $ do
+buildAdjustableContainer::(SimpleFormInstanceC t m, VFormBuilderC t m b,Traversable g)
+                          =>SFAdjustableI fa g b k s->FormValidator fa->Maybe FieldName->Maybe (R.Dynamic fa)->SimpleFormR t m fa
+buildAdjustableContainer sfAdj va mFN mfa = validateForm va . makeSimpleFormR  $ do
   fType <- getFormType
   case fType of
     ObserveOnly ->  buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfa

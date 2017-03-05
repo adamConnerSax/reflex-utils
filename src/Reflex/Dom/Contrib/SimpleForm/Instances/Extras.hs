@@ -8,12 +8,12 @@
 {-# LANGUAGE UndecidableInstances  #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Extras
        (
-         buildValidatedDynamic
-       , MWidget(..)
-       , buildValidatedIso'
-       , buildValidatedIso
+--         buildValidatedDynamic
+--       , MWidget(..)
+--       , buildValidatedIso'
+--       , buildValidatedIso
        ) where
-
+{-
 import           Control.Lens                          (view)
 import           Control.Lens.Iso                      (Iso', from, iso)
 import Control.Monad (join)
@@ -29,9 +29,9 @@ import qualified Reflex.Dom                            as RD
 import qualified DataBuilder                           as B
 
 import           Reflex.Dom.Contrib.SimpleForm.Builder
-import           Reflex.Dom.Contrib.SimpleForm.Instances.Basic (VBuilderC)
+import           Reflex.Dom.Contrib.SimpleForm.Instances.Basic (VFormBuilderC)
 
-{-
+
 -- This is not an isomorphism since there may be b's which have no analog as a's.  Injective but not nec. Surjective.
 class EquivRep a b where
   to::a -> b
@@ -41,7 +41,8 @@ instance (SimpleFormC t m,EquivRep a b, B.Builder (SimpleFormR t m) b)=>Builder 
   buildA mFN ma = from <$> buildA mFN (to <$> ma)
 -}
 
-buildValidatedDynamic'::forall t m a.(SimpleFormC t m, RD.PostBuild t m, MonadFix m, VBuilderC t m a)=>B.Validator (DynValidation t) a -> Maybe FieldName -> Maybe (R.Dynamic t a) -> SimpleFormR t m a
+{-
+buildValidatedDynamic'::forall t m a.(SimpleFormC t m, RD.PostBuild t m, MonadFix m, VBuilderC t m a)=>FormValidator (DynValidation t) a -> Maybe FieldName -> Maybe (R.Dynamic t a) -> SimpleFormR t m a
 buildValidatedDynamic' va mFN mda = B.validateFV va . makeSimpleFormR $ do
   let inputDyn = maybe (R.constDyn Nothing) (fmap Just) mda -- Dynamic t (Maybe a)
       builderDyn = unSF . B.buildA mFN <$> inputDyn -- Dynamic t (SFRW t m a)
@@ -62,7 +63,6 @@ buildValidatedDynamic va mFN mda = B.validateFV va . makeSimpleFormR $ do
 --  let initialEv = R.attachWith const (R.current (maybeToAV <$> inputDyn)) postbuild
   avDyn <- R.holdDyn (AccFailure [SFNothing]) $ R.leftmost [builderEv] --,initialEv]
   return $ DynValidation avDyn
-
   
 instance (SimpleFormC t m, RD.PostBuild t m, MonadFix m, VBuilderC t m a)=>Builder (SFR t m) (DynValidation t) (R.Dynamic t a) where
   buildValidated va mFN mda = B.validateFV va $ R.constDyn <$> buildValidatedDynamic B.validate mFN mda
@@ -79,6 +79,7 @@ instance (SimpleFormC t m, VBuilderC t m a)=>Builder (SFR t m) (DynValidation t)
             builder = B.buildA mFN
         dva <- unSF $ builder (Just a)
         return $ fmap (MWidget . return) dva --R.mapDyn (maybe Nothing (Just . MWidget . return)) dma
+
 
 makeValF::R.Reflex t=>(a->Either T.Text a)->B.Validator (DynValidation t) a
 makeValF f a = DynValidation $ case f a of
@@ -113,3 +114,4 @@ buildValidatedIso'::forall t m a b.(SimpleFormC t m,Builder (SFR t m) (DynValida
                 Maybe a->
                 SimpleFormR t m a
 buildValidatedIso' vf a2b b2a = buildValidatedIso vf (iso a2b b2a)
+-}

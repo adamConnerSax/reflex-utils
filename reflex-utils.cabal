@@ -59,7 +59,7 @@ library
                 Reflex.Dom.Contrib.SimpleForm.Instances.Basic
 --                Reflex.Dom.Contrib.SimpleForm.Instances.BasicDynamic
                 Reflex.Dom.Contrib.SimpleForm.Instances.Containers
-                Reflex.Dom.Contrib.SimpleForm.Instances.Extras
+--                Reflex.Dom.Contrib.SimpleForm.Instances.Extras
   if flag(wkwebview) || flag(warp)
    build-depends: ghcjs-dom == 0.7.*
                 , jsaddle
