@@ -57,7 +57,7 @@ library
                   Reflex.Dom.Contrib.CssUtils
   other-modules:
                 Reflex.Dom.Contrib.SimpleForm.Instances.Basic
-                Reflex.Dom.Contrib.SimpleForm.Instances.BasicDynamic
+--                Reflex.Dom.Contrib.SimpleForm.Instances.BasicDynamic
                 Reflex.Dom.Contrib.SimpleForm.Instances.Containers
                 Reflex.Dom.Contrib.SimpleForm.Instances.Extras
   if flag(wkwebview) || flag(warp)
@@ -89,6 +89,7 @@ library
                      , readable
                      , mmorph
                      , time
+                     , tuple
                      , hashable
                      , unordered-containers
                      , validation

@@ -8,16 +8,16 @@
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-
+{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        (
          sfWidget
        , sfWidget'
-       , buildReadMaybe
-       , buildReadable
+       , buildDynReadMaybe
+       , buildDynReadable
        , BasicC
        , SimpleFormInstanceC
-       , VBuilderC
        , showText
        , parseError
        , parseAndValidate
@@ -41,10 +41,11 @@ import           Text.Read                             (readMaybe)
 import           Data.ByteString                       (ByteString)
 import           Data.Int                              (Int16, Int32, Int64,
                                                         Int8)
-import           Data.Time.Calendar                    (Day)
-import           Data.Time.Clock                       (UTCTime)
+import           Data.Time.Calendar                    (Day,fromGregorian)
+import           Data.Time.Clock                       (UTCTime(..),secondsToDiffTime)
 import           Data.Word                             (Word16, Word32, Word64,
                                                         Word8)
+import           Data.Tuple.Select                     (sel1,sel2,sel3,sel4,sel5)                
 -- reflex imports
 import qualified Reflex                                as R
 import qualified Reflex.Dom                            as RD
@@ -64,9 +65,9 @@ showText = T.pack . show
 
 type BasicC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
 type SimpleFormInstanceC t m = (SimpleFormC t m, MonadWidgetExtraC t m, RD.PostBuild t m, MonadFix m)
-type VBuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
+--type VBuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
 
-instance {-# OVERLAPPABLE #-} R.Reflex t=>B.Validatable (DynValidation t) a
+instance {-# OVERLAPPABLE #-} B.Validatable (SFValidation) a
 
 readOnlyW::(BasicC t m, RD.PostBuild t m)=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
 readOnlyW f wc = do
@@ -75,13 +76,13 @@ readOnlyW f wc = do
   RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
   return da
 
-sfWidget::forall t m a b.(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)=>
-          (a->b)->
-          (a->T.Text)->
-          Maybe FieldName->
-          WidgetConfig t a->
-          (WidgetConfig t a->m (R.Dynamic t a))->
-          SFR t m (R.Dynamic t b)
+sfWidget::forall t m a b.(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)
+  =>(a->b) -- map in/out type to widget type (int to text, e.g.,)
+  ->(a->T.Text) -- show in/out type
+  ->Maybe FieldName -- field name ?
+  ->WidgetConfig t a
+  ->(WidgetConfig t a->m (R.Dynamic t a)) -- underlying reflex-dom-contrib widget
+  ->SFR t m (R.Dynamic t b)
 sfWidget fDyn fString mFN wc widget = do
   let addToAttrs::R.Reflex t=>T.Text->Maybe T.Text->RD.Dynamic t (M.Map T.Text T.Text)->RD.Dynamic t (M.Map T.Text T.Text)
       addToAttrs attr mVal attrsDyn = case mVal of
@@ -102,13 +103,20 @@ sfWidget fDyn fString mFN wc widget = do
         Just (LabelConfig t attrs) -> RD.elAttr "label" attrs  $ (RD.el "span" $ RD.text t) >> iw
   lift . labeledWidget $ (fmap fDyn <$> (if isObserver then readOnlyW fString wcAll else widget wcInput))
 
-sfWidget'::(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)=>
-  R.Event t a->b->(a->b)->(b->DynValidation t a)->(b->T.Text)->Maybe FieldName->Maybe T.Text->
-  (WidgetConfig t b->m (R.Dynamic t b))->SimpleFormR t m a
-sfWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = makeSimpleFormR $ mdo
+sfWidget'::(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)
+  =>R.Event t a -- update value events
+  ->b -- initial value to display in b-widget 
+  ->(a->b) -- map in/out type to widget type
+  ->(b->SFValidation a) --validate and map back
+  ->(b->T.Text) -- showText for widget type
+  ->Maybe FieldName -- field name ?
+  ->Maybe T.Text -- type name ?
+  ->(WidgetConfig t b->m (R.Dynamic t b)) -- underlying reflex-dom-contrib widget 
+  ->SFR t m (DynValidation t a)
+sfWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = mdo
   attrsDyn <- sfAttrs dva mFN mTypeName
   let wc = WidgetConfig (toWT <$> updateEv) initialWV attrsDyn
-  dva <- item $ joinDynOfDynValidation <$> sfWidget validateWT showWT mFN wc widget
+  dva <- item $ DynValidation <$> sfWidget validateWT showWT mFN wc widget
   return dva
 
 
@@ -124,30 +132,52 @@ textWidgetValue mFN c = _hwidget_value <$> restrictWidget blurOrEnter (htmlTextI
 parseError::Maybe FieldName->T.Text->T.Text
 parseError mFN x = T.pack (fromMaybe "N/A" mFN) <> ": " <> x
 
-parseAndValidate::R.Reflex t=>Maybe FieldName->T.Text->(T.Text -> Maybe a)->B.Validator (DynValidation t) a->DynValidation t a
+parseAndValidate::Maybe FieldName->T.Text->(T.Text -> Maybe a)->FormValidator a->AccValidation SimpleFormErrors a
 parseAndValidate mFN t parse va =
   case parse t of
-    Nothing -> dynValidationErr [SFNoParse $ parseError mFN t]
+    Nothing -> AccFailure [SFNoParse $ parseError mFN t]
     Just y -> va y
 
-buildReadable::(SimpleFormInstanceC t m, Readable a, Show a)=>B.Validator (DynValidation t) a->Maybe FieldName->Maybe a->SimpleFormR t m a
-buildReadable va mFN ma =
-  let vfwt x = parseAndValidate mFN x fromText va
-  in sfWidget' R.never (maybe "" showText ma) showText vfwt showText mFN Nothing $ textWidgetValue mFN
+-- turn a Dynamic into an Event with an initial firing to represent the value at postbuild.  Should we sample and return (a,Event t a)?
+mDynToInputEv::(R.Reflex t,RD.PostBuild t m)=>Maybe (R.Dynamic t a)-> m (R.Event t a)
+mDynToInputEv mDyn = do
+  postbuild <- RD.getPostBuild
+  let startValueEv x = R.attachWith const x postbuild
+      comboEv d = R.leftmost [startValueEv (R.current d), R.updated d]
+      updateEv = maybe R.never comboEv mDyn      
+  return updateEv -- this might cause loops from the startValueEv??
 
-buildReadMaybe::(SimpleFormInstanceC t m, Read a, Show a)=>B.Validator (DynValidation t) a->Maybe FieldName->Maybe a->SimpleFormR t m a
-buildReadMaybe va mFN ma =
+
+buildDynReadable::(SimpleFormInstanceC t m, Readable a, Show a)
+  =>FormValidator a
+  ->Maybe FieldName
+  ->Maybe (R.Dynamic t a)
+  ->SimpleFormR t m a
+buildDynReadable va mFN maDyn = makeSimpleFormR $ do
+  let vfwt x = parseAndValidate mFN x fromText va
+  inputEv <- mDynToInputEv maDyn
+  sfWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
+
+buildDynReadMaybe::(SimpleFormInstanceC t m, Read a, Show a)
+  =>FormValidator a
+  ->Maybe FieldName
+  ->Maybe (R.Dynamic t a)
+  ->SimpleFormR t m a
+buildDynReadMaybe va mFN maDyn = makeSimpleFormR $ do
   let vfwt x = parseAndValidate mFN x (readMaybe . T.unpack) va
-  in sfWidget' R.never (maybe "" showText ma) showText vfwt showText mFN Nothing $ textWidgetValue mFN
+  inputEv <- mDynToInputEv maDyn
+  sfWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
 -- | String and Text
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) T.Text where
-  buildValidated va mFN mInitial = sfWidget' R.never (maybe "" id mInitial) id va id mFN Nothing $ textWidgetValue mFN
+instance SimpleFormInstanceC t m=>FormBuilder t m T.Text where
+  buildForm va mFN mInitialDyn = makeSimpleFormR $ do
+    inputEv <- mDynToInputEv mInitialDyn
+    sfWidget' inputEv "" id va id mFN Nothing $ textWidgetValue mFN
 
-instance {-# OVERLAPPING #-} SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) String where
-  buildValidated va mFN mInitial =
+instance {-# OVERLAPPING #-} SimpleFormInstanceC t m=>FormBuilder t m String where
+  buildForm va mFN mInitialDyn = 
     let va' = (\t -> T.pack <$> va (T.unpack t))
-    in T.unpack <$> buildValidated va' mFN (T.pack <$> mInitial)
+    in T.unpack <$> buildForm va' mFN (fmap T.pack <$> mInitialDyn)
 
 
 {- Not clear what to do here! Default behavior is bad since Char is a huge enum.
@@ -158,112 +188,115 @@ instance SimpleFormC e t m=>B.Builder (RFormWidget e t m) Char where
     lift $ item attrs0e $ _hwidget_value <$> readableWidget (WidgetConfig RD.never mInitial attrsDyn)
 -}
 
+
 -- We don't need this.  If we leave it out, the Enum instance will work an we get a dropdown instead of a checkbox.  Which might be better...
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Bool where
-  buildValidated va mFN mInitial = sfWidget' R.never (fromMaybe False mInitial) id va showText mFN Nothing $ (\c -> _hwidget_value <$> htmlCheckbox c)
+instance SimpleFormInstanceC t m=>FormBuilder t m Bool where
+  buildForm va mFN mInitialDyn = makeSimpleFormR $ do
+    inputEv <- mDynToInputEv mInitialDyn
+    sfWidget' inputEv False id va showText mFN Nothing $ (\c -> _hwidget_value <$> htmlCheckbox c)
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Double where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Double where
+  buildForm = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Float where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Float where
+  buildForm = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Int where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Int where
+  buildForm = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Integer where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Integer where
+  buildForm = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Int8 where
-  buildValidated  = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Int8 where
+  buildForm  = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Int16 where
-  buildValidated  = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Int16 where
+  buildForm  = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Int32 where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Int32 where
+  buildForm = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Int64 where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Int64 where
+  buildForm = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Word8 where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Word8 where
+  buildForm = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Word16 where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Word16 where
+  buildForm = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Word32 where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Word32 where
+  buildForm = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Word64 where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m Word64 where
+  buildForm = buildDynReadable
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) ByteString where
-  buildValidated = buildReadable
+instance SimpleFormInstanceC t m=>FormBuilder t m ByteString where
+  buildForm = buildDynReadable
 
 --dateTime and date
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) UTCTime where
-  buildValidated va mFN mInitial =
+instance SimpleFormInstanceC t m=>FormBuilder t m UTCTime where
+  buildForm va mFN mInitialDyn = makeSimpleFormR $ do
     let vfwt x = case x of
-          Nothing -> dynValidationErr [SFNoParse "Couldn't parse as UTCTime."]
+          Nothing -> AccFailure [SFNoParse "Couldn't parse as UTCTime."]
           Just y -> va y
-    in sfWidget' R.never mInitial Just vfwt showText mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
+        initialDateTime = Just $ UTCTime (fromGregorian 1971 1 1) (secondsToDiffTime 0)
+    inputEv <- mDynToInputEv mInitialDyn
+    sfWidget' inputEv initialDateTime Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
 
 
-instance SimpleFormInstanceC t m=>B.Builder (SFR t m) (DynValidation t) Day where
-  buildValidated va mFN mInitial =
+instance SimpleFormInstanceC t m=>FormBuilder t m Day where
+  buildForm va mFN mInitialDyn = makeSimpleFormR $ do
     let vfwt x = case x of
-          Nothing -> dynValidationErr [SFNoParse "Couldn't parse as Day."]
+          Nothing -> AccFailure [SFNoParse "Couldn't parse as Day."]
           Just y -> va y
-    in sfWidget' R.never mInitial Just vfwt showText mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
+        initialDay = Just $ fromGregorian 1971 1 1
+    inputEv <- mDynToInputEv mInitialDyn  
+    sfWidget' inputEv initialDay Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
+
 
 -- uses generics to build instances
-instance (SimpleFormC t m, VBuilderC t m a)=>B.Builder (SFR t m) (DynValidation t) (Maybe a)
+instance (SimpleFormC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a)
 
-instance (SimpleFormC t m, VBuilderC t m a, VBuilderC t m b)=>B.Builder (SFR t m) (DynValidation t) (Either a b)
-
+instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (Either a b)
 
 -- | Enums become dropdowns
-instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, Eq a)
-                              =>B.Builder (SFR t m) (DynValidation t) a where
-  buildValidated va mFN mInitial =
+instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=>FormBuilder t m a where
+  buildForm va mFN mInitialDyn = makeSimpleFormR $ do
     let values = [minBound..] :: [a]
-        initial = fromMaybe (head values) mInitial
-    in sfWidget' RD.never initial id va showText mFN Nothing $ (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
+        initial = head values
+    inputEv <- mDynToInputEv mInitialDyn  
+    sfWidget' inputEv initial id va showText mFN Nothing $ (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
 
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
 -- generics for (,) since mkDyn is not an optimization here
-instance (SimpleFormC t m, VBuilderC t m a, VBuilderC t m b)=>B.Builder (SFR t m) (DynValidation t) (a,b)
+instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
 
-instance (SimpleFormC t m, VBuilderC t m a, VBuilderC t m b, VBuilderC t m c)=>B.Builder (SFR t m) (DynValidation t) (a,b,c) where
-  buildValidated va mFN mTup = B.validateFV va . makeSimpleFormR $ do
-    let (ma,mb,mc) = maybe (Nothing,Nothing,Nothing) (\(a,b,c)->(Just a, Just b, Just c)) mTup
-    sfRow $ do
-      maW <- unSF $ B.buildA Nothing ma
-      mbW <- unSF $ B.buildA Nothing mb
-      mcW <- unSF $ B.buildA Nothing mc
+
+
+instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c)=>FormBuilder t m (a,b,c) where
+  buildForm va mFN mTupDyn = validateForm va . makeSimpleFormR $ sfRow $ do
+      maW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
+      mbW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
+      mcW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel3) mTupDyn
       return $ (,,) <$> maW <*> mbW <*> mcW
 
-instance (SimpleFormC t m, VBuilderC t m a, VBuilderC t m b, VBuilderC t m c, VBuilderC t m d)
-         =>B.Builder (SFR t m) (DynValidation t) (a,b,c,d) where
-  buildValidated va mFN mTup = B.validateFV va . makeSimpleFormR $ do
-    let (ma,mb,mc,md) = maybe (Nothing,Nothing,Nothing,Nothing) (\(a,b,c,d)->(Just a, Just b, Just c,Just d)) mTup
-    sfRow $ do
-      maW <- unSF $ B.buildA Nothing ma
-      mbW <- unSF $ B.buildA Nothing mb
-      mcW <- unSF $ B.buildA Nothing mc
-      mdW <- unSF $ B.buildA Nothing md
+
+instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d)=>FormBuilder t m (a,b,c,d) where
+  buildForm va mFN mTupDyn = validateForm va . makeSimpleFormR $ sfRow $ do
+      maW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
+      mbW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
+      mcW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel3) mTupDyn
+      mdW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel4) mTupDyn
       return $ (,,,) <$> maW <*> mbW <*> mcW <*> mdW
 
-instance (SimpleFormC t m, VBuilderC t m a, VBuilderC t m b, VBuilderC t m c, VBuilderC t m d, VBuilderC t m e)
-         =>B.Builder (SFR t m) (DynValidation t) (a,b,c,d,e) where
-  buildValidated va mFN mTup = B.validateFV va . makeSimpleFormR $ do
-    let (ma,mb,mc,md,me) = maybe (Nothing,Nothing,Nothing,Nothing,Nothing) (\(a,b,c,d,e)->(Just a, Just b, Just c, Just d, Just e)) mTup
-    sfRow $ do
-      maW <- unSF $ B.buildA Nothing ma
-      mbW <- unSF $ B.buildA Nothing mb
-      mcW <- unSF $ B.buildA Nothing mc
-      mdW <- unSF $ B.buildA Nothing md
-      meW <- unSF $ B.buildA Nothing me
+instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d, VFormBuilderC t m e)=>FormBuilder t m (a,b,c,d,e) where
+  buildForm va mFN mTupDyn = validateForm va . makeSimpleFormR $ sfRow $ do
+      maW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
+      mbW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
+      mcW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel3) mTupDyn
+      mdW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel4) mTupDyn
+      meW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel5) mTupDyn
       return $ (,,,,) <$> maW <*> mbW <*> mcW <*> mdW <*> meW
+

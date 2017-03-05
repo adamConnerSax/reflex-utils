@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Reflex.Dom.Contrib.SimpleForm.DynValidation where
 
 import           Control.Monad     (join)
@@ -11,6 +13,8 @@ import           Reflex            (Dynamic, Reflex, constDyn, zipDynWith)
 data SimpleFormError  = SFNothing | SFNoParse Text | SFInvalid Text deriving (Show,Eq)
 
 type SimpleFormErrors = [SimpleFormError]
+
+type SFValidation = AccValidation SimpleFormErrors
 
 accValidation::(err->b)->(a->b)->AccValidation err a->b
 accValidation f _ (AccFailure e) = f e
@@ -29,7 +33,7 @@ mergeAccValidation x = case x of
   AccSuccess y -> y
   AccFailure errs -> AccFailure errs
 
-newtype DynValidation t a = DynValidation { unDynValidation::Dynamic t (AccValidation SimpleFormErrors a) }
+newtype DynValidation t a = DynValidation { unDynValidation::Dynamic t (SFValidation a) }
 -- NB: this is isomorphic to Compose (Dynamic t) (AccValidation SimpleFormErrors a)
 {-
 type  DynValidation t a = Compose (Dynamic t) (AccValidation a)
@@ -57,12 +61,7 @@ instance Reflex t=>Applicative (DynValidation t) where
   dvf <*> dva = DynValidation $ zipDynWith (<*>) (unDynValidation dvf) (unDynValidation dva)
 
 
-instance Reflex t=>MonadLike (DynValidation t) where
+instance MonadLike SFValidation where
   pureLike = pure
-  joinLike dvdva =
-    let f x = case x of
-          AccSuccess y -> y
-          AccFailure err -> DynValidation . constDyn $ AccFailure err
-    in joinDynOfDynValidation . fmap f $ unDynValidation dvdva
+  joinLike = mergeAccValidation
 
--- no Monad instance because it would fail to satisfy <*> = `ap' due to that being impossible for AccValidation

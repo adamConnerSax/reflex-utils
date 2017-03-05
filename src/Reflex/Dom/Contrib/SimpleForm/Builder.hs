@@ -22,12 +22,16 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , observeWidget
        , observeFlow
        , SimpleFormR
+       , FormValidator
+       , validateForm
+       , FormBuilder(..)
+       , buildForm'
        , makeSimpleFormR
        , unSF
-       , BuilderC
+       , VFormBuilderC
+       , SimpleFormC
        , CollapsibleInitialState(..)
        , runSimpleFormR
-       , SimpleFormC
        , module ReflexExport
        , module BExport
        , module GSOP
@@ -97,24 +101,26 @@ makeSimpleFormR = Compose
 unSF::SimpleFormR t m a->SFRW t m a
 unSF = getCompose
 
-type BuilderC t m a = (B.Builder (SFR t m) (R.Dynamic t) (AccValidation SimpleFormErrors) a, B.Validatable (AccValidation SimpleFormErrors) a)
+type BuilderC t m a = (B.Builder (SFR t m) (R.Dynamic t) (SFValidation) a, B.Validatable (SFValidation) a)
 
-type FormValidator a = B.Validator (AccValidation SimpleFormErrors) a
+type FormValidator a = B.Validator (SFValidation) a
+
+validateForm::(Functor m, R.Reflex t)=>FormValidator a->SimpleFormR t m a->SimpleFormR t m a
+validateForm va = makeSimpleFormR . fmap DynValidation . B.unFGV . B.validateFGV va . B.FGV . fmap unDynValidation . unSF   
 
 
 class (SimpleFormC t m, RD.PostBuild t m) => FormBuilder t m a where
   buildForm::FormValidator a->Maybe FieldName->Maybe (R.Dynamic t a)->SimpleFormR t m a
-  default buildForm::(GBuilder (SFR t m) (R.Dynamic t) (AccValidation SimpleFormErrors) a
-                     {- , B.Validatable (AccValidation SimpleFormErrors) a -})
+  default buildForm::(GBuilder (SFR t m) (R.Dynamic t) (SFValidation) a)
                    =>FormValidator a->Maybe FieldName->Maybe (R.Dynamic t a)->SimpleFormR t m a
   buildForm va mFN = makeSimpleFormR . fmap DynValidation . B.unFGV . gBuildValidated va mFN
 
-type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable (AccValidation SimpleFormErrors) a)
+type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable (SFValidation) a)
 
 buildForm'::VFormBuilderC t m a=>Maybe FieldName->Maybe (R.Dynamic t a)->SimpleFormR t m a
 buildForm' = buildForm B.validator
 
-instance (SimpleFormC t m,FormBuilder t m a)=>B.Builder (SFR t m) (R.Dynamic t) (AccValidation SimpleFormErrors) a where
+instance (SimpleFormC t m,FormBuilder t m a)=>B.Builder (SFR t m) (R.Dynamic t) (SFValidation) a where
   buildValidated va mFN = B.FGV . fmap unDynValidation . unSF . buildForm va mFN
 
 runSimpleFormR::Monad m=>SimpleFormConfiguration t m->SimpleFormR t m a->m (DynValidation t a)
@@ -242,7 +248,7 @@ componentTitle mFN mType =
   in if isJust mFN && isJust mType then fnS <> "::" <> tnS else fnS <> tnS
 
 
-instance (SimpleFormC t m, RD.PostBuild t m)=> B.Buildable (SFR t m) (R.Dynamic t) (AccValidation SimpleFormErrors) where
+instance (SimpleFormC t m, RD.PostBuild t m)=> B.Buildable (SFR t m) (R.Dynamic t) (SFValidation) where
   bFail msg = B.FGV . fmap unDynValidation $ do
     failF <- failureF . _builderFunctions <$> ask
     failF $ T.pack msg
@@ -267,10 +273,10 @@ instance (SimpleFormC t m, RD.PostBuild t m)=> B.Buildable (SFR t m) (R.Dynamic 
 
 {-
   bCollapse dynFGV = FGV $ do
-    let uncomposed = unFGV <$> dynFGV -- Dynamic t (SFR t m (Dynamic t (AccValidation SimpleFormErrors a)))
-    newInputDynEv <- RD.dyn uncomposed -- Event t (Dynamic t (AccValidation SimpleFormErrors a))
-    newInputBeh <- R.hold R.never (R.updated <$> dyned) -- Behavior t (Event t (AccValidation SimpleFormErrors a))
-    let newInputEv = R.switch newInputBeh -- Event t (AccValidation SimpleFormErrors a)
+    let uncomposed = unFGV <$> dynFGV -- Dynamic t (SFR t m (Dynamic t (SFValidation a)))
+    newInputDynEv <- RD.dyn uncomposed -- Event t (Dynamic t (SFValidation a))
+    newInputBeh <- R.hold R.never (R.updated <$> dyned) -- Behavior t (Event t (SFValidation a))
+    let newInputEv = R.switch newInputBeh -- Event t (SFValidation a)
     R.holdDyn (AccFailure [SFNothing]) newInputEv 
 -}   
     

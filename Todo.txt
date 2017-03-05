@@ -4,6 +4,8 @@ Small
 3. Put add/delete buttons on ListBasedEditable
 4. Add a "change key" option?  It would have to remove the old and add it as a new one with a new key?
 5. Initial states??
+6. Switch from HtmlTextWidget in reflex-dom-contrib to TextInput in reflex-dom.  How to handle restrictWidget?
+
 
 Medium
 1. Make other containers work in this framework.
