@@ -374,6 +374,13 @@ lbcUpdate (EditKey oldKey newKey) (LBCWidgetState s m) =
   in LBCWidgetState s' m'
 -}
 
+
+buildLBEditableMapSimple::(SimpleFormInstanceC t m, VFormBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)
+buildLBEEditableMapSimple mFN mMapDyn = sfRow $ do
+  let map0 = Just <$> fromMaybe (R.constDyn M.empty) mMapDyn
+      editF k dynV = RD.div $ el "p" $ text (T.pack $ show k) >> editOne dynV
+  listWithKey map0 editF
+
 newtype LBCMap k v = LBCMap { lbcMap::M.Map (Maybe k) (Maybe v) }
 newtype LBCSelection k = LBCSelection { lbcSelection::Maybe k }
 
@@ -398,7 +405,7 @@ buildLBEditableMap mFN mMapDyn = sfRow $ mdo
       editedToCI (Nothing,_) = Nothing -- shouldn't happen
       editedToCI (Just k, v) = Just $ MapChangeValue k v
       editF Nothing _ _ = return R.never
-      editF (Just _) valDyn selDyn = editOne (fromJust <$> valDyn) selDyn -- will be okay but relies on getting LBCState manipulation right
+      editF (Just _) valDyn selDyn = editOneEv selDyn (fromJust <$> valDyn) -- will be okay but relies on getting LBCState manipulation right
 --      editF Nothing _ = return R.never
 --      editF (Just val) selDyn = editOneSimple val selDyn -- will be okay but relies on getting LBCState manipulation right
       editWidgets x = R.fmapMaybe editedToCI <$> RD.selectViewListWithKey selectionDyn x editF
@@ -421,9 +428,13 @@ buildLBEditableMap mFN mMapDyn = sfRow $ mdo
   let mapDyn = lbcMap <$> lbcMapDyn 
   return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
 
+editOne::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->SFR t m (R.Dynamic t (Maybe v))
+editOne valDyn = do
+  vEv<- fmap avToMaybe . R.updated . unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn))
+  newDyn <- R.holdDyn 
 
-editOne::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
-editOne valDyn selDyn = do
+editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t Bool -> R.Dynamic t v->SFR t m (R.Event t v)
+editOneEv selDyn valDyn = do
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
   resDynAV <-  RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
   let resDyn = avToMaybe <$> resDynAV -- Dynamic t (Maybe v)
