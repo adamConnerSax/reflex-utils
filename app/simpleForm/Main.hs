@@ -226,9 +226,9 @@ buildDate va mFN msDyn =
 buildDateTime::SimpleFormInstanceC t m=>FormValidator DateOrDateTime ->
   Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (MDWrapped (SFR t m) (Dynamic t) SFValidation DateOrDateTime)
 buildDateTime va mFN msDyn =
-  let blankBuilder = simpleFormRToFGV $ validateForm va $ D <$> buildForm' Nothing Nothing
+  let blankBuilder = simpleFormRToFGV $ validateForm va $ DT <$> buildForm' Nothing Nothing
   in case msDyn of
-    Nothing -> constDyn (MDWrapped False ("Date",mFN) blankBuilder)
+    Nothing -> constDyn (MDWrapped False ("DateTime",mFN) blankBuilder)
     Just ddtDyn ->
       let f ms = MDWrapped matched ("DateTime",mFN) bldr where
             (matched,mDateTime) = case ms of
@@ -241,6 +241,7 @@ instance SimpleFormInstanceC t m=>FormBuilder t m DateOrDateTime where
   buildForm va mFN = fgvToSimpleFormR . B.buildAFromConList [buildDate,buildDateTime] va mFN
 
 -- put some data in for demo purposes
+
 b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
 b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
@@ -252,7 +253,7 @@ testComplexForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfigu
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (Just testMap)
+  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (Just $ AI 10)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed C:"

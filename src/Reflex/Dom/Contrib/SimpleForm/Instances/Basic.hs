@@ -86,7 +86,7 @@ sfWidget::forall t m a b.(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix 
   ->WidgetConfig t a
   ->(WidgetConfig t a->m (R.Dynamic t a)) -- underlying reflex-dom-contrib widget
   ->SFR t m (R.Dynamic t b)
-sfWidget fDyn fString mFN wc widget = do
+sfWidget f fString mFN wc widget = do
   let addToAttrs::R.Reflex t=>T.Text->Maybe T.Text->RD.Dynamic t (M.Map T.Text T.Text)->RD.Dynamic t (M.Map T.Text T.Text)
       addToAttrs attr mVal attrsDyn = case mVal of
         Nothing -> attrsDyn
@@ -104,7 +104,7 @@ sfWidget fDyn fString mFN wc widget = do
       labeledWidget iw = case _inputLabelConfig inputCfg of
         Nothing -> iw
         Just (LabelConfig t attrs) -> RD.elAttr "label" attrs  $ (RD.el "span" $ RD.text t) >> iw
-  lift . labeledWidget $ (fmap fDyn <$> (if isObserver then readOnlyW fString wcAll else widget wcInput))
+  lift . labeledWidget $ (fmap f <$> (if isObserver then readOnlyW fString wcAll else widget wcInput))
 
 sfWidget'::(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)
   =>R.Event t a -- update value events
@@ -130,13 +130,13 @@ instance R.Reflex t=>Functor (HtmlWidget t) where
   fmap f (HtmlWidget v c kp kd ku hf) = HtmlWidget (f <$> v) (f <$> c) kp kd ku hf
 
 textWidgetValue::SimpleFormInstanceC t m=>Maybe FieldName->WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
-textWidgetValue mFN c = _hwidget_value <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
+textWidgetValue mFN c = _hwidget_value <$> {- restrictWidget blurOrEnter -} (htmlTextInput (maybe "" T.pack mFN)) c
 
 parseError::Maybe FieldName->T.Text->T.Text
 parseError mFN x = T.pack (fromMaybe "N/A" mFN) <> ": " <> x
 
-parseAndValidate::Maybe FieldName->T.Text->(T.Text -> Maybe a)->FormValidator a->AccValidation SimpleFormErrors a
-parseAndValidate mFN t parse va =
+parseAndValidate::Maybe FieldName->(T.Text -> Maybe a)->FormValidator a->T.Text->AccValidation SimpleFormErrors a
+parseAndValidate mFN parse va t =
   case parse t of
     Nothing -> AccFailure [SFNoParse $ parseError mFN t]
     Just y -> va y
@@ -157,7 +157,7 @@ buildDynReadable::(SimpleFormInstanceC t m, Readable a, Show a)
   ->Maybe (R.Dynamic t a)
   ->SimpleFormR t m a
 buildDynReadable va mFN maDyn = makeSimpleFormR $ do
-  let vfwt x = parseAndValidate mFN x fromText va
+  let vfwt = parseAndValidate mFN fromText va
   inputEv <- mDynToInputEv maDyn
   sfWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
@@ -167,10 +167,11 @@ buildDynReadMaybe::(SimpleFormInstanceC t m, Read a, Show a)
   ->Maybe (R.Dynamic t a)
   ->SimpleFormR t m a
 buildDynReadMaybe va mFN maDyn = makeSimpleFormR $ do
-  let vfwt x = parseAndValidate mFN x (readMaybe . T.unpack) va
+  let vfwt = parseAndValidate mFN (readMaybe . T.unpack) va
   inputEv <- mDynToInputEv maDyn
   sfWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
+-- NB this will handle Dynamic t (Dynamic t a)) inputs
 instance (SimpleFormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (R.Dynamic t a) where
   buildForm va mFN = validateForm va . fmap R.constDyn . buildForm' mFN . fmap join
 
