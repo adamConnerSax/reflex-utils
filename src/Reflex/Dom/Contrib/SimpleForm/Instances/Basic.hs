@@ -130,7 +130,24 @@ instance R.Reflex t=>Functor (HtmlWidget t) where
   fmap f (HtmlWidget v c kp kd ku hf) = HtmlWidget (f <$> v) (f <$> c) kp kd ku hf
 
 textWidgetValue::SimpleFormInstanceC t m=>Maybe FieldName->WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
-textWidgetValue mFN c = _hwidget_value <$> {- restrictWidget blurOrEnter -} (htmlTextInput (maybe "" T.pack mFN)) c
+textWidgetValue mFN c = _hwidget_value <$> restrictWidget' blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
+
+textWidgetValue'::SimpleFormInstanceC t m=>Maybe FieldName->WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
+textWidgetValue' mFN c = inputOnEnter (htmlTextInput (maybe "" T.pack mFN)) c
+
+-- this does what restrictWidget does but allows the set event to change the "authoritative value"
+restrictWidget'::(RD.DomBuilder t m, R.MonadHold t m)
+  =>(HtmlWidget t a -> R.Event t a)
+  -> GWidget t m a
+  -> GWidget t m a
+restrictWidget' restrictFunc wFunc cfg = do
+  w <- wFunc cfg
+  let e = restrictFunc w
+      setEv = _widgetConfig_setValue cfg
+  v <- R.holdDyn (_widgetConfig_initialValue cfg) (R.leftmost [e,setEv])
+  return $ w { _hwidget_value = v
+             , _hwidget_change = e
+             }
 
 parseError::Maybe FieldName->T.Text->T.Text
 parseError mFN x = T.pack (fromMaybe "N/A" mFN) <> ": " <> x

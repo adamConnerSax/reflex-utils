@@ -7,7 +7,7 @@ import           Control.Monad     (join)
 import           Data.Text         (Text)
 import           Data.Validation   (AccValidation (..))
 import           DataBuilder.Types (MonadLike (..))
-import           Reflex            (Dynamic, Reflex, constDyn, zipDynWith)
+import           Reflex            (Dynamic, Reflex, constDyn, zipDynWith, never)
 
 
 data SimpleFormError  = SFNothing | SFNoParse Text | SFInvalid Text deriving (Show,Eq)
