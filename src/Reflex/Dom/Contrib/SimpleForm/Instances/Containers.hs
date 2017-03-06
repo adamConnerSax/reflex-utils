@@ -96,7 +96,7 @@ buildAdjustableContainer sfAdj va mFN mfaDyn = validateForm va . makeSimpleFormR
   fType <- getFormType
   case fType of
     ObserveOnly ->  buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfaDyn
-    Interactive ->  buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfaDyn
+    Interactive ->  buildTraversableSFA (cRep . sfAI $ sfAdj) mFN mfaDyn --buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfaDyn
 
 
 {-
@@ -164,8 +164,8 @@ instance (B.Validatable SFValidation a, B.Validatable SFValidation b)=>B.Validat
 -}
 
 instance (SimpleFormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a,Show k)=>FormBuilder t m (M.Map k a) where
-  buildForm = buildAdjustableContainer (SFAdjustableI mapSFA mapSFD)
---  buildForm va mFN ma = validateForm va . makeSimpleFormR $ buildLBEditableMap mFN ma
+--  buildForm = buildAdjustableContainer (SFAdjustableI mapSFA mapSFD)
+  buildForm va mFN ma = validateForm va . makeSimpleFormR $ buildLBEditableMap mFN ma
 
 intMapSFA::SFAppendableI (IM.IntMap v) IM.IntMap (IM.Key,v)
 intMapSFA = SFAppendableI (CRepI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList $ snd <$> IM.toList m)) mempty (\(k,x) m->IM.insert k x m) IM.size
@@ -353,7 +353,7 @@ buildDeletable dI _ mgbDyn =
       let newgbEv = R.attachPromptlyDynWithMaybe (\mgb' key-> delete dI key <$> (avToMaybe mgb')) dmgb (R.switchPromptlyDyn dEv)
       return $ DynValidation dmgb
 
-{-
+
 -- List Based
 -- buildListBasedContainer::(SimpleFormInstanceC t m, VBuilderC t m b, Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
 
@@ -390,10 +390,10 @@ hiddenCSS  = "style" =: "display: none"
 visibleCSS::M.Map T.Text T.Text
 visibleCSS = "style" =: "display: inline"
 
-buildLBEditableMap::(SimpleFormInstanceC t m, VBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
-buildLBEditableMap mFN mMap = sfRow $ mdo
-  let map0 = fromMaybe M.empty mMap
-      mk0 = if M.null map0 then Nothing else Just . head $ M.keys map0
+buildLBEditableMap::(SimpleFormInstanceC t m, VFormBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
+buildLBEditableMap mFN mMapDyn = sfRow $ mdo
+  let map0Dyn = fromMaybe (R.constDyn M.empty) mMapDyn
+      mk0Dyn = (\x -> if M.null x then Nothing else Just . head $ M.keys x) <$> map0Dyn
       labelF k _ = T.pack $ show k
       editedToCI (Nothing,_) = Nothing -- shouldn't happen
       editedToCI (Just k, v) = Just $ MapChangeValue k v
@@ -403,30 +403,35 @@ buildLBEditableMap mFN mMap = sfRow $ mdo
 --      editF (Just val) selDyn = editOneSimple val selDyn -- will be okay but relies on getting LBCState manipulation right
       editWidgets x = R.fmapMaybe editedToCI <$> RD.selectViewListWithKey selectionDyn x editF
   postbuild <- RD.getPostBuild
-  lbcSelDyn <- R.foldDyn updateSelection (LBCSelection mk0) selUpdateEv
+  lbcSelDyn <- R.foldDyn updateSelection (LBCSelection Nothing) selUpdateEv
   let selectionDyn = lbcSelection <$> lbcSelDyn
-      setSelectEv = R.leftmost [reselectEv, (LBCSelection mk0) <$ postbuild]
-  selectEv <- sfCol $ selectableKeyList 10 labelF reselectEv lbcMapDyn
+      setSelectEv = R.leftmost [reselectEv, LBCSelection <$> R.attachWith const (R.current mk0Dyn) postbuild]
+  selectEv <- sfCol $ selectableKeyList 10 labelF setSelectEv lbcMapDyn
   let selUpdateEv = R.leftmost [selectEv]
-
   
   mapUpdateEv <- editWidgets mapDyn -- Event t (MapChangeValue k v)
-  let newMapEv = R.attachWith (flip updateMap) (R.current lbcMapDyn) mapUpdateEv
+  let editedMapEvDyn = (\x->flip updateMap x <$> mapUpdateEv) <$> lbcMapDyn -- Dynamic t (Event t ))
+      editedMapEv0 = R.attachWith const (R.current editedMapEvDyn) postbuild
+      editedMapEvEv = R.updated editedMapEvDyn
+  editedMapEvBeh <- R.hold R.never editedMapEvEv
+  let editedMapEv = R.switch editedMapEvBeh
       reselectEv = (\(MapChangeValue k _) -> LBCSelection (Just k)) <$> mapUpdateEv
-  lbcMapDyn <- R.holdDyn (LBCMap $ toMaybeMap map0) newMapEv
+      inputMapEv = LBCMap . toMaybeMap <$> R.leftmost [R.updated map0Dyn, R.attachWith const (R.current map0Dyn) postbuild]
+  lbcMapDyn <- R.holdDyn (LBCMap M.empty) (R.leftmost [inputMapEv,editedMapEv])
   let mapDyn = lbcMap <$> lbcMapDyn 
   return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
 
 
-editOne::(SimpleFormInstanceC t m, VBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
+editOne::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
 editOne valDyn selDyn = do
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
-  resDynAV <-  RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ buildValidatedDynamic B.validate Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
+  resDynAV <-  RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
   let resDyn = avToMaybe <$> resDynAV -- Dynamic t (Maybe v)
   return $ R.traceEventWith (const "editOne") $ R.fmapMaybe id $ R.updated resDyn 
 
+
 {-
-editOne'::(SimpleFormInstanceC t m, VBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
+editOne'::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
 editOne' vDyn selDyn = do
   let editDyn = flip editOneSimple selDyn <$> vDyn
   editEvEv <- RD.dyn editDyn
@@ -481,7 +486,7 @@ myWidgetList selDyn mapDyn widgetF = do
   R.switch <$> R.hold R.never eventEv -- does this hold make these outputs suitable for input?
 --  return $ R.switch eventDyn
 
-
+{-
 {-
 data MapState k = Empty | Singleton k | Bigger deriving (Eq)
 toMapState::M.Map k v->MapState k

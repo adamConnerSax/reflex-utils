@@ -26,6 +26,7 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        ) where
 
 import           Control.Lens                          (over, view, (^.))
+import           Control.Monad                         (join)
 import           Control.Monad.Fix                     (MonadFix)
 import           Control.Monad.Reader                  (lift)
 import qualified Data.Map                              as M
@@ -41,11 +42,13 @@ import           Text.Read                             (readMaybe)
 import           Data.ByteString                       (ByteString)
 import           Data.Int                              (Int16, Int32, Int64,
                                                         Int8)
-import           Data.Time.Calendar                    (Day,fromGregorian)
-import           Data.Time.Clock                       (UTCTime(..),secondsToDiffTime)
+import           Data.Time.Calendar                    (Day, fromGregorian)
+import           Data.Time.Clock                       (UTCTime (..),
+                                                        secondsToDiffTime)
+import           Data.Tuple.Select                     (sel1, sel2, sel3, sel4,
+                                                        sel5)
 import           Data.Word                             (Word16, Word32, Word64,
                                                         Word8)
-import           Data.Tuple.Select                     (sel1,sel2,sel3,sel4,sel5)                
 -- reflex imports
 import qualified Reflex                                as R
 import qualified Reflex.Dom                            as RD
@@ -105,13 +108,13 @@ sfWidget fDyn fString mFN wc widget = do
 
 sfWidget'::(R.Reflex t,SimpleFormC t m, RD.PostBuild t m,MonadFix m)
   =>R.Event t a -- update value events
-  ->b -- initial value to display in b-widget 
+  ->b -- initial value to display in b-widget
   ->(a->b) -- map in/out type to widget type
   ->(b->SFValidation a) --validate and map back
   ->(b->T.Text) -- showText for widget type
   ->Maybe FieldName -- field name ?
   ->Maybe T.Text -- type name ?
-  ->(WidgetConfig t b->m (R.Dynamic t b)) -- underlying reflex-dom-contrib widget 
+  ->(WidgetConfig t b->m (R.Dynamic t b)) -- underlying reflex-dom-contrib widget
   ->SFR t m (DynValidation t a)
 sfWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = mdo
   attrsDyn <- sfAttrs dva mFN mTypeName
@@ -144,7 +147,7 @@ mDynToInputEv mDyn = do
   postbuild <- RD.getPostBuild
   let startValueEv x = R.attachWith const x postbuild
       comboEv d = R.leftmost [startValueEv (R.current d), R.updated d]
-      updateEv = maybe R.never comboEv mDyn      
+      updateEv = maybe R.never comboEv mDyn
   return updateEv -- this might cause loops from the startValueEv??
 
 
@@ -168,6 +171,9 @@ buildDynReadMaybe va mFN maDyn = makeSimpleFormR $ do
   inputEv <- mDynToInputEv maDyn
   sfWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
+instance (SimpleFormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (R.Dynamic t a) where
+  buildForm va mFN = validateForm va . fmap R.constDyn . buildForm' mFN . fmap join
+
 -- | String and Text
 instance SimpleFormInstanceC t m=>FormBuilder t m T.Text where
   buildForm va mFN mInitialDyn = makeSimpleFormR $ do
@@ -175,7 +181,7 @@ instance SimpleFormInstanceC t m=>FormBuilder t m T.Text where
     sfWidget' inputEv "" id va id mFN Nothing $ textWidgetValue mFN
 
 instance {-# OVERLAPPING #-} SimpleFormInstanceC t m=>FormBuilder t m String where
-  buildForm va mFN mInitialDyn = 
+  buildForm va mFN mInitialDyn =
     let va' = (\t -> T.pack <$> va (T.unpack t))
     in T.unpack <$> buildForm va' mFN (fmap T.pack <$> mInitialDyn)
 
@@ -251,7 +257,7 @@ instance SimpleFormInstanceC t m=>FormBuilder t m Day where
           Nothing -> AccFailure [SFNoParse "Couldn't parse as Day."]
           Just y -> va y
         initialDay = Just $ fromGregorian 1971 1 1
-    inputEv <- mDynToInputEv mInitialDyn  
+    inputEv <- mDynToInputEv mInitialDyn
     sfWidget' inputEv initialDay Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
 
 
@@ -265,7 +271,7 @@ instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, 
   buildForm va mFN mInitialDyn = makeSimpleFormR $ do
     let values = [minBound..] :: [a]
         initial = head values
-    inputEv <- mDynToInputEv mInitialDyn  
+    inputEv <- mDynToInputEv mInitialDyn
     sfWidget' inputEv initial id va showText mFN Nothing $ (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
 
 

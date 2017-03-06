@@ -1,5 +1,6 @@
 {-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE DefaultSignatures      #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -10,7 +11,6 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE DefaultSignatures      #-}
 module Reflex.Dom.Contrib.SimpleForm.Builder
        (
          module Reflex.Dom.Contrib.SimpleForm.DynValidation
@@ -27,6 +27,7 @@ module Reflex.Dom.Contrib.SimpleForm.Builder
        , FormValidator
        , validateForm
        , FormBuilder(..)
+       , SFMDWrapped
        , buildForm'
        , makeSimpleFormR
        , unSF
@@ -107,14 +108,14 @@ fgvToSimpleFormR::Functor m=>B.FGV (SFR t m) (R.Dynamic t) SFValidation a -> Sim
 fgvToSimpleFormR = makeSimpleFormR . fmap DynValidation . B.unFGV
 
 simpleFormRToFGV::Functor m=>SimpleFormR t m a -> B.FGV (SFR t m) (R.Dynamic t) SFValidation a
-simpleFormRToFGV = B.FGV . fmap unDynValidation . unSF 
+simpleFormRToFGV = B.FGV . fmap unDynValidation . unSF
 
 type BuilderC t m a = (B.Builder (SFR t m) (R.Dynamic t) (SFValidation) a, B.Validatable (SFValidation) a)
 
 type FormValidator a = B.Validator (SFValidation) a
 
 validateForm::(Functor m, R.Reflex t)=>FormValidator a->SimpleFormR t m a->SimpleFormR t m a
-validateForm va = makeSimpleFormR . fmap DynValidation . B.unFGV . B.validateFGV va . B.FGV . fmap unDynValidation . unSF   
+validateForm va = makeSimpleFormR . fmap DynValidation . B.unFGV . B.validateFGV va . B.FGV . fmap unDynValidation . unSF
 
 
 class (SimpleFormC t m, RD.PostBuild t m) => FormBuilder t m a where
@@ -164,7 +165,7 @@ makeSimpleForm' cfg ma submitWidget = do
 
 
 observeDynamic::(SimpleFormC t m, VFormBuilderC t m a)=>SimpleFormConfiguration t m->R.Dynamic t a->m (DynValidation t a)
-observeDynamic cfg  = runSimpleFormR (setToObserve cfg) . buildForm' Nothing . Just 
+observeDynamic cfg  = runSimpleFormR (setToObserve cfg) . buildForm' Nothing . Just
 
 {-
 observeDynValidation::(SimpleFormC t m,RD.PostBuild t m
@@ -277,7 +278,9 @@ instance (SimpleFormC t m, RD.PostBuild t m)=> B.Buildable (SFR t m) (R.Dynamic 
         newWidgetEv = R.updated uncomposed
         startingWidgetEv = R.attachWith const (R.current uncomposed) postbuild
     join <$> RD.widgetHold (return $ R.constDyn $ AccFailure [SFNothing]) (R.leftmost [startingWidgetEv, newWidgetEv])
-    
+
+
+type SFMDWrapped t m a = B.MDWrapped (SFR t m) (R.Dynamic t) (SFValidation) a
 
 {-
   bCollapse dynFGV = FGV $ do
@@ -285,9 +288,9 @@ instance (SimpleFormC t m, RD.PostBuild t m)=> B.Buildable (SFR t m) (R.Dynamic 
     newInputDynEv <- RD.dyn uncomposed -- Event t (Dynamic t (SFValidation a))
     newInputBeh <- R.hold R.never (R.updated <$> dyned) -- Behavior t (Event t (SFValidation a))
     let newInputEv = R.switch newInputBeh -- Event t (SFValidation a)
-    R.holdDyn (AccFailure [SFNothing]) newInputEv 
--}   
-    
+    R.holdDyn (AccFailure [SFNothing]) newInputEv
+-}
+
 {-
 deriveSFRowBuilder::Name -> Q [Dec]
 deriveSFRowBuilder typeName =

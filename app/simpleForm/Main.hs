@@ -210,27 +210,35 @@ instance SimpleFormInstanceC t m=>FormBuilder t m BRec where
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
 buildDate::SimpleFormInstanceC t m=>FormValidator DateOrDateTime->
-  Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (MDWrapped (SFR t m) (Dynamic t) SFValidation DateOrDateTime)
+  Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (SFMDWrapped t m DateOrDateTime)
 buildDate va mFN msDyn =
-  let f ms = MDWrapped matched ("Date",mFN) bldr where
-        (matched,mDay) = case ms of
-                           Just (D day) -> (True,Just day)
-                           _            -> (False, Nothing)
-        bldr = simpleFormRToFGV $ validateForm va $ D <$> buildForm' Nothing (constDyn <$> mDay)
-  in f <$> msDyn
-  
+  let blankBuilder = simpleFormRToFGV $ validateForm va $ D <$> buildForm' Nothing Nothing
+  in case msDyn of
+    Nothing -> constDyn (MDWrapped False ("Date",mFN) blankBuilder)
+    Just ddtDyn ->
+      let f ms = MDWrapped matched ("Date",mFN) bldr where
+            (matched,mDay) = case ms of
+                               (D day) -> (True,Just day)
+                               _       -> (False, Nothing)
+            bldr = simpleFormRToFGV $ validateForm va $ D <$> buildForm' Nothing (constDyn <$> mDay)
+      in f <$> ddtDyn
+
 buildDateTime::SimpleFormInstanceC t m=>FormValidator DateOrDateTime ->
   Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (MDWrapped (SFR t m) (Dynamic t) SFValidation DateOrDateTime)
 buildDateTime va mFN msDyn =
-  let f ms = MDWrapped matched ("DateTime",mFN) bldr where
-        (matched,mDateTime) = case ms of
-                                Just (DT dt) -> (True,Just dt)
-                                _            -> (False, Nothing)
-        bldr = simpleFormRToFGV $ validateForm va $ DT <$> buildForm' Nothing (constDyn <$> mDateTime)
-  in f <$> msDyn
+  let blankBuilder = simpleFormRToFGV $ validateForm va $ D <$> buildForm' Nothing Nothing
+  in case msDyn of
+    Nothing -> constDyn (MDWrapped False ("Date",mFN) blankBuilder)
+    Just ddtDyn ->
+      let f ms = MDWrapped matched ("DateTime",mFN) bldr where
+            (matched,mDateTime) = case ms of
+                                    (DT dt) -> (True,Just dt)
+                                    _       -> (False, Nothing)
+            bldr = simpleFormRToFGV $ validateForm va $ DT <$> buildForm' Nothing (constDyn <$> mDateTime)
+      in f <$> ddtDyn
 
 instance SimpleFormInstanceC t m=>FormBuilder t m DateOrDateTime where
-  buildForm = makeSimpleFormR . fmap DynValidation . B.unFGV $ B.buildAFromConList [buildDate,buildDateTime]
+  buildForm va mFN = fgvToSimpleFormR . B.buildAFromConList [buildDate,buildDateTime] va mFN
 
 -- put some data in for demo purposes
 b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
@@ -244,12 +252,12 @@ testComplexForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfigu
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (Just c)
+  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (Just testMap)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed C:"
   el "p" blank
-  _ <- flexFill LayoutRight $ observeDynValidation cfg cDynM
+  _ <- flexFill LayoutRight $ observeDynamic cfg (avToMaybe <$> unDynValidation cDynM)
 
   return ()
 
