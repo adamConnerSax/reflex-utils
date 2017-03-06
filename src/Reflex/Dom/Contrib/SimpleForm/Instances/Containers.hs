@@ -375,11 +375,16 @@ lbcUpdate (EditKey oldKey newKey) (LBCWidgetState s m) =
 -}
 
 
+
 buildLBEditableMapSimple::(SimpleFormInstanceC t m, VFormBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)
-buildLBEEditableMapSimple mFN mMapDyn = sfRow $ do
-  let map0 = Just <$> fromMaybe (R.constDyn M.empty) mMapDyn
-      editF k dynV = RD.div $ el "p" $ text (T.pack $ show k) >> editOne dynV
-  listWithKey map0 editF
+buildLBEditableMapSimple mFN mMapDyn = sfRow $ do
+  let map0 = fromMaybe (R.constDyn M.empty) mMapDyn
+      editF k dynV = RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k) >> editOne dynV
+  mMapDyn' <- RD.listWithKey map0 editF
+  let res = DynValidation $ AccSuccess . M.mapMaybe id <$> mMapDyn'
+  return res
+
+
 
 newtype LBCMap k v = LBCMap { lbcMap::M.Map (Maybe k) (Maybe v) }
 newtype LBCSelection k = LBCSelection { lbcSelection::Maybe k }
@@ -430,9 +435,11 @@ buildLBEditableMap mFN mMapDyn = sfRow $ mdo
 
 editOne::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->SFR t m (R.Dynamic t (Maybe v))
 editOne valDyn = do
-  vEv<- fmap avToMaybe . R.updated . unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn))
-  newDyn <- R.holdDyn 
-
+  postbuild <- getPostBuild
+  vEv <- fmap avToMaybe . R.updated . unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn))
+  let initialEv = Just <$> R.tag (current valDyn) postbuild
+  R.holdDyn Nothing (R.leftmost [vEv,initialEv])
+  
 editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t Bool -> R.Dynamic t v->SFR t m (R.Event t v)
 editOneEv selDyn valDyn = do
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
