@@ -293,19 +293,13 @@ buildLBEMapLVWK::(SimpleFormInstanceC t m
                   , Ord k,Show k)
                 => LBBuildF t m k v
 buildLBEMapLVWK mFN mapDyn0 = mdo
-  postbuild <- RD.getPostBuild
   let editF k dynV = RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k) >> (fmap Just <$> editOneEv (R.constDyn True) dynV)
   mapEditsEv  <- RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
-{-
-  let newMapEvDyn = (\m -> flip RD.applyMap m <$> mapEditsEv) <$> mapDyn -- Dynamic t (Event t (Map k v))
-  newMapEvBeh <- R.hold R.never (R.updated newMapEvDyn)
-  let newMapEv = R.switch newMapEvBeh 
--}
+  initialMapEv <- (R.tag (R.current mapDyn0) <$> RD.getPostBuild) 
   let editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv 
-      initialMapEv = R.tag (R.current mapDyn0) postbuild
       mapEv = R.leftmost [R.updated mapDyn0, initialMapEv, editedMapEv] -- NB: Updates to mapDyn0 should win over the initialEv if they are simultaneous.
   mapDyn <- R.holdDyn M.empty mapEv
-  return mapDyn                                              
+  return mapDyn      
 
 
 
