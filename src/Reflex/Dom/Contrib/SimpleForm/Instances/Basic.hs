@@ -162,7 +162,7 @@ parseAndValidate mFN parse va t =
 mDynToInputEv::(R.Reflex t,RD.PostBuild t m)=>Maybe (R.Dynamic t a)-> m (R.Event t a)
 mDynToInputEv mDyn = do
   postbuild <- RD.getPostBuild
-  let startValueEv x = R.attachWith const x postbuild
+  let startValueEv x = R.tag x postbuild
       comboEv d = R.leftmost [startValueEv (R.current d), R.updated d]
       updateEv = maybe R.never comboEv mDyn
   return updateEv -- this might cause loops from the startValueEv??

@@ -276,7 +276,7 @@ instance (SimpleFormC t m, RD.PostBuild t m)=> B.Buildable (SFR t m) (R.Dynamic 
     postbuild <- RD.getPostBuild
     let uncomposed = B.unFGV <$> dynFGV
         newWidgetEv = R.updated uncomposed
-        startingWidgetEv = R.attachWith const (R.current uncomposed) postbuild
+        startingWidgetEv = R.tag (R.current uncomposed) postbuild
     join <$> RD.widgetHold (return $ R.constDyn $ AccFailure [SFNothing]) (R.leftmost [startingWidgetEv, newWidgetEv])
 
 
