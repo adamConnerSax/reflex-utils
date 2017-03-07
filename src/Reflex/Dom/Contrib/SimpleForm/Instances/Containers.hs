@@ -165,7 +165,8 @@ instance (B.Validatable SFValidation a, B.Validatable SFValidation b)=>B.Validat
 
 instance (SimpleFormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a,Show k)=>FormBuilder t m (M.Map k a) where
 --  buildForm = buildAdjustableContainer (SFAdjustableI mapSFA mapSFD)
-  buildForm va mFN ma = validateForm va . makeSimpleFormR $ buildLBEditableMapWithAdd mFN ma
+--  buildForm va mFN ma = validateForm va . makeSimpleFormR $ toBuildF buildLBEMapLVWK mFN ma
+  buildForm va mFN ma = validateForm va . makeSimpleFormR $ toBuildF (buildLBEMapWithAdd buildLBEMapLVWK) mFN ma
 
 intMapSFA::SFAppendableI (IM.IntMap v) IM.IntMap (IM.Key,v)
 intMapSFA = SFAppendableI (CRepI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList $ snd <$> IM.toList m)) mempty (\(k,x) m->IM.insert k x m) IM.size
@@ -220,6 +221,275 @@ instance (SimpleFormInstanceC t m, Eq a, Hashable a, VFormBuilderC t m a)=>FormB
 -- the various container builder components
 type BuildF t m a = Maybe FieldName->Maybe (R.Dynamic t a)->SFRW t m a
 
+
+-- List Based
+-- buildListBasedContainer::(SimpleFormInstanceC t m, VBuilderC t m b, Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
+
+--data LBCItemState = Visible | Hidden 
+
+{-
+data LBCWidgetState k v = LBCWidgetState { lbcSelection::Maybe k, lbcMap::M.Map (Maybe k) (Maybe v) }
+data LBCWidgetUpdate k v = ChangeSelection (Maybe k) | ChangeValue k v | DeleteItem k | AddItem k v | EditKey k k
+
+lbcUpdate::(Eq k,Ord k)=>LBCWidgetUpdate k v->LBCWidgetState k v->LBCWidgetState k v
+lbcUpdate (ChangeSelection mKey) (LBCWidgetState s m) = let s' = if M.member mKey m then mKey else s in LBCWidgetState s' m
+lbcUpdate (ChangeValue key val) (LBCWidgetState s m) = let m'=M.adjust (const $ Just val) (Just key) m in LBCWidgetState s m'
+lbcUpdate (DeleteItem key) (LBCWidgetState s m) = let (m',s') = (M.delete (Just key) m',if s==(Just key) then Nothing else s) in LBCWidgetState s' m'
+lbcUpdate (AddItem key val) (LBCWidgetState s m) = let m' = M.insert (Just key) (Just val) m in LBCWidgetState s m' 
+lbcUpdate (EditKey oldKey newKey) (LBCWidgetState s m) =
+  let s' = if s == Just oldKey then Just newKey else s
+      m' = maybe m (\x -> M.delete (Just oldKey) $ M.insert (Just newKey) x m ) (M.lookup (Just oldKey) m)
+  in LBCWidgetState s' m'
+-}
+
+
+type LBBuildF t m k v = Maybe FieldName->(R.Dynamic t (M.Map k v))->SFR t m (R.Dynamic t (M.Map k v))
+
+toBuildF::(R.Reflex t,Functor m)=>LBBuildF t m k v->BuildF t m (M.Map k v)
+toBuildF lbbf mFN mMapDyn =
+  let mapDyn = fromMaybe (R.constDyn M.empty) mMapDyn
+  in DynValidation . fmap AccSuccess <$> lbbf mFN mapDyn 
+
+
+
+-- simplest.  Use listWithKey
+buildLBEMapLWK::(SimpleFormInstanceC t m
+                 , VFormBuilderC t m v
+                 , Ord k, Show k)
+               =>LBBuildF t m k v
+buildLBEMapLWK mFN mapDyn = do
+  let editF k dynV = RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k) >> editOne dynV
+  mapOfDynMaybe <- RD.listWithKey mapDyn editF
+  return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
+
+
+buildLBEMapWithAdd::(SimpleFormInstanceC t m
+                    , VFormBuilderC t m k
+                    , VFormBuilderC t m v
+                    , Ord k,Show k)
+                  =>LBBuildF t m k v -- simple builder
+                  ->LBBuildF t m k v
+buildLBEMapWithAdd lbbf mFN mapDyn0 = sfCol $ mdo
+  postbuild <- RD.getPostBuild
+  editedMapDyn <- sfItem $ lbbf mFN mapDyn -- Dynamic t (M.Map k v)
+  addEv <- sfRow $ mdo -- Event t (k,v)
+    let newOneWidget = fmap avToMaybe . unDynValidation <$> (unSF $ buildForm' Nothing Nothing) -- m (Dynamic t (Maybe (k,v))
+        addWidget = join <$> RD.widgetHold newOneWidget (newOneWidget <$ addButtonEv) 
+    newOneDyn <- sfItem addWidget -- Dynamic t (Maybe (k,v))
+    addButtonEv <- sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "+" -- Event t ()
+    return $ R.attachWithMaybe const (R.current newOneDyn) addButtonEv -- fires only if newOneDyn is Just x
+  let newMapEv = R.attachWith (\m (k,v)->M.insert k v m) (R.current editedMapDyn) addEv
+      initialMapEv = R.tag (R.current mapDyn0) postbuild
+  mapDyn <- R.holdDyn M.empty (R.leftmost [initialMapEv, newMapEv])
+  return editedMapDyn
+
+
+
+-- now do with ListViewWithKey so we can put in delete events
+-- NB: ListViewWithKey returns and Event t (M.Map k v) but it contains only the keys for which things have changed
+-- NB: ListViewWithKey gets only mapDyn0 as input.  Only need to update if something *else* changes the map.
+buildLBEMapLVWK::(SimpleFormInstanceC t m
+                  , VFormBuilderC t m v
+                  , Ord k,Show k)
+                => LBBuildF t m k v
+buildLBEMapLVWK mFN mapDyn0 = mdo
+  postbuild <- RD.getPostBuild
+  let editF k dynV = RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k) >> (fmap Just <$> editOneEv (R.constDyn True) dynV)
+  mapEditsEv  <- RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
+{-
+  let newMapEvDyn = (\m -> flip RD.applyMap m <$> mapEditsEv) <$> mapDyn -- Dynamic t (Event t (Map k v))
+  newMapEvBeh <- R.hold R.never (R.updated newMapEvDyn)
+  let newMapEv = R.switch newMapEvBeh 
+-}
+  let editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv 
+      initialMapEv = R.tag (R.current mapDyn0) postbuild
+      mapEv = R.leftmost [R.updated mapDyn0, initialMapEv, editedMapEv] -- NB: Updates to mapDyn0 should win over the initialEv if they are simultaneous.
+  mapDyn <- R.holdDyn M.empty mapEv
+  return mapDyn                                              
+
+
+
+editOne::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->SFR t m (R.Dynamic t (Maybe v))
+editOne valDyn = do
+  postbuild <- RD.getPostBuild
+  vEv <- fmap avToMaybe . R.updated . unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn))
+  let initialEv = Just <$> R.tag (R.current valDyn) postbuild
+  R.holdDyn Nothing (R.leftmost [vEv,initialEv])
+
+editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t Bool->R.Dynamic t v->SFR t m (R.Event t v)
+editOneEv selDyn valDyn = do
+  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
+  resDynAV <-  RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
+  let resDyn = avToMaybe <$> resDynAV -- Dynamic t (Maybe v)
+  return $ R.fmapMaybe id $ R.updated resDyn 
+
+
+
+
+newtype LBCMap k v = LBCMap { lbcMap::M.Map (Maybe k) (Maybe v) }
+newtype LBCSelection k = LBCSelection { lbcSelection::Maybe k }
+
+
+data LBCSelectionUpdate k = SelectionUpdate (Maybe k) 
+updateSelection::LBCSelectionUpdate k->LBCSelection k->LBCSelection k
+updateSelection (SelectionUpdate mk) _ = LBCSelection mk -- this no longer checks if mk is in map so we need to make sure
+
+data LBCMapUpdate k v = MapChangeValue k v
+updateMap::Ord k=>LBCMapUpdate k v->LBCMap k v->LBCMap k v
+updateMap (MapChangeValue k v) (LBCMap m) = LBCMap $ M.adjust (const $ Just v) (Just k) m
+
+hiddenCSS::M.Map T.Text T.Text
+hiddenCSS  = "style" =: "display: none"
+visibleCSS::M.Map T.Text T.Text
+visibleCSS = "style" =: "display: inline"
+
+buildLBEditableMap::(SimpleFormInstanceC t m, VFormBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
+buildLBEditableMap mFN mMapDyn = sfRow $ mdo
+  let map0Dyn = fromMaybe (R.constDyn M.empty) mMapDyn
+      mk0Dyn = (\x -> if M.null x then Nothing else Just . head $ M.keys x) <$> map0Dyn
+      labelF k _ = T.pack $ show k
+      editedToCI (Nothing,_) = Nothing -- shouldn't happen
+      editedToCI (Just k, v) = Just $ MapChangeValue k v
+      editF Nothing _ _ = return R.never
+      editF (Just _) valDyn selDyn = editOneEv selDyn (fromJust <$> valDyn) -- will be okay but relies on getting LBCState manipulation right
+--      editF Nothing _ = return R.never
+--      editF (Just val) selDyn = editOneSimple val selDyn -- will be okay but relies on getting LBCState manipulation right
+      editWidgets x = R.fmapMaybe editedToCI <$> RD.selectViewListWithKey selectionDyn x editF
+  postbuild <- RD.getPostBuild
+  lbcSelDyn <- R.foldDyn updateSelection (LBCSelection Nothing) selUpdateEv
+  let selectionDyn = lbcSelection <$> lbcSelDyn
+      setSelectEv = R.leftmost [reselectEv, LBCSelection <$> R.tag (R.current mk0Dyn) postbuild]
+  selectEv <- sfCol $ selectableKeyList 10 labelF setSelectEv lbcMapDyn
+  let selUpdateEv = R.leftmost [selectEv]
+  
+  mapUpdateEv <- editWidgets mapDyn -- Event t (MapChangeValue k v)
+  let editedMapEvDyn = (\x->flip updateMap x <$> mapUpdateEv) <$> lbcMapDyn -- Dynamic t (Event t ))
+      editedMapEv0 = R.tag (R.current editedMapEvDyn) postbuild
+      editedMapEvEv = R.updated editedMapEvDyn
+  editedMapEvBeh <- R.hold R.never editedMapEvEv
+  let editedMapEv = R.switch editedMapEvBeh
+      reselectEv = (\(MapChangeValue k _) -> LBCSelection (Just k)) <$> mapUpdateEv
+      inputMapEv = LBCMap . toMaybeMap <$> R.leftmost [R.updated map0Dyn, R.tag (R.current map0Dyn) postbuild]
+  lbcMapDyn <- R.holdDyn (LBCMap M.empty) (R.leftmost [inputMapEv,editedMapEv])
+  let mapDyn = lbcMap <$> lbcMapDyn 
+  return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
+
+
+toMaybeMap::Ord k=>M.Map k v->M.Map (Maybe k) (Maybe v)
+toMaybeMap = M.insert Nothing Nothing . M.fromList . fmap (\(k,v)->(Just k,Just v)) . M.toList 
+
+fromMaybeMap::Ord k=>M.Map (Maybe k) (Maybe v) -> M.Map k v
+fromMaybeMap = M.fromList . catMaybes . fmap (\(mk, mv)-> (,) <$> mk <*> mv) . M.toList 
+
+selectableKeyList::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k, Show k)
+  =>Int -- max size for dropdown
+  ->(k->v->T.Text) -- function to label the map entries
+  ->R.Event t (LBCSelection k) -- update current selection
+  ->R.Dynamic t (LBCMap k v)  -- the map
+  ->m (R.Event t (LBCSelectionUpdate k)) 
+selectableKeyList maxDDSize labelF selEv curMapDyn = do
+  let mDyn = lbcMap <$> curMapDyn
+      sizeF n = min maxDDSize n
+      sizeDyn = M.size <$> mDyn
+      ddAttrs = ddAttrsDyn sizeF sizeDyn
+      labelF' Nothing _ = ""
+      labelF' _ Nothing = ""
+      labelF' (Just k) (Just v) = labelF k v
+      ddMap = R.traceDyn "ddMap: " $ M.mapWithKey labelF' <$> mDyn
+      config = RD.DropdownConfig (lbcSelection <$> selEv) ddAttrs
+  fmap SelectionUpdate . R.traceEvent "selectEv: " . RD._dropdown_change <$> RD.dropdown Nothing ddMap config    
+  
+ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
+ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
+
+myWidgetList::(RD.DomBuilder t m, R.MonadHold t m, R.PostBuild t m,R.Reflex t,Monad m,Eq k)
+  => R.Dynamic t k
+  -> R.Dynamic t (M.Map k v)
+  -> (v->R.Dynamic t Bool->m (R.Event t a))
+  -> m (R.Event t (k,a))
+myWidgetList selDyn mapDyn widgetF = do
+  let selWidgetF keyDyn f (key,val) = fmap (key,) <$> f val ((==key) <$> keyDyn)  -- Dynamic t k -> (v->Dynamic t Bool->m (Event t a))->(k,v)->m (Event t (k,a))
+      listOfWidgetsDyn = fmap (selWidgetF selDyn widgetF) .  M.toList <$> mapDyn -- Dynamic t [m (Event t (k,a)], this is bad, redoes all widgets
+      eventWidgetDyn = (fmap R.leftmost) . sequence <$> listOfWidgetsDyn -- Dynamic t (m (Event t (k,a)))
+  eventEv <- RD.dyn eventWidgetDyn -- Event t (Event t (k,a)).  NB, this is not an efficient way to handle this!
+  R.switch <$> R.hold R.never eventEv -- does this hold make these outputs suitable for input?
+
+
+{-
+data MapState k = Empty | Singleton k | Bigger deriving (Eq)
+toMapState::M.Map k v->MapState k
+toMapState m = case M.size m of
+  0 -> Empty
+  1 -> let x = head $ M.keys m in Singleton x
+  _ -> Bigger
+
+
+lbcDropdown::forall t m k v.(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)
+  =>Int -- max dropdown size
+  ->(k->v->T.Text) -- text to show in dropdown
+  ->R.Dynamic t (LBCWidgetState k v) -- current state
+  ->m (R.Event t (LBCWidgetUpdate k v)) 
+lbcDropdown maxSize labelF curStateDyn = do
+  let mDyn = unLBCWidgetState  <$> curStateDyn
+      sizeF n = max maxSize (n+1)
+      sizeDyn = M.size <$> mDyn
+      mapStateDyn = toMapState <$> mDyn
+      ddAttrs = ddAttrsDyn sizeF sizeDyn
+      ddMap = M.mapWithKey (\k (v,_) -> labelF k v) <$> mDyn
+      mapStateChangeEv = R.updated . R.uniqDyn $ mapStateDyn
+      emptyWidget = RD.el "h1" $ RD.text "Container has no items!" >> return R.never
+      widget mapState = case mapState of
+        Empty -> Just emptyWidget
+        Singleton k -> Just $ do
+          let config = RD.DropdownConfig R.never ddAttrs
+          fmap Reveal . RD._dropdown_change <$> RD.dropdown k ddMap config
+        Bigger -> Nothing
+      widgetEv::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)=>R.Event t (m (R.Event t (LBCWidgetUpdate k v)))
+      widgetEv = R.fmapMaybe widget $ R.leftmost [mapStateChangeEv, R.tag (R.current mapStateDyn) R.getPostBuild]
+  R.switchPromptlyDyn <$> RD.widgetHold (emptyWidget) widgetEv
+-}
+
+{-
+-- This is not optimal.  The Dropdown can handle dynamic maps which means we only need to re-widget when size switches from 0 to non-zero and vice-versa
+selectableKeyList::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)=>Int->k->(k->v->T.Text)->R.Dynamic t (LBCWidgetState k v)->m (R.Dynamic t (Maybe k))
+selectableKeyList maxSelectSize k0 labelF lbcStateDyn = do
+  let mDyn = unLBCWidgetState  <$> lbcStateDyn
+      sizeF n = max maxSelectSize (n+1)
+      sizeDyn = M.size <$> mDyn
+      ddAttrs = ddAttrsDyn sizeF sizeDyn
+      newWidgetEv = (\m->(m,M.size m > 0)) <$> mDyn
+      makeWidget (m,nonE) = case nonE of
+        False -> el "h1" $ text "No entries in container!" >> return (R.constDyn Nothing) 
+        True -> do
+          let ddMap = M.mapWithKey labelF m
+              config = DropDownConfig R.never ddAttrs
+              k0 = head . M.keys $ m
+          fmap Just . RD._dropdown_value <$> RD.dropdown k0 (R.constDyn ddMap) config
+  RD.widgetHold (makeWidget (m,M.size > 0)) (makeWidget <$> newWidgetEv)
+-}
+
+{-
+selectableKeyListWidget::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)=>Int->(k->v->T.Text)->R.Dynamic t (LBCWidgetState k v)->m (R.Dynamic t k)
+selectableKeyListWidget maxSelectSize labelF lcbStateDyn = do
+  let widget maxSize lF (LBCWidgetState m) = do
+        let emptyWidget = RD.el "h1" $ RD.text "No elements in container!"
+            nonEmptyWidget = do
+              let k0 = head . M.keys $ m'
+              selectableKeyList maxSize k0 lF               
+
+
+
+slvWrapper::(DomBuilder t m, Ord k, PostBuild t m, MonadHold t m, MonadFix m)
+  => Dynamic t (Maybe k)  -- ^ Current selection key
+  -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
+  -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
+  -> m (Event t (k, a))
+slvWrapper selDyn mapDyn widgetF =  do
+  let nonEmptyEv = fmapMaybe id
+-}
+
+  
+  
 -- This feels like a lot of machinery just to get removables...but it does work...
 newtype SSFR s t m a = SSFR { unSSFR::StateT s (SFR t m) (DynValidation t a) }
 
@@ -353,270 +623,3 @@ buildDeletable dI _ mgbDyn =
       let newgbEv = R.attachPromptlyDynWithMaybe (\mgb' key-> delete dI key <$> (avToMaybe mgb')) dmgb (R.switchPromptlyDyn dEv)
       return $ DynValidation dmgb
 
-
--- List Based
--- buildListBasedContainer::(SimpleFormInstanceC t m, VBuilderC t m b, Traversable g)=>SFAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
-
---data LBCItemState = Visible | Hidden 
-
-{-
-data LBCWidgetState k v = LBCWidgetState { lbcSelection::Maybe k, lbcMap::M.Map (Maybe k) (Maybe v) }
-data LBCWidgetUpdate k v = ChangeSelection (Maybe k) | ChangeValue k v | DeleteItem k | AddItem k v | EditKey k k
-
-lbcUpdate::(Eq k,Ord k)=>LBCWidgetUpdate k v->LBCWidgetState k v->LBCWidgetState k v
-lbcUpdate (ChangeSelection mKey) (LBCWidgetState s m) = let s' = if M.member mKey m then mKey else s in LBCWidgetState s' m
-lbcUpdate (ChangeValue key val) (LBCWidgetState s m) = let m'=M.adjust (const $ Just val) (Just key) m in LBCWidgetState s m'
-lbcUpdate (DeleteItem key) (LBCWidgetState s m) = let (m',s') = (M.delete (Just key) m',if s==(Just key) then Nothing else s) in LBCWidgetState s' m'
-lbcUpdate (AddItem key val) (LBCWidgetState s m) = let m' = M.insert (Just key) (Just val) m in LBCWidgetState s m' 
-lbcUpdate (EditKey oldKey newKey) (LBCWidgetState s m) =
-  let s' = if s == Just oldKey then Just newKey else s
-      m' = maybe m (\x -> M.delete (Just oldKey) $ M.insert (Just newKey) x m ) (M.lookup (Just oldKey) m)
-  in LBCWidgetState s' m'
--}
-
-
--- simplest.  Use listWithKey
-buildLBEditableMapSimple::(SimpleFormInstanceC t m
-                          , VFormBuilderC t m v
-                          , Ord k,Show k)=>BuildF t m (M.Map k v)
-buildLBEditableMapSimple mFN mMapDyn =
-  let mapDyn = fromMaybe (R.constDyn M.empty) mMapDyn
-  in sfCol $ DynValidation . fmap AccSuccess <$> buildLBEditableMapSimple' mFN mapDyn
-{-
-  let map0 = fromMaybe (R.constDyn M.empty) mMapDyn
-      editF k dynV = RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k) >> editOne dynV
-  mapOfDynMaybe <- RD.listWithKey map0 editF
-  let res = DynValidation $ AccSuccess . M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
-  return res
--}
-
-buildLBEditableMapSimple'::(SimpleFormInstanceC t m
-                           , VFormBuilderC t m v
-                           ,Ord k,Show k)
-  =>Maybe FieldName
-  ->R.Dynamic t (M.Map k v)
-  ->SFR t m (R.Dynamic t (M.Map k v))
-buildLBEditableMapSimple' mFN mapDyn = do
-  let editF k dynV = RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k) >> editOne dynV
-  mapOfDynMaybe <- RD.listWithKey mapDyn editF
-  return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
-
-
-buildLBEditableMapWithAdd::(SimpleFormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)
-buildLBEditableMapWithAdd mFN mMapDyn0 = sfCol $ mdo
-  postbuild <- RD.getPostBuild
-  editedMapDyn <- sfItem $ buildLBEditableMapSimple' mFN mapDyn -- Dynamic t (M.Map k v)
-  addEv <- sfRow $ mdo -- Event t (k,v)
-    let newOneWidget = fmap avToMaybe . unDynValidation <$> (unSF $ buildForm' Nothing Nothing) -- m (Dynamic t (Maybe (k,v))
-        addWidget = join <$> RD.widgetHold newOneWidget (newOneWidget <$ addButtonEv) 
-    newOneDyn <- sfItem addWidget -- Dynamic t (Maybe (k,v))
-    addButtonEv <- sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "+" -- Event t ()
-    return $ R.attachWithMaybe const (R.current newOneDyn) addButtonEv -- fires only if newOneDyn is Just x
-  let newMapEv = R.attachWith (\m (k,v)->M.insert k v m) (R.current editedMapDyn) addEv
-      mapDyn0 = fromMaybe (R.constDyn M.empty) mMapDyn0
-      initialMapEv = R.tag (R.current mapDyn0) postbuild
-  mapDyn <- R.holdDyn M.empty (R.leftmost [initialMapEv, newMapEv])
-  return . DynValidation $ AccSuccess <$> editedMapDyn
-
-
-editOne::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->SFR t m (R.Dynamic t (Maybe v))
-editOne valDyn = do
-  postbuild <- RD.getPostBuild
-  vEv <- fmap avToMaybe . R.updated . unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn))
-  let initialEv = Just <$> R.tag (R.current valDyn) postbuild
-  R.holdDyn Nothing (R.leftmost [vEv,initialEv])
-
-editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t Bool->R.Dynamic t v->SFR t m (R.Event t v)
-editOneEv selDyn valDyn = do
-  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
-  resDynAV <-  RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
-  let resDyn = avToMaybe <$> resDynAV -- Dynamic t (Maybe v)
-  return $ R.traceEventWith (const "editOne") $ R.fmapMaybe id $ R.updated resDyn 
-
-
-newtype LBCMap k v = LBCMap { lbcMap::M.Map (Maybe k) (Maybe v) }
-newtype LBCSelection k = LBCSelection { lbcSelection::Maybe k }
-
-
-data LBCSelectionUpdate k = SelectionUpdate (Maybe k) 
-updateSelection::LBCSelectionUpdate k->LBCSelection k->LBCSelection k
-updateSelection (SelectionUpdate mk) _ = LBCSelection mk -- this no longer checks if mk is in map so we need to make sure
-
-data LBCMapUpdate k v = MapChangeValue k v
-updateMap::Ord k=>LBCMapUpdate k v->LBCMap k v->LBCMap k v
-updateMap (MapChangeValue k v) (LBCMap m) = LBCMap $ M.adjust (const $ Just v) (Just k) m
-
-hiddenCSS::M.Map T.Text T.Text
-hiddenCSS  = "style" =: "display: none"
-visibleCSS::M.Map T.Text T.Text
-visibleCSS = "style" =: "display: inline"
-
-buildLBEditableMap::(SimpleFormInstanceC t m, VFormBuilderC t m v,Ord k,Show k)=>BuildF t m (M.Map k v)  
-buildLBEditableMap mFN mMapDyn = sfRow $ mdo
-  let map0Dyn = fromMaybe (R.constDyn M.empty) mMapDyn
-      mk0Dyn = (\x -> if M.null x then Nothing else Just . head $ M.keys x) <$> map0Dyn
-      labelF k _ = T.pack $ show k
-      editedToCI (Nothing,_) = Nothing -- shouldn't happen
-      editedToCI (Just k, v) = Just $ MapChangeValue k v
-      editF Nothing _ _ = return R.never
-      editF (Just _) valDyn selDyn = editOneEv selDyn (fromJust <$> valDyn) -- will be okay but relies on getting LBCState manipulation right
---      editF Nothing _ = return R.never
---      editF (Just val) selDyn = editOneSimple val selDyn -- will be okay but relies on getting LBCState manipulation right
-      editWidgets x = R.fmapMaybe editedToCI <$> RD.selectViewListWithKey selectionDyn x editF
-  postbuild <- RD.getPostBuild
-  lbcSelDyn <- R.foldDyn updateSelection (LBCSelection Nothing) selUpdateEv
-  let selectionDyn = lbcSelection <$> lbcSelDyn
-      setSelectEv = R.leftmost [reselectEv, LBCSelection <$> R.tag (R.current mk0Dyn) postbuild]
-  selectEv <- sfCol $ selectableKeyList 10 labelF setSelectEv lbcMapDyn
-  let selUpdateEv = R.leftmost [selectEv]
-  
-  mapUpdateEv <- editWidgets mapDyn -- Event t (MapChangeValue k v)
-  let editedMapEvDyn = (\x->flip updateMap x <$> mapUpdateEv) <$> lbcMapDyn -- Dynamic t (Event t ))
-      editedMapEv0 = R.tag (R.current editedMapEvDyn) postbuild
-      editedMapEvEv = R.updated editedMapEvDyn
-  editedMapEvBeh <- R.hold R.never editedMapEvEv
-  let editedMapEv = R.switch editedMapEvBeh
-      reselectEv = (\(MapChangeValue k _) -> LBCSelection (Just k)) <$> mapUpdateEv
-      inputMapEv = LBCMap . toMaybeMap <$> R.leftmost [R.updated map0Dyn, R.tag (R.current map0Dyn) postbuild]
-  lbcMapDyn <- R.holdDyn (LBCMap M.empty) (R.leftmost [inputMapEv,editedMapEv])
-  let mapDyn = lbcMap <$> lbcMapDyn 
-  return . DynValidation $ (AccSuccess . fromMaybeMap <$> mapDyn)
-
-
-
-{-
-editOne'::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->R.Dynamic t Bool->SFR t m (R.Event t v)
-editOne' vDyn selDyn = do
-  let editDyn = flip editOneSimple selDyn <$> vDyn
-  editEvEv <- RD.dyn editDyn
-  editBeh <- R.hold R.never editEvEv
-  return $ R.switch editBeh
-
-editOneSimple::(SimpleFormInstanceC t m, VBuilderC t m v)=>v->R.Dynamic t Bool->SFR t m (R.Event t v)
-editOneSimple val selDyn = do
-  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
-  resDynAV <-  RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ B.buildA Nothing (Just val)) -- Dynamic t (AccValidation) val
-  let resDyn = accValidation (const Nothing) Just <$> resDynAV -- Dynamic t (Maybe v)
-  return $ R.traceEventWith (const "editOneSimple") $ R.fmapMaybe id $ R.updated resDyn 
--}
-
-toMaybeMap::Ord k=>M.Map k v->M.Map (Maybe k) (Maybe v)
-toMaybeMap = M.insert Nothing Nothing . M.fromList . fmap (\(k,v)->(Just k,Just v)) . M.toList 
-
-fromMaybeMap::Ord k=>M.Map (Maybe k) (Maybe v) -> M.Map k v
-fromMaybeMap = M.fromList . catMaybes . fmap (\(mk, mv)-> (,) <$> mk <*> mv) . M.toList 
-
-selectableKeyList::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k, Show k)
-  =>Int -- max size for dropdown
-  ->(k->v->T.Text) -- function to label the map entries
-  ->R.Event t (LBCSelection k) -- update current selection
-  ->R.Dynamic t (LBCMap k v)  -- the map
-  ->m (R.Event t (LBCSelectionUpdate k)) 
-selectableKeyList maxDDSize labelF selEv curMapDyn = do
-  let mDyn = lbcMap <$> curMapDyn
-      sizeF n = min maxDDSize n
-      sizeDyn = M.size <$> mDyn
-      ddAttrs = ddAttrsDyn sizeF sizeDyn
-      labelF' Nothing _ = ""
-      labelF' _ Nothing = ""
-      labelF' (Just k) (Just v) = labelF k v
-      ddMap = R.traceDyn "ddMap: " $ M.mapWithKey labelF' <$> mDyn
-      config = RD.DropdownConfig (lbcSelection <$> selEv) ddAttrs
-  fmap SelectionUpdate . R.traceEvent "selectEv: " . RD._dropdown_change <$> RD.dropdown Nothing ddMap config    
-  
-ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
-ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
-
-myWidgetList::(RD.DomBuilder t m, R.MonadHold t m, R.PostBuild t m,R.Reflex t,Monad m,Eq k)
-  => R.Dynamic t k
-  -> R.Dynamic t (M.Map k v)
-  -> (v->R.Dynamic t Bool->m (R.Event t a))
-  -> m (R.Event t (k,a))
-myWidgetList selDyn mapDyn widgetF = do
-  let selWidgetF keyDyn f (key,val) = fmap (key,) <$> f val ((==key) <$> keyDyn)  -- Dynamic t k -> (v->Dynamic t Bool->m (Event t a))->(k,v)->m (Event t (k,a))
-      listOfWidgetsDyn = fmap (selWidgetF selDyn widgetF) .  M.toList <$> mapDyn -- Dynamic t [m (Event t (k,a)], this is bad, redoes all widgets
-      eventWidgetDyn = (fmap R.leftmost) . sequence <$> listOfWidgetsDyn -- Dynamic t (m (Event t (k,a)))
-  eventEv <- RD.dyn eventWidgetDyn -- Event t (Event t (k,a)).  NB, this is not an efficient way to handle this!
-  R.switch <$> R.hold R.never eventEv -- does this hold make these outputs suitable for input?
---  return $ R.switch eventDyn
-
-{-
-{-
-data MapState k = Empty | Singleton k | Bigger deriving (Eq)
-toMapState::M.Map k v->MapState k
-toMapState m = case M.size m of
-  0 -> Empty
-  1 -> let x = head $ M.keys m in Singleton x
-  _ -> Bigger
-
-
-lbcDropdown::forall t m k v.(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)
-  =>Int -- max dropdown size
-  ->(k->v->T.Text) -- text to show in dropdown
-  ->R.Dynamic t (LBCWidgetState k v) -- current state
-  ->m (R.Event t (LBCWidgetUpdate k v)) 
-lbcDropdown maxSize labelF curStateDyn = do
-  let mDyn = unLBCWidgetState  <$> curStateDyn
-      sizeF n = max maxSize (n+1)
-      sizeDyn = M.size <$> mDyn
-      mapStateDyn = toMapState <$> mDyn
-      ddAttrs = ddAttrsDyn sizeF sizeDyn
-      ddMap = M.mapWithKey (\k (v,_) -> labelF k v) <$> mDyn
-      mapStateChangeEv = R.updated . R.uniqDyn $ mapStateDyn
-      emptyWidget = RD.el "h1" $ RD.text "Container has no items!" >> return R.never
-      widget mapState = case mapState of
-        Empty -> Just emptyWidget
-        Singleton k -> Just $ do
-          let config = RD.DropdownConfig R.never ddAttrs
-          fmap Reveal . RD._dropdown_change <$> RD.dropdown k ddMap config
-        Bigger -> Nothing
-      widgetEv::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)=>R.Event t (m (R.Event t (LBCWidgetUpdate k v)))
-      widgetEv = R.fmapMaybe widget $ R.leftmost [mapStateChangeEv, R.tag (R.current mapStateDyn) R.getPostBuild]
-  R.switchPromptlyDyn <$> RD.widgetHold (emptyWidget) widgetEv
-
-
-
--}
-
-{-
--- This is not optimal.  The Dropdown can handle dynamic maps which means we only need to re-widget when size switches from 0 to non-zero and vice-versa
-selectableKeyList::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)=>Int->k->(k->v->T.Text)->R.Dynamic t (LBCWidgetState k v)->m (R.Dynamic t (Maybe k))
-selectableKeyList maxSelectSize k0 labelF lbcStateDyn = do
-  let mDyn = unLBCWidgetState  <$> lbcStateDyn
-      sizeF n = max maxSelectSize (n+1)
-      sizeDyn = M.size <$> mDyn
-      ddAttrs = ddAttrsDyn sizeF sizeDyn
-      newWidgetEv = (\m->(m,M.size m > 0)) <$> mDyn
-      makeWidget (m,nonE) = case nonE of
-        False -> el "h1" $ text "No entries in container!" >> return (R.constDyn Nothing) 
-        True -> do
-          let ddMap = M.mapWithKey labelF m
-              config = DropDownConfig R.never ddAttrs
-              k0 = head . M.keys $ m
-          fmap Just . RD._dropdown_value <$> RD.dropdown k0 (R.constDyn ddMap) config
-  RD.widgetHold (makeWidget (m,M.size > 0)) (makeWidget <$> newWidgetEv)
--}
-
-{-
-selectableKeyListWidget::(RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)=>Int->(k->v->T.Text)->R.Dynamic t (LBCWidgetState k v)->m (R.Dynamic t k)
-selectableKeyListWidget maxSelectSize labelF lcbStateDyn = do
-  let widget maxSize lF (LBCWidgetState m) = do
-        let emptyWidget = RD.el "h1" $ RD.text "No elements in container!"
-            nonEmptyWidget = do
-              let k0 = head . M.keys $ m'
-              selectableKeyList maxSize k0 lF               
-
-
-
-slvWrapper::(DomBuilder t m, Ord k, PostBuild t m, MonadHold t m, MonadFix m)
-  => Dynamic t (Maybe k)  -- ^ Current selection key
-  -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
-  -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
-  -> m (Event t (k, a))
-slvWrapper selDyn mapDyn widgetF =  do
-  let nonEmptyEv = fmapMaybe id
--}
-
-  
-  
--}  

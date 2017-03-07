@@ -165,7 +165,7 @@ makeSimpleForm' cfg ma submitWidget = do
 
 
 observeDynamic::(SimpleFormC t m, VFormBuilderC t m a)=>SimpleFormConfiguration t m->R.Dynamic t a->m (DynValidation t a)
-observeDynamic cfg  = runSimpleFormR (setToObserve cfg) . buildForm' Nothing . Just
+observeDynamic cfg = runSimpleFormR (setToObserve cfg) . buildForm' Nothing . Just
 
 {-
 observeDynValidation::(SimpleFormC t m,RD.PostBuild t m
