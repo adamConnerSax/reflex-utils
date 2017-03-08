@@ -44,7 +44,7 @@ import qualified Data.Set as S
 import Data.Hashable (Hashable)
 import qualified Data.HashMap.Lazy as HML
 import qualified Data.HashSet as HS
-import Data.Maybe (fromMaybe,catMaybes,fromJust)
+import Data.Maybe (fromMaybe,catMaybes,isNothing)
 import Data.Monoid ((<>))
 -- my libs
 import qualified DataBuilder as B
@@ -273,7 +273,7 @@ buildLBEMapWithAdd lbbf mFN mapDyn0 = sfCol $ mdo
   postbuild <- RD.getPostBuild
   editedMapDyn <- sfItem $ lbbf mFN mapDyn -- Dynamic t (M.Map k v)
   addEv <- sfRow $ mdo -- Event t (k,v)
-    let newOneWidget = fmap avToMaybe . unDynValidation <$> (unSF $ buildForm' Nothing Nothing) -- m (Dynamic t (Maybe (k,v))
+    let newOneWidget = fmap avToMaybe . unDynValidation <$> (sfRow . unSF $ buildForm' Nothing Nothing) -- m (Dynamic t (Maybe (k,v))
         addWidget = join <$> RD.widgetHold newOneWidget (newOneWidget <$ addButtonEv) 
     newOneDyn <- sfItem addWidget -- Dynamic t (Maybe (k,v))
     addButtonEv <- sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "+" -- Event t ()
@@ -297,8 +297,9 @@ buildLBEMapLVWK mFN mapDyn0 = mdo
   mapEditsEv  <- RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
   initialMapEv <- (R.tag (R.current mapDyn0) <$> RD.getPostBuild) 
   let editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv
---      wasDeleteEv = () <$ (R.fmapMaybe id $ F.find (==Nothing) . M.elems <$> mapEditsEv)
-      mapEv = R.leftmost [R.updated mapDyn0, initialMapEv, editedMapEv] -- NB: Updates to mapDyn0 should win over the initialEv if they are simultaneous.
+--      wasDeleteEv = () <$ (R.fmapMaybe id $ F.find (isNothing) . M.elems <$> mapEditsEv)
+      updatedInputEv = R.leftmost [R.updated mapDyn0, initialMapEv] -- NB: Updates to mapDyn0 should win over the initialEv if they are simultaneous.
+      mapEv = R.leftmost [updatedInputEv, editedMapEv]
   mapDyn <- R.holdDyn M.empty mapEv
   return mapDyn      
 
@@ -311,13 +312,17 @@ editOne valDyn = do
   R.holdDyn Nothing (R.leftmost [vEv,initialEv])
 
 editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v,Show k)=>R.Dynamic t Bool->k->R.Dynamic t v->SFR t m (R.Event t (Maybe v))
-editOneEv selDyn k valDyn = sfRow $ do
-  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
-  sfItem $ RD.el "div" $ RD.text (T.pack $ show k)
-  resDynAV <-  sfItem $ RD.elDynAttr "div" widgetAttrs $ unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
-  delButton <- sfItem $ sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "-" -- Event t ()
-  let resDyn = avToMaybe <$> resDynAV -- Dynamic t (Maybe v)
-  return $ R.leftmost [Just <$> (R.fmapMaybe id $ R.updated resDyn), Nothing <$ delButton] 
+editOneEv selDyn k valDyn = mdo
+  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
+  (visibleDyn,outEv) <- RD.elDynAttr "div" widgetAttrs $ sfRow $ do
+    sfItem $ RD.el "div" $ RD.text (T.pack $ show k)
+    resDynAV <-  sfItem $ unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
+    delButtonEv <- sfItem $ sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "-" -- Event t ()
+    let resDyn = avToMaybe <$> resDynAV -- Dynamic t (Maybe v)
+    inputSelEv <- dynAsEv selDyn
+    visibleDyn' <- R.holdDyn True $ R.leftmost [inputSelEv, False <$ delButtonEv]
+    return (visibleDyn',R.leftmost [Just <$> (R.fmapMaybe id $ R.updated resDyn), Nothing <$ delButtonEv])
+  return outEv
 
 
 hiddenCSS::M.Map T.Text T.Text
@@ -329,6 +334,8 @@ visibleCSS = "style" =: "display: inline"
 ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
 ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
 
+dynAsEv::RD.PostBuild t m=>R.Dynamic t a->m (R.Event t a)
+dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD.getPostBuild
 
 
 {-

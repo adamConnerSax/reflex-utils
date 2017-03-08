@@ -298,7 +298,7 @@ instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, 
 instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
 
 instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c)=>FormBuilder t m (a,b,c) where
-  buildForm va mFN mTupDyn = validateForm va . makeSimpleFormR $ sfRow $ do
+  buildForm va mFN mTupDyn = validateForm va . makeSimpleFormR $ do
       maW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
       mbW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
       mcW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel3) mTupDyn
@@ -306,7 +306,7 @@ instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilde
 
 
 instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d)=>FormBuilder t m (a,b,c,d) where
-  buildForm va mFN mTupDyn = validateForm va . makeSimpleFormR $ sfRow $ do
+  buildForm va mFN mTupDyn = validateForm va . makeSimpleFormR $ do
       maW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
       mbW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
       mcW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel3) mTupDyn
@@ -314,7 +314,7 @@ instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilde
       return $ (,,,) <$> maW <*> mbW <*> mcW <*> mdW
 
 instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d, VFormBuilderC t m e)=>FormBuilder t m (a,b,c,d,e) where
-  buildForm va mFN mTupDyn = validateForm va . makeSimpleFormR $ sfRow $ do
+  buildForm va mFN mTupDyn = validateForm va . makeSimpleFormR $ do
       maW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
       mbW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
       mcW <- unSF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel3) mTupDyn
