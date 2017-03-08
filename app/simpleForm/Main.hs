@@ -249,6 +249,9 @@ c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.emp
 testMap::M.Map T.Text Int
 testMap = M.fromList [("A",1),("B",2),("C",3)]
 
+testMap2::M.Map T.Text (M.Map T.Text Int)
+testMap2 = M.fromList [("MapA",M.fromList [("A",1),("B",2)]),("MapB",M.fromList [("C",5),("E",7)])]
+
 testComplexForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""

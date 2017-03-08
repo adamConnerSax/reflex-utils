@@ -164,10 +164,17 @@ instance (B.Validatable SFValidation a, B.Validatable SFValidation b)=>B.Validat
 -}
 
 instance (SimpleFormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a,Show k)=>FormBuilder t m (M.Map k a) where
+  buildForm va mFN mfaDyn =  validateForm va . makeSimpleFormR  $ do
+    fType <- getFormType
+    case fType of
+      ObserveOnly ->  toBuildF buildLBEMapLWK mFN mfaDyn
+      Interactive ->  toBuildF (buildLBEMapWithAdd buildLBEMapLVWKSD) mFN mfaDyn
+
 --  buildForm = buildAdjustableContainer (SFAdjustableI mapSFA mapSFD)
 --  buildForm va mFN ma = validateForm va . makeSimpleFormR $ toBuildF buildLBEMapLVWK mFN ma
-  buildForm va mFN ma = validateForm va . makeSimpleFormR $ toBuildF (buildLBEMapWithAdd buildLBEMapLVWK) mFN ma
-
+--  buildForm va mFN ma = validateForm va . makeSimpleFormR $ toBuildF (buildLBEMapWithAdd buildLBEMapLWK) mFN ma
+--  buildForm va mFN ma = validateForm va . makeSimpleFormR $ toBuildF buildLBEMapLVWKSD mFN ma
+  
 intMapSFA::SFAppendableI (IM.IntMap v) IM.IntMap (IM.Key,v)
 intMapSFA = SFAppendableI (CRepI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList $ snd <$> IM.toList m)) mempty (\(k,x) m->IM.insert k x m) IM.size
 
@@ -251,18 +258,6 @@ toBuildF lbbf mFN mMapDyn =
   in DynValidation . fmap AccSuccess <$> lbbf mFN mapDyn 
 
 
-
--- simplest.  Use listWithKey
-buildLBEMapLWK::(SimpleFormInstanceC t m
-                 , VFormBuilderC t m v
-                 , Ord k, Show k)
-               =>LBBuildF t m k v
-buildLBEMapLWK mFN mapDyn = do
-  let editF k dynV = RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k) >> editOne dynV
-  mapOfDynMaybe <- RD.listWithKey mapDyn editF
-  return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
-
-
 buildLBEMapWithAdd::(SimpleFormInstanceC t m
                     , VFormBuilderC t m k
                     , VFormBuilderC t m v
@@ -270,46 +265,51 @@ buildLBEMapWithAdd::(SimpleFormInstanceC t m
                   =>LBBuildF t m k v -- simple builder
                   ->LBBuildF t m k v
 buildLBEMapWithAdd lbbf mFN mapDyn0 = sfCol $ mdo
-  postbuild <- RD.getPostBuild
+  initialMapEv <- dynAsEv mapDyn0
   editedMapDyn <- sfItem $ lbbf mFN mapDyn -- Dynamic t (M.Map k v)
   addEv <- sfRow $ mdo -- Event t (k,v)
     let newOneWidget = fmap avToMaybe . unDynValidation <$> (sfRow . unSF $ buildForm' Nothing Nothing) -- m (Dynamic t (Maybe (k,v))
         addWidget = join <$> RD.widgetHold newOneWidget (newOneWidget <$ addButtonEv) 
     newOneDyn <- sfItem addWidget -- Dynamic t (Maybe (k,v))
     addButtonEv <- sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "+" -- Event t ()
-    return $ R.attachWithMaybe const (R.current newOneDyn) addButtonEv -- fires only if newOneDyn is Just x
-  let newMapEv = R.attachWith (\m (k,v)->M.insert k v m) (R.current editedMapDyn) addEv
-      initialMapEv = R.tag (R.current mapDyn0) postbuild
-  mapDyn <- R.holdDyn M.empty (R.leftmost [initialMapEv, newMapEv])
+    return $ R.attachWithMaybe const (R.current newOneDyn) addButtonEv -- fires only if newOneDyn is (Just x)
+  let mapWithAdditionEv = R.attachWith (\m (k,v)->M.insert k v m) (R.current editedMapDyn) addEv
+  mapDyn <- R.holdDyn M.empty (R.leftmost [initialMapEv, mapWithAdditionEv])
+--  outDyn <- R.holdDyn M.empty (R.leftmost [R.traceEventWith (const "E") initialMapEv, R.updated editedMapDyn])
   return editedMapDyn
 
 
+-- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses. 
+buildLBEMapLWK::(SimpleFormInstanceC t m
+                 , VFormBuilderC t m v
+                 , Ord k, Show k)
+               =>LBBuildF t m k v
+buildLBEMapLWK mFN map0Dyn = mdo
+  newInputMapEv <- dynAsEv map0Dyn -- FIXME: this is superfluous but here for sameness while debugging the observe issue
+  let editF k dynV = RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k) >> editOne dynV
+  mapOfDynMaybe <- RD.listWithKey mapDyn editF
+  mapDyn <- R.holdDyn M.empty newInputMapEv
+  return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
+
+editOne::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->SFR t m (R.Dynamic t (Maybe v))
+editOne valDyn = fmap avToMaybe . unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn))
+
 
 -- now do with ListViewWithKey so we can put in delete events
--- NB: ListViewWithKey returns and Event t (M.Map k v) but it contains only the keys for which things have changed
+-- NB: ListViewWithKey returns an Event t (M.Map k v) but it contains only the keys for which things have changed
 -- NB: ListViewWithKey gets only mapDyn0 as input.  Only need to update if something *else* changes the map.
 buildLBEMapLVWK::(SimpleFormInstanceC t m
                   , VFormBuilderC t m v
-                  , Ord k,Show k)
+                  , Ord k, Show k)
                 => LBBuildF t m k v
 buildLBEMapLVWK mFN mapDyn0 = mdo
   let editF = editOneEv (R.constDyn True) 
+  newInputMapEv <- dynAsEv mapDyn0
   mapEditsEv  <- RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
-  initialMapEv <- (R.tag (R.current mapDyn0) <$> RD.getPostBuild) 
   let editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv
---      wasDeleteEv = () <$ (R.fmapMaybe id $ F.find (isNothing) . M.elems <$> mapEditsEv)
-      updatedInputEv = R.leftmost [R.updated mapDyn0, initialMapEv] -- NB: Updates to mapDyn0 should win over the initialEv if they are simultaneous.
-      mapEv = R.leftmost [updatedInputEv, editedMapEv]
+      mapEv = R.leftmost [newInputMapEv, editedMapEv]
   mapDyn <- R.holdDyn M.empty mapEv
   return mapDyn      
-
-
-editOne::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->SFR t m (R.Dynamic t (Maybe v))
-editOne valDyn = do
-  postbuild <- RD.getPostBuild
-  vEv <- fmap avToMaybe . R.updated . unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn))
-  let initialEv = Just <$> R.tag (R.current valDyn) postbuild
-  R.holdDyn Nothing (R.leftmost [vEv,initialEv])
 
 editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v,Show k)=>R.Dynamic t Bool->k->R.Dynamic t v->SFR t m (R.Event t (Maybe v))
 editOneEv selDyn k valDyn = mdo
@@ -320,11 +320,35 @@ editOneEv selDyn k valDyn = mdo
     delButtonEv <- sfItem $ sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "-" -- Event t ()
     let resDyn = avToMaybe <$> resDynAV -- Dynamic t (Maybe v)
     inputSelEv <- dynAsEv selDyn
-    visibleDyn' <- R.holdDyn True $ R.leftmost [inputSelEv, False <$ delButtonEv]
+    visibleDyn' <- R.holdDyn True $ R.leftmost [inputSelEv -- calling widget
+                                               , False <$ delButtonEv -- delete button pressed, so hide
+                                               , True <$ (R.updated valDyn) -- value updated so make sure it's visible (in case of re-use of deleted key)
+                                               ]
     return (visibleDyn',R.leftmost [Just <$> (R.fmapMaybe id $ R.updated resDyn), Nothing <$ delButtonEv])
   return outEv
 
+-- now with ListViewWithKeyShallowDiff just so I understand things.
+buildLBEMapLVWKSD::(SimpleFormInstanceC t m
+                  , VFormBuilderC t m v
+                  , Ord k, Show k)
+                => LBBuildF t m k v
+buildLBEMapLVWKSD mf mapDyn0 = mdo
+  newInputMapEv <- dynAsEv mapDyn0
+  updateEvsDyn <- RD.listWithKeyShallowDiff M.empty diffMapEv editOneSD -- Dynamic t (Map k (Event t (Maybe v)))
+  let mapEditsEv =  R.switch $ R.mergeMap <$> R.current updateEvsDyn -- Event t (Map k (Maybe v))
+      diffMapEv = R.traceEventWith (const "new Input to buildLBEMapLVWKSD") $ fmap Just <$> newInputMapEv 
+      editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv
+      newMapEv = R.leftmost [newInputMapEv, editedMapEv]
+  mapDyn <- R.holdDyn M.empty newMapEv
+  return mapDyn
+  
+editOneSD::(SimpleFormInstanceC t m, VFormBuilderC t m v, Show k)=>k->v->R.Event t v->SFR t m (R.Event t (Maybe v))
+editOneSD k v0 vEv = R.holdDyn v0 vEv >>= editOneEv (R.constDyn True) k
 
+
+
+
+  
 hiddenCSS::M.Map T.Text T.Text
 hiddenCSS  = "style" =: "display: none"
 visibleCSS::M.Map T.Text T.Text
@@ -334,6 +358,9 @@ visibleCSS = "style" =: "display: inline"
 ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
 ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
 
+
+-- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
+-- that's the value we want not the tagged current value. 
 dynAsEv::RD.PostBuild t m=>R.Dynamic t a->m (R.Event t a)
 dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD.getPostBuild
 
