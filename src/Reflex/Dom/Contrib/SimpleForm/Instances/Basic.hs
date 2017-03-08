@@ -14,6 +14,7 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        (
          sfWidget
        , sfWidget'
+       , dynAsEv
        , buildDynReadMaybe
        , buildDynReadable
        , BasicC
@@ -158,12 +159,17 @@ parseAndValidate mFN parse va t =
     Nothing -> AccFailure [SFNoParse $ parseError mFN t]
     Just y -> va y
 
+-- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
+-- that's the value we want not the tagged current value. 
+dynAsEv::RD.PostBuild t m=>R.Dynamic t a->m (R.Event t a)
+dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD.getPostBuild
+
 -- turn a Dynamic into an Event with an initial firing to represent the value at postbuild.  Should we sample and return (a,Event t a)?
 mDynToInputEv::(R.Reflex t,RD.PostBuild t m)=>Maybe (R.Dynamic t a)-> m (R.Event t a)
 mDynToInputEv mDyn = do
   postbuild <- RD.getPostBuild
   let startValueEv x = R.tag x postbuild
-      comboEv d = R.leftmost [startValueEv (R.current d), R.updated d]
+      comboEv d = R.leftmost [R.updated d, startValueEv (R.current d)]
       updateEv = maybe R.never comboEv mDyn
   return updateEv -- this might cause loops from the startValueEv??
 
