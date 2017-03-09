@@ -178,7 +178,7 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 -- generic instances
 -- NB: "Generic" below is the Generics.SOP sort.
 -- NB: You don't need the "buildA .. = .. gBuildA .. " lines if the default formatting is okay.  But this allows you to insert layout on a per type basis.
-
+{-
 instance Generic A
 instance HasDatatypeInfo A
 instance SimpleFormInstanceC t m=>FormBuilder t m A where
@@ -245,7 +245,7 @@ instance SimpleFormInstanceC t m=>FormBuilder t m DateOrDateTime where
 b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
 b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
-
+-}
 testMap::M.Map T.Text Int
 testMap = M.fromList [("A",1),("B",2),("C",3)]
 

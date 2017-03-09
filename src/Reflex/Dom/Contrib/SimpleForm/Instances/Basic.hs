@@ -15,6 +15,7 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
          sfWidget
        , sfWidget'
        , dynAsEv
+       , traceDynAsEv
        , buildDynReadMaybe
        , buildDynReadable
        , BasicC
@@ -75,7 +76,7 @@ instance {-# OVERLAPPABLE #-} B.Validatable (SFValidation) a
 
 readOnlyW::(BasicC t m, RD.PostBuild t m)=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
 readOnlyW f wc = do
-  da <- R.foldDyn const (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
+  da <- R.holdDyn (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
   let ds = f <$> da
   RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
   return da
@@ -164,16 +165,18 @@ parseAndValidate mFN parse va t =
 dynAsEv::RD.PostBuild t m=>R.Dynamic t a->m (R.Event t a)
 dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD.getPostBuild
 
+traceDynAsEv::RD.PostBuild t m=>(a->String)->R.Dynamic t a->m (R.Event t a)
+traceDynAsEv f dyn = do
+  postbuild <- RD.getPostBuild
+  let f' prefix x = prefix ++ f x
+      upEv = R.traceEventWith (f' "update-") $ R.updated dyn
+      pbEv = R.traceEventWith (f' "postbuild-") $ R.tag (R.current dyn) postbuild
+  return $ R.leftmost [upEv, pbEv] 
+
+
 -- turn a Dynamic into an Event with an initial firing to represent the value at postbuild.  Should we sample and return (a,Event t a)?
 mDynToInputEv::(R.Reflex t,RD.PostBuild t m)=>Maybe (R.Dynamic t a)-> m (R.Event t a)
 mDynToInputEv mDyn = maybe (return R.never) dynAsEv mDyn
-{-
-  postbuild <- RD.getPostBuild
-  let startValueEv x = R.tag x postbuild
-      comboEv d = R.leftmost [R.updated d, startValueEv (R.current d)]
-      updateEv = maybe R.never comboEv mDyn
-  return updateEv -- this might cause loops from the startValueEv??
--}
 
 buildDynReadable::(SimpleFormInstanceC t m, Readable a, Show a)
   =>FormValidator a

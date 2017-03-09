@@ -16,16 +16,16 @@ import           Reflex
 import           Reflex.Dom                       hiding (mainWidget, run)
 import           Reflex.Dom.Core                  (mainWidget)
 
+import           Control.Monad                    (join)
 import           Control.Monad.Fix                (MonadFix)
 
 import qualified Data.Map                         as M
-import           Data.Maybe                       (catMaybes, fromJust,
-                                                   fromMaybe)
 import           Data.Monoid                      ((<>))
 import qualified Data.Text                        as T
 
 import           System.Process                   (spawnProcess)
 import           Text.Read                        (readMaybe)
+import Reflex.Dom.Contrib.Widgets.Common 
 
 
 -- NB: This is just for warp.
@@ -37,85 +37,137 @@ main = do
 
 testWidget::JSM()
 testWidget = mainWidget $ do
-  let x = M.fromList [("A",1),("B",2)]
-  res <- buildLBEditableMap x
+  let x0 = M.fromList [("A",1),("B",2)]
+  el "span" $ text "editWidget:  "
+  res <- buildLBEMapLVWK (constDyn x0)
+  el "br" blank
+  el "br" blank
+  el "span" $ text "dynText: "
   dynText $ T.pack . show <$> res
+  el "br" blank
+  el "br" blank  
+  el "span" $ text "showWidget: "
+  _ <- buildLBEMapLWK res
   return ()
 
 
+type WidgetConstraints t m k v = (DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, Show v, Read v, Ord k, Show k)
+
+-- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses. 
+buildLBEMapLWK::WidgetConstraints t m k v=>Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
+buildLBEMapLWK map0Dyn = do
+  mapOfDyn <- listWithKey (traceDynWith (\m -> "LWK map0Dyn: " ++ show m) map0Dyn) editWidgetDyn -- Dynamic t (M.Map k (Dynamic t (Maybe v)))
+  return $ M.mapMaybe id <$> (join $ distributeMapOverDynPure <$> mapOfDyn)
+
+editWidgetDyn::WidgetConstraints t m k v=>k->Dynamic t v-> m (Dynamic t (Maybe v))
+editWidgetDyn k vDyn = do
+  inputEv' <- traceDynAsEv (\x->"editWidget: v=" ++ show x) vDyn
+  let inputEv = T.pack . show <$> inputEv'
+      config = def {_textInputConfig_setValue = inputEv }
+  el "span" $ text (T.pack $ show k)
+  valDyn <- _textInput_value <$> textInput config
+  return $ readMaybe . T.unpack <$> valDyn 
 
 
-newtype LBCMap k v = LBCMap { lbcMap::M.Map (Maybe k) (Maybe v) }
-newtype LBCSelection k = LBCSelection { lbcSelection::Maybe k }
-
-data LBCSelectionUpdate k = SelectionUpdate (Maybe k)
-updateSelection::LBCSelectionUpdate k->LBCSelection k->LBCSelection k
-updateSelection (SelectionUpdate mk) _ = LBCSelection mk
-
-data LBCMapUpdate k v = MapChangeValue k v
-updateMap::Ord k=>LBCMapUpdate k v->LBCMap k v->LBCMap k v
-updateMap (MapChangeValue k v) (LBCMap m) = LBCMap $ M.adjust (const $ Just v) (Just k) m
-
-reselect::LBCMapUpdate k v->Maybe k
-reselect (MapChangeValue k v) = Just k
+-- NB: ListViewWithKey returns an Event t (M.Map k v) but it contains only the keys for which things have changed
+-- NB: ListViewWithKey gets only mapDyn0 as input.  Only need to update if something *else* changes the map.
+buildLBEMapLVWK::WidgetConstraints t m k v=>Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
+buildLBEMapLVWK mapDyn0 = mdo
+  let editW = editAndDeleteWidgetEv (constDyn True)
+  newInputMapEv <- traceDynAsEv (\m->"LVWK mapDyn0" ++ show m) mapDyn0
+  mapEditsEv  <- listViewWithKey mapDyn0 editW -- Event t (M.Map k (Maybe v)), carries only updates
+  let editedMapEv = traceEventWith (\m->"LVWK editedMap: " ++ show m) $ attachWith (flip applyMap) (current mapDyn) mapEditsEv
+      mapEv = leftmost [newInputMapEv, editedMapEv]
+  mapDyn <- holdDyn M.empty mapEv
+  return (traceDynWith (\m -> "LVWK mapDyn: " ++ show (M.keys m)) mapDyn)
 
 
-buildLBEditableMap::(DomBuilder t m, PostBuild t m, MonadHold t m,MonadFix m,
-                      Read v, Show v,Ord k,Show k,DomBuilderSpace m ~ GhcjsDomSpace)
-  =>M.Map k v
-  ->m (Dynamic t (M.Map k v))
-buildLBEditableMap map0 = mdo
-  let mk0 = if M.null map0 then Nothing else Just . head $ M.keys map0
-      labelF k _ = T.pack $ show k
-      editedToCI (Nothing,_) = Nothing -- shouldn't happen
-      editedToCI (Just k, v) = Just $ MapChangeValue k v
-      editF Nothing _ _ = return never
-      editF (Just _) valDyn selDyn = selectableWidget' (fromJust <$> valDyn) selDyn -- fromJust will be okay but relies on getting LBCState manipulation right
-      editWidgets x = fmapMaybe editedToCI <$> selectViewListWithKey selectionDyn x editF
+editWidgetEv::WidgetConstraints t m k v=>k->Dynamic t v-> m (Event t (Maybe v))
+editWidgetEv k vDyn = updated <$> editWidgetDyn k vDyn
+
+editWidgetEv'::WidgetConstraints t m k v=>k->Dynamic t v-> m (Event t (Maybe v))
+editWidgetEv' k vDyn = do
+  inputEv' <- traceDynAsEv (\x->"editWidget: v=" ++ show x) vDyn
+  let inputEv = T.pack . show <$> inputEv'
+      config = def {_textInputConfig_setValue = inputEv }
+  el "span" $ text (T.pack $ show k)
+  valEv <- _textInput_input <$> textInput config
+  return $ readMaybe . T.unpack <$> valEv
+
+
+editAndDeleteWidgetEv::WidgetConstraints t m k v=>Dynamic t Bool->k->Dynamic t v-> m (Event t (Maybe v))
+editAndDeleteWidgetEv selDyn k vDyn = mdo
+  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
+  (visibleDyn,outEv) <- elDynAttr "div" widgetAttrs $ do
+    resDyn <-  editWidgetDyn k vDyn
+    delButtonEv <- buttonNoSubmit "-"
+    selEv <- dynAsEv selDyn
+    visDyn <-  holdDyn True $ leftmost
+               [
+                 selEv
+               , False <$ delButtonEv -- delete button pressed, so hide
+               , True <$ (updated vDyn) -- value updated so make sure it's visible (in case of re-use of deleted key)
+               ]
+    let outEv' = leftmost
+                 [
+                   Just <$> (fmapMaybe id $ updated resDyn)
+                 , Nothing <$ delButtonEv
+                 ]           
+    return (visDyn,outEv')
+  return outEv
+  
+buttonNoSubmit::DomBuilder t m=>T.Text -> m (Event t ())
+buttonNoSubmit t = (domEvent Click . fst) <$> elAttr' "button" ("type" =: "button") (text t)
+
+{-
+editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v,Show k)=>Dynamic t Bool->k->Dynamic t v->SFR t m (Event t (Maybe v))
+editOneEv selDyn k valDyn = mdo
+  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
+  (visibleDyn,outEv) <- elDynAttr "div" widgetAttrs $ sfRow $ do
+    sfItem $ el "div" $ text (T.pack $ show k)
+    resDynAV <-  sfItem $ unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
+    delButtonEv <- sfItem $ sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "-" -- Event t ()
+    let resDyn = avToMaybe <$> resDynAV -- Dynamic t (Maybe v)
+    inputSelEv <- dynAsEv selDyn
+    visibleDyn' <- holdDyn True $ leftmost [inputSelEv -- calling widget
+                                               , False <$ delButtonEv -- delete button pressed, so hide
+                                               , True <$ (updated valDyn) -- value updated so make sure it's visible (in case of re-use of deleted key)
+                                               ]
+    return (visibleDyn',leftmost [Just <$> (fmapMaybe id $ updated resDyn), Nothing <$ delButtonEv])
+  return outEv
+
+-- now with ListViewWithKeyShallowDiff just so I understand things.
+buildLBEMapLVWKSD::(SimpleFormInstanceC t m
+                  , VFormBuilderC t m v
+                  , Ord k, Show k)
+                => LBBuildF t m k v
+buildLBEMapLVWKSD mf mapDyn0 = mdo
+  newInputMapEv <- dynAsEv mapDyn0
+  updateEvsDyn <- listWithKeyShallowDiff M.empty diffMapEv editOneSD -- Dynamic t (Map k (Event t (Maybe v)))
+  let mapEditsEv =  switch $ mergeMap <$> current updateEvsDyn -- Event t (Map k (Maybe v))
+      diffMapEv = traceEventWith (\m -> "new Input to buildLBEMapLVWKSD: " ++ show (M.keys m)) $ fmap Just <$> newInputMapEv 
+      editedMapEv = attachWith (flip applyMap) (current mapDyn) mapEditsEv
+      newMapEv = leftmost [newInputMapEv, editedMapEv]
+  mapDyn <- holdDyn M.empty newMapEv
+  return (traceDynWith (\m -> "LVWKSD mapDyn: " ++ show (M.keys m)) mapDyn)
+
+editWidgetSD::WidgetConstraints t m k v=>k->v->Event t v->SFR t m (Event t (Maybe v))
+editWidgetSD k v0 vEv = holdDyn v0 vEv >>= editOneEv k
+
+
+-}
+
+dynAsEv::PostBuild t m=>Dynamic t a -> m (Event t a)
+dynAsEv dyn = (\x->leftmost [updated dyn, tag (current dyn) x]) <$> getPostBuild 
+
+
+traceDynAsEv::PostBuild t m=>(a->String)->Dynamic t a->m (Event t a)
+traceDynAsEv f dyn = do
   postbuild <- getPostBuild
-  lbcSelDyn <- foldDyn updateSelection (LBCSelection mk0) selUpdateEv
-  let selectionDyn = lbcSelection <$> lbcSelDyn
-  selectEv <- selectableKeyList 10 labelF lbcMapDyn reselectEv
-  let selUpdateEv = leftmost [selectEv]
-
-
-  mapUpdateEv <- editWidgets mapDyn -- Event t (MapChangeValue k v)
-  let newMapEv = attachWith (flip updateMap) (current lbcMapDyn) mapUpdateEv
-      reselectEv = leftmost [reselect <$> mapUpdateEv, mk0 <$ postbuild]
-  lbcMapDyn <- holdDyn (LBCMap $ toMaybeMap map0) newMapEv
-  let mapDyn = lbcMap <$> lbcMapDyn
-  return $ fromMaybeMap <$> mapDyn
-
-editWidget::(DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, Show v, Read v)=>Dynamic t v -> m (Event t v)
-editWidget vDyn = do
-  postbuild <- getPostBuild
-  let initialEv = T.pack . show <$> attachWith const (current vDyn) postbuild
-      newvEv = T.pack . show <$> updated vDyn
-      config = def {_textInputConfig_setValue = leftmost [initialEv,newvEv] }
-  fmapMaybe (readMaybe . T.unpack) . _textInput_input <$> textInput config
-
-selectableWidget::(DomBuilder t m,PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, Read v, Show v)
-  =>Dynamic t v
-  ->Dynamic t Bool
-  ->m (Event t v)
-selectableWidget valDyn selDyn = do
-  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
-  elDynAttr "div" widgetAttrs $ editWidget valDyn
-
-
-editWidget'::(DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, Show v, Read v)=>v -> m (Event t v)
-editWidget' v = fmapMaybe (readMaybe . T.unpack) . _textInput_input <$> textInput def { _textInputConfig_initialValue = T.pack . show $ v }
-
-selectableWidget'::(MonadHold t m,DomBuilder t m,PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, Read v, Show v)
-  =>Dynamic t v
-  ->Dynamic t Bool
-  ->m (Event t v)
-selectableWidget' valDyn selDyn = do
-  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> selDyn
-  let dynWidget = editWidget' <$> valDyn -- Dynamic t (m (Event t v))
-  evEv <- elDynAttr "div" widgetAttrs $ dyn dynWidget --  (Event t (Event t v))
-  switch <$> hold never evEv
-
+  let f' prefix x = prefix ++ f x
+      pbEv = traceEventWith (f' "postbuild-") $ tag (current dyn) postbuild
+      upEv = traceEventWith (f' "update-") $ updated dyn
+  return $ leftmost [upEv, pbEv] 
 
 
 hiddenCSS::M.Map T.Text T.Text
@@ -124,42 +176,3 @@ hiddenCSS  = "style" =: "display: none"
 visibleCSS::M.Map T.Text T.Text
 visibleCSS = "style" =: "display: inline"
 
-toMaybeMap::Ord k=>M.Map k v->M.Map (Maybe k) (Maybe v)
-toMaybeMap = M.insert Nothing Nothing . M.fromList . fmap (\(k,v)->(Just k,Just v)) . M.toList
-
-fromMaybeMap::Ord k=>M.Map (Maybe k) (Maybe v) -> M.Map k v
-fromMaybeMap = M.fromList . catMaybes . fmap (\(mk, mv)-> (,) <$> mk <*> mv) . M.toList
-
-selectableKeyList::(DomBuilder t m, MonadFix m, MonadHold t m, PostBuild t m, Ord k, Show k)
-  =>Int -- max size for dropdown
-  ->(k->v->T.Text) -- function to label the map entries
-  ->Dynamic t (LBCMap k v)  -- the map
-  ->Event t (Maybe k)
-  ->m (Event t (LBCSelectionUpdate k))
-selectableKeyList maxDDSize labelF curMapDyn curSelEv = do
-  let mDyn = lbcMap <$> curMapDyn
-      sizeF n = min maxDDSize n
-      sizeDyn = M.size <$> mDyn
-      ddAttrs = ddAttrsDyn sizeF sizeDyn
-      labelF' Nothing _ = ""
-      labelF' _ Nothing = ""
-      labelF' (Just k) (Just v) = labelF k v
-      ddMap = traceDyn "ddMap: " $ M.mapWithKey labelF' <$> mDyn
-      config = DropdownConfig curSelEv ddAttrs
-  fmap SelectionUpdate . traceEvent "selectEv: " . _dropdown_change <$> dropdown Nothing ddMap config
-
-ddAttrsDyn::Reflex t=>(Int->Int)->Dynamic t Int->Dynamic t AttributeMap
-ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
-
--- this is a (poor) substitute for selectViewListwithkey
-myWidgetList::(DomBuilder t m, MonadHold t m, PostBuild t m,Reflex t,Monad m,Eq k)
-  => Dynamic t k
-  -> Dynamic t (M.Map k v)
-  -> (v->Dynamic t Bool->m (Event t a))
-  -> m (Event t (k,a))
-myWidgetList selDyn mapDyn widgetF = do
-  let selWidgetF keyDyn f (key,val) = fmap (key,) <$> f val ((==key) <$> keyDyn)
-      listOfWidgetsDyn = fmap (selWidgetF selDyn widgetF) .  M.toList <$> mapDyn
-      eventWidgetDyn = (fmap leftmost) . sequence <$> listOfWidgetsDyn -- Dynamic t (m (Event t (k,a)))
-  eventEv <- dyn eventWidgetDyn -- Event t (Event t (k,a)).  NB, this is not an efficient way to handle this!
-  switch <$> hold never eventEv -- does this hold make these outputs suitable for input?
