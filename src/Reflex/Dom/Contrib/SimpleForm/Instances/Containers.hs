@@ -14,7 +14,7 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
 -- All the basic (primitive types, tuples, etc.) are in here
 import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
-import Reflex.Dom.Contrib.SimpleForm.Instances.Basic (SimpleFormInstanceC)
+import Reflex.Dom.Contrib.SimpleForm.Instances.Basic (SimpleFormInstanceC,dynAsEv)
 --import Reflex.Dom.Contrib.SimpleForm.Instances.Extras (buildValidatedDynamic)
 import Reflex.Dom.Contrib.SimpleForm.Builder
 import Reflex.Dom.Contrib.SimpleForm.DynValidation (accValidation)
@@ -168,7 +168,7 @@ instance (SimpleFormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m
     fType <- getFormType
     case fType of
       ObserveOnly ->  toBuildF buildLBEMapLWK mFN mfaDyn
-      Interactive ->  toBuildF (buildLBEMapWithAdd buildLBEMapLVWKSD) mFN mfaDyn
+      Interactive ->  toBuildF buildLBEMapLVWK mFN mfaDyn
 
 --  buildForm = buildAdjustableContainer (SFAdjustableI mapSFA mapSFD)
 --  buildForm va mFN ma = validateForm va . makeSimpleFormR $ toBuildF buildLBEMapLVWK mFN ma
@@ -285,11 +285,10 @@ buildLBEMapLWK::(SimpleFormInstanceC t m
                  , Ord k, Show k)
                =>LBBuildF t m k v
 buildLBEMapLWK mFN map0Dyn = mdo
-  newInputMapEv <- dynAsEv map0Dyn -- FIXME: this is superfluous but here for sameness while debugging the observe issue
   let editF k dynV = RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k) >> editOne dynV
-  mapOfDynMaybe <- RD.listWithKey mapDyn editF
-  mapDyn <- R.holdDyn M.empty newInputMapEv
+  mapOfDynMaybe <- RD.listWithKey map0Dyn editF
   return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
+
 
 editOne::(SimpleFormInstanceC t m, VFormBuilderC t m v)=>R.Dynamic t v->SFR t m (R.Dynamic t (Maybe v))
 editOne valDyn = fmap avToMaybe . unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn))
@@ -344,10 +343,6 @@ buildLBEMapLVWKSD mf mapDyn0 = mdo
   
 editOneSD::(SimpleFormInstanceC t m, VFormBuilderC t m v, Show k)=>k->v->R.Event t v->SFR t m (R.Event t (Maybe v))
 editOneSD k v0 vEv = R.holdDyn v0 vEv >>= editOneEv (R.constDyn True) k
-
-
-
-
   
 hiddenCSS::M.Map T.Text T.Text
 hiddenCSS  = "style" =: "display: none"
@@ -357,12 +352,6 @@ visibleCSS = "style" =: "display: inline"
 
 ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
 ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
-
-
--- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
--- that's the value we want not the tagged current value. 
-dynAsEv::RD.PostBuild t m=>R.Dynamic t a->m (R.Event t a)
-dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD.getPostBuild
 
 
 {-

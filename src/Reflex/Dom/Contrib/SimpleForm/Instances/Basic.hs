@@ -166,13 +166,14 @@ dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD
 
 -- turn a Dynamic into an Event with an initial firing to represent the value at postbuild.  Should we sample and return (a,Event t a)?
 mDynToInputEv::(R.Reflex t,RD.PostBuild t m)=>Maybe (R.Dynamic t a)-> m (R.Event t a)
-mDynToInputEv mDyn = do
+mDynToInputEv mDyn = maybe (return R.never) dynAsEv mDyn
+{-
   postbuild <- RD.getPostBuild
   let startValueEv x = R.tag x postbuild
       comboEv d = R.leftmost [R.updated d, startValueEv (R.current d)]
       updateEv = maybe R.never comboEv mDyn
   return updateEv -- this might cause loops from the startValueEv??
-
+-}
 
 buildDynReadable::(SimpleFormInstanceC t m, Readable a, Show a)
   =>FormValidator a
