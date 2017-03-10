@@ -40,37 +40,38 @@ main = do
 
 testWidget::JSM()
 testWidget = mainWidget $ do
-  el "span" $ text "unrestricted editWidget"
-  unrestrictedWidgetEv <- updated <$> editWidgetDyn' id ("unrestricted"::T.Text) (constDyn (1::Int))
+  let space =   el "br" blank >> el "h1" (text "") >> el "br" blank
+  el "span" $ text "unrestricted editWidget:  "
+  unrestrictedWidgetEv <- updated <$> editWidgetDyn' id (""::T.Text) (constDyn (1::Int))
   urwDyn <- holdDyn Nothing (Just <$> fmapMaybe id unrestrictedWidgetEv)
   el "br" blank
+  el "span" (text "dynText of holdDyn of widget events: ")
   dynText $ T.pack . show <$> urwDyn
-  el "br" blank
+  space
 
-  el "span" $ text "restrictWidget"
-  restrictedWidgetEv <- updated <$> editWidgetDyn' (restrictWidget blurOrEnter) ("restrictWidget"::T.Text) (constDyn (1::Int))
+  el "span" $ text "restrictWidget:  "
+  restrictedWidgetEv <- updated <$> editWidgetDyn' (restrictWidget blurOrEnter) (""::T.Text) (constDyn (1::Int))
   el "br" blank
   rwDyn <- holdDyn Nothing (Just <$> fmapMaybe id restrictedWidgetEv)
+  el "span" (text "dynText of holdDyn of widget events: ")
   dynText $ T.pack .show <$> rwDyn
-  el "br" blank
-
-  el "span" $ text "restrictWidget'"
-  restrictedWidgetEv' <- updated <$> editWidgetDyn' (restrictWidget' blurOrEnter) ("restrictWidget'"::T.Text) (constDyn (1::Int))
+  space
+  
+  el "span" $ text "restrictWidget':  "
+  restrictedWidgetEv' <- updated <$> editWidgetDyn' (restrictWidget' blurOrEnter) (""::T.Text) (constDyn (1::Int))
   el "br" blank
   rwDyn' <- holdDyn Nothing (Just <$> fmapMaybe id restrictedWidgetEv')
+  el "span" (text "dynText of holdDyn of widget events: ")
   dynText $ T.pack .show <$> rwDyn'
-  el "br" blank
-
+  space
   
   let x0 = M.fromList [("A",1),("B",2)]
   el "span" $ text "editWidget:  "
   res <- buildLBEMapLVWK (constDyn x0)
-  el "br" blank
-  el "br" blank
+  space
   el "span" $ text "dynText: "
   dynText $ T.pack . show <$> res
-  el "br" blank
-  el "br" blank  
+  space
   el "span" $ text "showWidget: "
   _ <- buildLBEMapLWK res
   return ()
