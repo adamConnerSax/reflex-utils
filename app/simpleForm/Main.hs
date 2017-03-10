@@ -246,11 +246,11 @@ b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
 b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
 -}
-testMap::M.Map T.Text Int
-testMap = M.fromList [("A",1),("B",2),("C",3)]
+testMap::M.Map T.Text T.Text
+testMap = M.fromList [("A","a"),("B","b"),("C","c")]
 
-testMap2::M.Map T.Text (M.Map T.Text Int)
-testMap2 = M.fromList [("MapA",M.fromList [("A",1),("B",2)]),("MapB",M.fromList [("C",5),("E",7)])]
+testMap2::M.Map T.Text (M.Map T.Text T.Text)
+testMap2 = M.fromList [("MapA",M.fromList [("A","a"),("B","b")]),("MapB",M.fromList [("C","c"),("E","e")])]
 
 testComplexForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m -> m ()
 testComplexForm cfg = do
@@ -291,11 +291,11 @@ test::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m 
 test cfg = do
   el "p" (text "")
   el "br" blank
-  staticTabbedLayout def (userFormTab cfg)
+  staticTabbedLayout def (complexFormTab cfg)
     [
-      userFormTab cfg
-    , complexFormTab cfg
-    , flowTestTab cfg
+{-      userFormTab cfg
+    ,-} complexFormTab cfg {-
+    , flowTestTab cfg -}
     ]
   return ()
 

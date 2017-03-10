@@ -295,7 +295,6 @@ editOne k valDyn = do
   sfItem $ RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k)
   sfItem $ fmap avToMaybe . unDynValidation <$> (unSF $ buildForm' Nothing (Just $ R.traceDynWith (const "editOne valDyn") valDyn))
 
-
 -- now do with ListViewWithKey so we can put in delete events
 -- NB: ListViewWithKey returns an Event t (M.Map k v) but it contains only the keys for which things have changed
 -- NB: ListViewWithKey gets only mapDyn0 as input.  Only need to update if something *else* changes the map.
@@ -306,7 +305,7 @@ buildLBEMapLVWK::(SimpleFormInstanceC t m
 buildLBEMapLVWK mFN mapDyn0 = mdo
   let editF = editOneEv (R.constDyn True) 
   newInputMapEv <- traceDynAsEv (\m->"LVWK mapDyn0" ++ show (M.keys m)) mapDyn0
-  mapEditsEv  <- RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
+  mapEditsEv  <- R.traceEventWith (\m->"LVWK mapEditsEv: " ++ show (M.keys m)) <$> RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
   let editedMapEv = R.traceEventWith (\m->"LVWK editedMap: " ++ show (M.keys m)) $ R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv
       mapEv = R.leftmost [newInputMapEv, editedMapEv]
   mapDyn <- R.holdDyn M.empty mapEv
@@ -327,18 +326,18 @@ editAndDeleteWidgetEv::WidgetConstraints t m k v=>R.Dynamic t Bool->k->R.Dynamic
 editAndDeleteWidgetEv selDyn k vDyn = mdo
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
   (visibleDyn,outEv) <- RD.elDynAttr "div" widgetAttrs $ do
-    resDyn <-  editWidgetDyn k vDyn
+    resEv <-  R.updated <$> editWidgetDyn k vDyn
     delButtonEv <- buttonNoSubmit' "-"
     selEv <- dynAsEv selDyn
     visDyn <-  R.holdDyn True $ R.leftmost
                [
                  selEv
                , False <$ delButtonEv -- delete button pressed, so hide
-               , True <$ (R.updated vDyn) -- value updated so make sure it's visible (in case of re-use of deleted key)
+               , True <$ R.updated vDyn -- value updated so make sure it's visible (in case of re-use of deleted key)
                ]
     let outEv' = R.leftmost
                  [
-                   Just <$> (R.fmapMaybe id $ R.updated resDyn)
+                   Just <$> R.fmapMaybe id resEv
                  , Nothing <$ delButtonEv
                  ]           
     return (visDyn,outEv')
@@ -348,13 +347,13 @@ editAndDeleteWidgetEv selDyn k vDyn = mdo
 editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v,Ord k, Show k, Show v, Read v)=>R.Dynamic t Bool->k->R.Dynamic t v->SFR t m (R.Event t (Maybe v))
 editOneEv selDyn k valDyn = mdo
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
-  valEv <- traceDynAsEv (const "editOneEv valEv") valDyn
+  valEv <- traceDynAsEv (const "editWidgetDyn valEv") valDyn
   (visibleDyn,outEv) <- RD.elDynAttr "div" widgetAttrs $ sfRow $ do
-    resDyn <-  editWidgetDyn k valDyn {- editOne k valDyn -}
+    resEv <-  R.updated <$> editOne k valDyn
     delButtonEv <- sfItem $ sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "-" -- Event t ()
     let outEv' = R.traceEventWith (const "editOneEv outEv") $ R.leftmost
                  [
-                   Just <$> (R.fmapMaybe id $ R.updated resDyn)
+                   Just <$> R.fmapMaybe id resEv
                  , Just <$> valEv
                  , Nothing <$ delButtonEv]
     inputSelEv <- dynAsEv selDyn
@@ -362,7 +361,7 @@ editOneEv selDyn k valDyn = mdo
                    [
                      inputSelEv -- calling widget
                    , False <$ delButtonEv -- delete button pressed, so hide
-                   , True <$ (R.updated valDyn) -- value updated so make sure it's visible (in case of re-use of deleted key)
+                   , True <$ R.updated valDyn -- value updated so make sure it's visible (in case of re-use of deleted key)
                    ]
     
     return (visibleDyn',outEv')

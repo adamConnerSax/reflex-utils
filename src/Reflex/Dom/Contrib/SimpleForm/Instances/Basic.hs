@@ -72,7 +72,8 @@ type BasicC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
 type SimpleFormInstanceC t m = (SimpleFormC t m, MonadWidgetExtraC t m, RD.PostBuild t m, MonadFix m)
 --type VBuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
 
-instance {-# OVERLAPPABLE #-} B.Validatable (SFValidation) a
+instance {-# OVERLAPPABLE #-} B.Validatable (SFValidation) a where
+  validator a = AccSuccess a
 
 readOnlyW::(BasicC t m, RD.PostBuild t m)=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
 readOnlyW f wc = do
@@ -135,7 +136,7 @@ textWidgetValue::SimpleFormInstanceC t m=>Maybe FieldName->WidgetConfig t T.Text
 textWidgetValue mFN c = _hwidget_value <$> restrictWidget' blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
 
 textWidgetValue'::SimpleFormInstanceC t m=>Maybe FieldName->WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
-textWidgetValue' mFN c = inputOnEnter (htmlTextInput (maybe "" T.pack mFN)) c
+textWidgetValue' mFN c = _hwidget_value <$> htmlTextInput (maybe "" T.pack mFN) c
 
 -- this does what restrictWidget does but allows the set event to change the "authoritative value"
 restrictWidget'::(RD.DomBuilder t m, R.MonadHold t m)
@@ -144,10 +145,9 @@ restrictWidget'::(RD.DomBuilder t m, R.MonadHold t m)
   -> GWidget t m a
 restrictWidget' restrictFunc wFunc cfg = do
   w <- wFunc cfg
-  let e = restrictFunc w
-      setEv = _widgetConfig_setValue cfg
-  v <- R.holdDyn (_widgetConfig_initialValue cfg) (R.leftmost [e,setEv])
-  return $ w { _hwidget_value = v
+  let e = R.traceEventWith (const "restricWidget e") $ R.leftmost [R.traceEventWith (const "restricWidget setVal") (_widgetConfig_setValue cfg), restrictFunc w]
+  v <- R.holdDyn (_widgetConfig_initialValue cfg) e
+  return $ w { _hwidget_value = v 
              , _hwidget_change = e
              }
 
@@ -163,14 +163,14 @@ parseAndValidate mFN parse va t =
 -- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
 -- that's the value we want not the tagged current value. 
 dynAsEv::RD.PostBuild t m=>R.Dynamic t a->m (R.Event t a)
-dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD.getPostBuild
+dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tagPromptlyDyn dyn x]) <$> RD.getPostBuild
 
 traceDynAsEv::RD.PostBuild t m=>(a->String)->R.Dynamic t a->m (R.Event t a)
 traceDynAsEv f dyn = do
   postbuild <- RD.getPostBuild
   let f' prefix x = prefix ++ f x
       upEv = R.traceEventWith (f' "update-") $ R.updated dyn
-      pbEv = R.traceEventWith (f' "postbuild-") $ R.tag (R.current dyn) postbuild
+      pbEv = R.traceEventWith (f' "postbuild-") $ R.tagPromptlyDyn dyn postbuild
   return $ R.leftmost [upEv, pbEv] 
 
 
@@ -203,10 +203,31 @@ instance (SimpleFormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (R.Dyna
   buildForm va mFN = validateForm va . fmap R.constDyn . buildForm' mFN . fmap join
 
 -- | String and Text
+{-
 instance SimpleFormInstanceC t m=>FormBuilder t m T.Text where
   buildForm va mFN mInitialDyn = makeSimpleFormR $ do
-    inputEv <- mDynToInputEv mInitialDyn
+    inputEv <- maybe (return R.never) (traceDynAsEv (const "FormBuilder t m T.Text")) mInitialDyn  -- mDynToInputEv mInitialDyn
     sfWidget' inputEv "" id va id mFN Nothing $ textWidgetValue mFN
+-}
+
+{-
+instance SimpleFormInstanceC t m=>FormBuilder t m T.Text where
+  buildForm va mFN mInitialDyn = makeSimpleFormR $ do
+    inputEv <- maybe (return R.never) (traceDynAsEv (const "FormBuilder t m T.Text")) mInitialDyn  -- mDynToInputEv mInitialDyn
+    let wc = WidgetConfig inputEv "" (R.constDyn M.empty)
+    valDyn <- sfWidget id id mFN wc $ (\c -> _hwidget_value <$> htmlTextInput (maybe "" T.pack mFN) c) -- textWidgetValue mFN
+    return . DynValidation $ AccSuccess <$> valDyn 
+-}
+
+
+instance SimpleFormInstanceC t m=>FormBuilder t m T.Text where
+  buildForm va mFN mInitialDyn = makeSimpleFormR $ do
+    inputEv <- maybe (return R.never) (traceDynAsEv (const "FormBuilder t m T.Text")) mInitialDyn  -- mDynToInputEv mInitialDyn
+--    let config = RD.def {RD._textInputConfig_setValue = inputEv }
+    let wc = WidgetConfig inputEv "" (R.constDyn M.empty)
+    valDyn <- textWidgetValue mFN wc --RD._textInput_value <$> RD.textInput config
+    return . DynValidation $ AccSuccess <$> valDyn 
+
 
 instance {-# OVERLAPPING #-} SimpleFormInstanceC t m=>FormBuilder t m String where
   buildForm va mFN mInitialDyn =
