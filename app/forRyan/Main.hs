@@ -15,6 +15,9 @@ import           Language.Javascript.JSaddle.Warp (run)
 import           Reflex
 import           Reflex.Dom                       hiding (mainWidget, run)
 import           Reflex.Dom.Core                  (mainWidget)
+import           Reflex.Dom.Old (MonadWidget)
+import Control.Monad.Ref
+import Data.IORef
 
 import           Control.Monad                    (join)
 import           Control.Monad.Fix                (MonadFix)
@@ -51,7 +54,7 @@ testWidget = mainWidget $ do
   return ()
 
 
-type WidgetConstraints t m k v = (DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, Show v, Read v, Ord k, Show k)
+type WidgetConstraints t m k v = (MonadWidget t m, DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, Show v, Read v, Ord k, Show k)
 
 -- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses. 
 buildLBEMapLWK::WidgetConstraints t m k v=>Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
@@ -66,6 +69,16 @@ editWidgetDyn k vDyn = do
       config = def {_textInputConfig_setValue = inputEv }
   el "span" $ text (T.pack $ show k)
   valDyn <- _textInput_value <$> textInput config
+  return $ readMaybe . T.unpack <$> valDyn 
+
+
+editWidgetDyn'::WidgetConstraints t m k v=>k->Dynamic t v-> m (Dynamic t (Maybe v))
+editWidgetDyn' k vDyn = do
+  inputEv' <- traceDynAsEv (\x->"editWidget: v=" ++ show x) vDyn
+  let inputEv = T.pack . show <$> inputEv'
+      config = WidgetConfig inputEv "" (constDyn M.empty)
+  el "span" $ text (T.pack $ show k)
+  valDyn <- _hwidget_value <$> htmlTextInput "text" config
   return $ readMaybe . T.unpack <$> valDyn 
 
 
@@ -99,7 +112,7 @@ editAndDeleteWidgetEv::WidgetConstraints t m k v=>Dynamic t Bool->k->Dynamic t v
 editAndDeleteWidgetEv selDyn k vDyn = mdo
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
   (visibleDyn,outEv) <- elDynAttr "div" widgetAttrs $ do
-    resDyn <-  editWidgetDyn k vDyn
+    resDyn <-  editWidgetDyn' k vDyn
     delButtonEv <- buttonNoSubmit "-"
     selEv <- dynAsEv selDyn
     visDyn <-  holdDyn True $ leftmost

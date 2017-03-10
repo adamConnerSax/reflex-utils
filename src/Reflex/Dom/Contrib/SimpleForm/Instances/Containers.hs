@@ -292,8 +292,8 @@ buildLBEMapLWK mFN map0Dyn = do
 
 editOne::(SimpleFormInstanceC t m, VFormBuilderC t m v, Show k)=>k->R.Dynamic t v->SFR t m (R.Dynamic t (Maybe v))
 editOne k valDyn = do
-  RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k)
-  fmap avToMaybe . unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn))
+  sfItem $ RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k)
+  sfItem $ fmap avToMaybe . unDynValidation <$> (unSF $ buildForm' Nothing (Just $ R.traceDynWith (const "editOne valDyn") valDyn))
 
 
 -- now do with ListViewWithKey so we can put in delete events
@@ -304,7 +304,7 @@ buildLBEMapLVWK::(SimpleFormInstanceC t m
                   , Ord k, Show k,Read v, Show v)
                 => LBBuildF t m k v
 buildLBEMapLVWK mFN mapDyn0 = mdo
-  let editF = editAndDeleteWidgetEv (R.constDyn True) 
+  let editF = editOneEv (R.constDyn True) 
   newInputMapEv <- traceDynAsEv (\m->"LVWK mapDyn0" ++ show (M.keys m)) mapDyn0
   mapEditsEv  <- RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
   let editedMapEv = R.traceEventWith (\m->"LVWK editedMap: " ++ show (M.keys m)) $ R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv
@@ -345,27 +345,35 @@ editAndDeleteWidgetEv selDyn k vDyn = mdo
   return outEv
 
 
-editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v,Show k)=>R.Dynamic t Bool->k->R.Dynamic t v->SFR t m (R.Event t (Maybe v))
+editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v,Ord k, Show k, Show v, Read v)=>R.Dynamic t Bool->k->R.Dynamic t v->SFR t m (R.Event t (Maybe v))
 editOneEv selDyn k valDyn = mdo
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
+  valEv <- traceDynAsEv (const "editOneEv valEv") valDyn
   (visibleDyn,outEv) <- RD.elDynAttr "div" widgetAttrs $ sfRow $ do
-    sfItem $ RD.el "div" $ RD.text (T.pack $ show k)
-    resDynAV <-  sfItem $ unDynValidation <$> (unSF $ buildForm' Nothing (Just valDyn)) -- Dynamic t (AccValidation) val
+    resDyn <-  editWidgetDyn k valDyn {- editOne k valDyn -}
     delButtonEv <- sfItem $ sfCenter LayoutVertical . sfItemR . lift $ containerActionButton "-" -- Event t ()
-    let resDyn = avToMaybe <$> resDynAV -- Dynamic t (Maybe v)
---    resEv <- dynAsEv resDyn
+    let outEv' = R.traceEventWith (const "editOneEv outEv") $ R.leftmost
+                 [
+                   Just <$> (R.fmapMaybe id $ R.updated resDyn)
+                 , Just <$> valEv
+                 , Nothing <$ delButtonEv]
     inputSelEv <- dynAsEv selDyn
-    visibleDyn' <- R.holdDyn True $ R.leftmost [inputSelEv -- calling widget
-                                               , False <$ delButtonEv -- delete button pressed, so hide
-                                               , True <$ (R.updated valDyn) -- value updated so make sure it's visible (in case of re-use of deleted key)
-                                               ]
-    return (visibleDyn',R.leftmost [Just <$> (R.fmapMaybe id $ R.updated resDyn), Nothing <$ delButtonEv])
+    visibleDyn' <- R.holdDyn True $ R.leftmost
+                   [
+                     inputSelEv -- calling widget
+                   , False <$ delButtonEv -- delete button pressed, so hide
+                   , True <$ (R.updated valDyn) -- value updated so make sure it's visible (in case of re-use of deleted key)
+                   ]
+    
+    return (visibleDyn',outEv')
   return outEv
+
+
 
 -- now with ListViewWithKeyShallowDiff just so I understand things.
 buildLBEMapLVWKSD::(SimpleFormInstanceC t m
                   , VFormBuilderC t m v
-                  , Ord k, Show k)
+                  , Ord k, Show k, Read v, Show v, Ord k)
                 => LBBuildF t m k v
 buildLBEMapLVWKSD mf mapDyn0 = mdo
   newInputMapEv <- dynAsEv mapDyn0
@@ -377,7 +385,7 @@ buildLBEMapLVWKSD mf mapDyn0 = mdo
   mapDyn <- R.holdDyn M.empty newMapEv
   return (R.traceDynWith (\m -> "LVWKSD mapDyn: " ++ show (M.keys m)) mapDyn)
   
-editOneSD::(SimpleFormInstanceC t m, VFormBuilderC t m v, Show k)=>k->v->R.Event t v->SFR t m (R.Event t (Maybe v))
+editOneSD::(SimpleFormInstanceC t m, VFormBuilderC t m v, Ord k, Show k, Read v, Show v)=>k->v->R.Event t v->SFR t m (R.Event t (Maybe v))
 editOneSD k v0 vEv = R.holdDyn v0 vEv >>= editOneEv (R.constDyn True) k
   
 hiddenCSS::M.Map T.Text T.Text
