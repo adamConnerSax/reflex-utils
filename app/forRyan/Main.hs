@@ -40,6 +40,28 @@ main = do
 
 testWidget::JSM()
 testWidget = mainWidget $ do
+  el "span" $ text "unrestricted editWidget"
+  unrestrictedWidgetEv <- updated <$> editWidgetDyn' id ("unrestricted"::T.Text) (constDyn (1::Int))
+  urwDyn <- holdDyn Nothing (Just <$> fmapMaybe id unrestrictedWidgetEv)
+  el "br" blank
+  dynText $ T.pack . show <$> urwDyn
+  el "br" blank
+
+  el "span" $ text "restrictWidget"
+  restrictedWidgetEv <- updated <$> editWidgetDyn' (restrictWidget blurOrEnter) ("restrictWidget"::T.Text) (constDyn (1::Int))
+  el "br" blank
+  rwDyn <- holdDyn Nothing (Just <$> fmapMaybe id restrictedWidgetEv)
+  dynText $ T.pack .show <$> rwDyn
+  el "br" blank
+
+  el "span" $ text "restrictWidget'"
+  restrictedWidgetEv' <- updated <$> editWidgetDyn' (restrictWidget' blurOrEnter) ("restrictWidget'"::T.Text) (constDyn (1::Int))
+  el "br" blank
+  rwDyn' <- holdDyn Nothing (Just <$> fmapMaybe id restrictedWidgetEv')
+  dynText $ T.pack .show <$> rwDyn'
+  el "br" blank
+
+  
   let x0 = M.fromList [("A",1),("B",2)]
   el "span" $ text "editWidget:  "
   res <- buildLBEMapLVWK (constDyn x0)
@@ -67,7 +89,7 @@ buildLBEMapLWK map0Dyn = do
 -- NB: ListViewWithKey gets only mapDyn0 as input.  Only need to update if something *else* changes the map.
 buildLBEMapLVWK::WidgetConstraints t m k v=>Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
 buildLBEMapLVWK mapDyn0 = mdo
-  let editW = editAndDeleteWidgetEv (constDyn True)
+  let editW k vDyn = updated <$> restrictedEditWidgetDyn k vDyn
   newInputMapEv <- traceDynAsEv (\m->"LVWK mapDyn0" ++ show m) mapDyn0
   mapEditsEv  <- listViewWithKey mapDyn0 editW -- Event t (M.Map k (Maybe v)), carries only updates
   let editedMapEv = traceEventWith (\m->"LVWK editedMap: " ++ show m) $ attachWith (flip applyMap) (current mapDyn) mapEditsEv
@@ -76,30 +98,8 @@ buildLBEMapLVWK mapDyn0 = mdo
   return (traceDynWith (\m -> "LVWK mapDyn: " ++ show (M.keys m)) mapDyn)
 
 
-editAndDeleteWidgetEv::WidgetConstraints t m k v=>Dynamic t Bool->k->Dynamic t v-> m (Event t (Maybe v))
-editAndDeleteWidgetEv selDyn k vDyn = mdo
-  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
-  (visibleDyn,outEv) <- elDynAttr "div" widgetAttrs $ do
-    resEv <-  updated <$> editWidgetDynRestrict k vDyn
-    delButtonEv <- buttonNoSubmit "-"
-    selEv <- dynAsEv selDyn
-    visDyn <-  holdDyn True $ leftmost
-               [
-                 selEv
-               , False <$ delButtonEv -- delete button pressed, so hide
-               , True <$ updated vDyn -- value updated so make sure it's visible (in case of re-use of deleted key)
-               ]
-    let outEv' = leftmost
-                 [
-                   Just <$> fmapMaybe id resEv
-                 , Nothing <$ delButtonEv
-                 ]           
-    return (visDyn,outEv')
-  return outEv
-
-
-editWidgetDynRestrict::WidgetConstraints t m k v=>k->Dynamic t v-> m (Dynamic t (Maybe v))
-editWidgetDynRestrict = editWidgetDyn' (restrictWidget' blurOrEnter)
+restrictedEditWidgetDyn::WidgetConstraints t m k v=>k->Dynamic t v-> m (Dynamic t (Maybe v))
+restrictedEditWidgetDyn = editWidgetDyn' (restrictWidget' blurOrEnter)
 
 editWidgetDyn::WidgetConstraints t m k v=>k->Dynamic t v-> m (Dynamic t (Maybe v))
 editWidgetDyn = editWidgetDyn' id
@@ -153,3 +153,26 @@ hiddenCSS  = "style" =: "display: none"
 visibleCSS::M.Map T.Text T.Text
 visibleCSS = "style" =: "display: inline"
 
+
+{-
+editAndDeleteWidgetEv::WidgetConstraints t m k v=>Dynamic t Bool->k->Dynamic t v-> m (Event t (Maybe v))
+editAndDeleteWidgetEv selDyn k vDyn = mdo
+  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
+  (visibleDyn,outEv) <- elDynAttr "div" widgetAttrs $ do
+    resEv <-  updated <$> editWidgetDyn k vDyn
+    delButtonEv <- buttonNoSubmit "-"
+    selEv <- dynAsEv selDyn
+    visDyn <-  holdDyn True $ leftmost
+               [
+                 selEv
+               , False <$ delButtonEv -- delete button pressed, so hide
+               , True <$ updated vDyn -- value updated so make sure it's visible (in case of re-use of deleted key)
+               ]
+    let outEv' = leftmost
+                 [
+                   Just <$> fmapMaybe id resEv
+                 , Nothing <$ delButtonEv
+                 ]           
+    return (visDyn,outEv')
+  return outEv
+-}

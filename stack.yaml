@@ -13,10 +13,12 @@ packages:
 - location:
     git: https://github.com/reflex-frp/reflex
     commit: "daec2bbc6e098ce9c2056cfeea286de67135d85f"
+#    commit: "d78ba4318c425ca9b942dc387d7c5c7ab2d2e095"
   extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex-dom
     commit: "402ad561d30fb1daa291e7284d4ee05d825883a2"
+#    commit: "6be990ea6cdea57ef5c3caf2c02d77e0a6c28bb1"	
   extra-dep: true
   subdirs:
   - reflex-dom-core
