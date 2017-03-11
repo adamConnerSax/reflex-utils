@@ -10,7 +10,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE UndecidableInstances  #-}
-module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
+module Reflex.Dom.Contrib.SimpleForm.Instances.Containers (buildLBEMapLWK,buildLBEMapLVWK) where
 
 -- All the basic (primitive types, tuples, etc.) are in here
 import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
@@ -252,6 +252,7 @@ lbcUpdate (EditKey oldKey newKey) (LBCWidgetState s m) =
 -}
 
 
+type LBBuildFBase t m k v = Maybe FieldName->(R.Dynamic t (M.Map k v))->m (R.Dynamic t (M.Map k v))
 type LBBuildF t m k v = Maybe FieldName->(R.Dynamic t (M.Map k v))->SFR t m (R.Dynamic t (M.Map k v))
 
 toBuildF::(R.Reflex t,Functor m)=>LBBuildF t m k v->BuildF t m (M.Map k v)
@@ -303,7 +304,7 @@ buildLBEMapLVWK::(SimpleFormInstanceC t m
                   , Ord k, Show k,Read v, Show v)
                 => LBBuildF t m k v
 buildLBEMapLVWK mFN mapDyn0 = mdo
-  let editF = editOneEv (R.constDyn True) 
+  let editF k valDyn = R.updated <$> editOne k valDyn -- editOneEv (R.constDyn True) k valDyn
   newInputMapEv <- traceDynAsEv (\m->"LVWK mapDyn0" ++ show (M.keys m)) mapDyn0
   mapEditsEv  <- R.traceEventWith (\m->"LVWK mapEditsEv: " ++ show (M.keys m)) <$> RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
   let editedMapEv = R.traceEventWith (\m->"LVWK editedMap: " ++ show (M.keys m)) $ R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv

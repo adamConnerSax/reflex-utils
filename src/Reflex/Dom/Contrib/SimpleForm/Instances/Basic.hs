@@ -9,6 +9,7 @@
 {-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE DeriveGeneric         #-}
 
 module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        (
@@ -311,9 +312,20 @@ instance SimpleFormInstanceC t m=>FormBuilder t m Day where
 
 
 -- uses generics to build instances
-instance (SimpleFormC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a)
+instance (SimpleFormC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a) 
 
 instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (Either a b)
+
+avToEither::AccValidation a b -> Either a b
+avToEither (AccSuccess x) = Right x
+avToEither (AccFailure x) = Left x
+
+eitherToAV::Either a b->AccValidation a b
+eitherToAV (Left x) = AccFailure x
+eitherToAV (Right x) = AccSuccess x
+
+instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (AccValidation a b) where
+  buildForm va mFN mInitialDyn = eitherToAV <$> buildForm (fmap avToEither . va . eitherToAV) mFN (fmap avToEither <$> mInitialDyn)
 
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=>FormBuilder t m a where

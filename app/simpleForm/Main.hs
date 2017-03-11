@@ -18,7 +18,7 @@ import           Control.Lens                                (view, (^.))
 import           Control.Monad                               (foldM)
 import           Control.Monad.Fix                           (MonadFix)
 import           Control.Monad.IO.Class                      as IOC (MonadIO)
-import           Control.Monad.Reader                        (ask)
+import           Control.Monad.Reader                        (ask,runReaderT)
 
 import           Data.Monoid                                 ((<>))
 import qualified GHC.Generics                                as GHC
@@ -75,6 +75,7 @@ import           DataBuilder                                 as B
 import           Reflex.Dom.Contrib.SimpleForm
 import           Reflex.Dom.Contrib.SimpleForm.Configuration
 import           Reflex.Dom.Contrib.SimpleForm.Instances     (SimpleFormInstanceC)
+import           Reflex.Dom.Contrib.SimpleForm.Instances.Containers
 
 import           Css
 
@@ -246,22 +247,29 @@ b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
 b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
 -}
-testMap::M.Map T.Text T.Text
-testMap = M.fromList [("A","a"),("B","b"),("C","c")]
+testMap::M.Map T.Text Int
+testMap = M.fromList [("A",1),("B",2)]
 
 testMap2::M.Map T.Text (M.Map T.Text T.Text)
 testMap2 = M.fromList [("MapA",M.fromList [("A","a"),("B","b")]),("MapB",M.fromList [("C","c"),("E","e")])]
+
+-- Natural Transformation to the rescue
+avMapToMap::AccValidation a (M.Map k v) -> M.Map k v
+avMapToMap (AccFailure _) = M.empty
+avMapToMap (AccSuccess m) = m
 
 testComplexForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM<- flexFill LayoutRight $ makeSimpleForm cfg (Just $ testMap)
+--  cDynM <- avMapToMap . fmap AccSuccess <$> runReaderT (buildLBEMapLVWK Nothing (constDyn testMap)) cfg
+--  cDynM <- runSimpleFormR cfg (makeSimpleFormR $ (DynValidation . fmap AccSuccess <$> buildLBEMapLVWK Nothing (constDyn testMap))) 
+  cDynM <- flexFill LayoutRight $ makeSimpleForm cfg (Just $ testMap)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed C:"
   el "p" blank
-  _ <- flexFill LayoutRight $ observeDynamic cfg (avToMaybe <$> unDynValidation cDynM)
+  _ <- flexFill LayoutRight $ observeDynamic cfg (avMapToMap <$> unDynValidation cDynM)
   return ()
 
 complexFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration t m -> TabInfo t m ()

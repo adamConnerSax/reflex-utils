@@ -40,45 +40,59 @@ main = do
 
 testWidget::JSM()
 testWidget = mainWidget $ do
-  let space =   el "br" blank >> el "h1" (text "") >> el "br" blank
-  el "span" $ text "unrestricted editWidget:  "
-  unrestrictedWidgetEv <- updated <$> editWidgetDyn' id (""::T.Text) (constDyn (1::Int))
-  urwDyn <- holdDyn Nothing (Just <$> fmapMaybe id unrestrictedWidgetEv)
-  el "br" blank
-  el "span" (text "dynText of holdDyn of widget events: ")
-  dynText $ T.pack . show <$> urwDyn
-  space
+  let -- unrestrictedWidget = editWidgetDyn' id
+      contribRestrictedWidget = editWidgetDyn' (restrictWidget blurOrEnter)
+      -- modifiedRestrictedWidget = editWidgetDyn' (restrictWidget' blurOrEnter)
+      x0 = M.fromList [("A",1),("B",2)]
 
-  el "span" $ text "restrictWidget:  "
-  restrictedWidgetEv <- updated <$> editWidgetDyn' (restrictWidget blurOrEnter) (""::T.Text) (constDyn (1::Int))
-  el "br" blank
-  rwDyn <- holdDyn Nothing (Just <$> fmapMaybe id restrictedWidgetEv)
-  el "span" (text "dynText of holdDyn of widget events: ")
-  dynText $ T.pack .show <$> rwDyn
-  space
+{-      
+  testSingleWidget "unrestricted" unrestrictedWidget (1::Int)
+  testSingleWidget "restrictWidget" contribRestrictedWidget (1::Int)
+  testSingleWidget "restrictWidget'" modifiedRestrictedWidget (1::Int) 
+-} 
+
+--  testLVWKWithWidget "unrestricted" unrestrictedWidget x0
+  testLVWKWithWidget "restrictWidget" contribRestrictedWidget x0
+--  testLVWKWithWidget "restrictWidget'" modifiedRestrictedWidget x0
   
-  el "span" $ text "restrictWidget':  "
-  restrictedWidgetEv' <- updated <$> editWidgetDyn' (restrictWidget' blurOrEnter) (""::T.Text) (constDyn (1::Int))
-  el "br" blank
-  rwDyn' <- holdDyn Nothing (Just <$> fmapMaybe id restrictedWidgetEv')
-  el "span" (text "dynText of holdDyn of widget events: ")
-  dynText $ T.pack .show <$> rwDyn'
-  space
-  
-  let x0 = M.fromList [("A",1),("B",2)]
-  el "span" $ text "editWidget:  "
-  res <- buildLBEMapLVWK (constDyn x0)
-  space
-  el "span" $ text "dynText: "
-  dynText $ T.pack . show <$> res
-  space
-  el "span" $ text "showWidget: "
-  _ <- buildLBEMapLWK res
-  return ()
 
 
 type WidgetConstraints t m k v = (MonadWidget t m, DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, Show v, Read v, Ord k, Show k)
 
+testSingleWidget::WidgetConstraints t m T.Text v=>T.Text->(T.Text->Dynamic t v-> m (Dynamic t (Maybe v)))->v->m ()
+testSingleWidget label widget v0 = do
+  el "h2" $ text label >> el "br" blank
+  el "span" $ text $ "widget:  "
+  widgetEv <- updated <$> widget (""::T.Text) (constDyn v0)
+  widgetDyn <- holdDyn Nothing (Just <$> fmapMaybe id widgetEv)
+  el "br" blank
+  el "span" (text "dynText of holdDyn of widget events: ")
+  dynText $ T.pack . show <$> widgetDyn
+  bigBreak
+  
+
+
+testLVWKWithWidget::WidgetConstraints t m k v=>T.Text->(k->Dynamic t v-> m (Dynamic t (Maybe v)))->M.Map k v->m ()
+testLVWKWithWidget label widget map0 = do
+  el "h2" $ text label >> el "br" blank
+  el "span" $ text "editWidget:  "
+  resDyn <- buildLBEMapLVWK widget (constDyn map0)
+  smallBreak
+  el "span" $ text "dynText: "
+  dynText $ T.pack . show <$> resDyn
+  smallBreak
+  el "span" $ text "showWidget: "
+  _ <- buildLBEMapLWK resDyn
+  bigBreak
+
+
+smallBreak::DomBuilder t m=>m ()
+smallBreak =   el "br" blank >> el "br" blank
+  
+bigBreak::DomBuilder t m=>m()
+bigBreak =   el "br" blank >> el "h1" (text "") >> el "br" blank
+
+  
 
 -- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses. 
 buildLBEMapLWK::WidgetConstraints t m k v=>Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
@@ -88,9 +102,9 @@ buildLBEMapLWK map0Dyn = do
 
 -- NB: ListViewWithKey returns an Event t (M.Map k v) but it contains only the keys for which things have changed
 -- NB: ListViewWithKey gets only mapDyn0 as input.  Only need to update if something *else* changes the map.
-buildLBEMapLVWK::WidgetConstraints t m k v=>Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
-buildLBEMapLVWK mapDyn0 = mdo
-  let editW k vDyn = updated <$> restrictedEditWidgetDyn k vDyn
+buildLBEMapLVWK::WidgetConstraints t m k v=>(k->Dynamic t v-> m (Dynamic t (Maybe v)))->Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
+buildLBEMapLVWK editOneWidget mapDyn0 = mdo
+  let editW k vDyn = updated <$> editOneWidget k vDyn
   newInputMapEv <- traceDynAsEv (\m->"LVWK mapDyn0" ++ show m) mapDyn0
   mapEditsEv  <- listViewWithKey mapDyn0 editW -- Event t (M.Map k (Maybe v)), carries only updates
   let editedMapEv = traceEventWith (\m->"LVWK editedMap: " ++ show m) $ attachWith (flip applyMap) (current mapDyn) mapEditsEv
