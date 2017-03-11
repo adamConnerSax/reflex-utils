@@ -21,11 +21,7 @@ module Reflex.Dom.Contrib.SimpleForm.Instances.Basic
        , buildDynReadable
        , BasicC
        , SimpleFormInstanceC
-       , showText
-       , parseError
-       , parseAndValidate
-       , textWidgetValue
-       , item
+       , buildFormIso
        ) where
 
 import           Control.Lens                          (over, view, (^.))
@@ -148,7 +144,7 @@ restrictWidget'::(RD.DomBuilder t m, R.MonadHold t m)
   -> GWidget t m a
 restrictWidget' restrictFunc wFunc cfg = do
   w <- wFunc cfg
-  let e = R.traceEventWith (const "restricWidget e") $ R.leftmost [R.traceEventWith (const "restricWidget setVal") (_widgetConfig_setValue cfg), restrictFunc w]
+  let e = R.leftmost [(_widgetConfig_setValue cfg), restrictFunc w]
   v <- R.holdDyn (_widgetConfig_initialValue cfg) e
   return $ w { _hwidget_value = v 
              , _hwidget_change = e
