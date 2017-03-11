@@ -10,7 +10,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE UndecidableInstances  #-}
-module Reflex.Dom.Contrib.SimpleForm.Instances.Containers (buildLBEMapLWK,buildLBEMapLVWK) where
+module Reflex.Dom.Contrib.SimpleForm.Instances.Containers () where
 
 -- All the basic (primitive types, tuples, etc.) are in here
 import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
@@ -252,7 +252,6 @@ lbcUpdate (EditKey oldKey newKey) (LBCWidgetState s m) =
 -}
 
 
-type LBBuildFBase t m k v = Maybe FieldName->(R.Dynamic t (M.Map k v))->m (R.Dynamic t (M.Map k v))
 type LBBuildF t m k v = Maybe FieldName->(R.Dynamic t (M.Map k v))->SFR t m (R.Dynamic t (M.Map k v))
 
 toBuildF::(R.Reflex t,Functor m)=>LBBuildF t m k v->BuildF t m (M.Map k v)
@@ -264,7 +263,7 @@ toBuildF lbbf mFN mMapDyn =
 buildLBEMapWithAdd::(SimpleFormInstanceC t m
                     , VFormBuilderC t m k
                     , VFormBuilderC t m v
-                    , Ord k,Show k)
+                    , Ord k)
                   =>LBBuildF t m k v -- simple builder
                   ->LBBuildF t m k v
 buildLBEMapWithAdd lbbf mFN mapDyn0 = sfCol $ mdo
@@ -284,10 +283,10 @@ buildLBEMapWithAdd lbbf mFN mapDyn0 = sfCol $ mdo
 -- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses. 
 buildLBEMapLWK::(SimpleFormInstanceC t m
                  , VFormBuilderC t m v
-                 , Ord k, Show k, Read v, Show v)
+                 , Ord k, Show k)
                =>LBBuildF t m k v
 buildLBEMapLWK mFN map0Dyn = do
-  mapOfDynMaybe <- RD.listWithKey (R.traceDynWith (\m -> "LWK map0Dyn: " ++ show (M.keys m)) map0Dyn) editWidgetDyn
+  mapOfDynMaybe <- RD.listWithKey (R.traceDynWith (\m -> "LWK map0Dyn: " ++ show (M.keys m)) map0Dyn) editOne
   return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
 
 
@@ -301,7 +300,7 @@ editOne k valDyn = do
 -- NB: ListViewWithKey gets only mapDyn0 as input.  Only need to update if something *else* changes the map.
 buildLBEMapLVWK::(SimpleFormInstanceC t m
                   , VFormBuilderC t m v
-                  , Ord k, Show k,Read v, Show v)
+                  , Ord k , Show k)
                 => LBBuildF t m k v
 buildLBEMapLVWK mFN mapDyn0 = mdo
   let editF k valDyn = R.updated <$> editOne k valDyn -- editOneEv (R.constDyn True) k valDyn
@@ -345,7 +344,7 @@ editAndDeleteWidgetEv selDyn k vDyn = mdo
   return outEv
 
 
-editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v,Ord k, Show k, Show v, Read v)=>R.Dynamic t Bool->k->R.Dynamic t v->SFR t m (R.Event t (Maybe v))
+editOneEv::(SimpleFormInstanceC t m, VFormBuilderC t m v,Ord k, Show k)=>R.Dynamic t Bool->k->R.Dynamic t v->SFR t m (R.Event t (Maybe v))
 editOneEv selDyn k valDyn = mdo
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
   valEv <- traceDynAsEv (const "editWidgetDyn valEv") valDyn
@@ -373,7 +372,7 @@ editOneEv selDyn k valDyn = mdo
 -- now with ListViewWithKeyShallowDiff just so I understand things.
 buildLBEMapLVWKSD::(SimpleFormInstanceC t m
                   , VFormBuilderC t m v
-                  , Ord k, Show k, Read v, Show v, Ord k)
+                  , Ord k, Show k)
                 => LBBuildF t m k v
 buildLBEMapLVWKSD mf mapDyn0 = mdo
   newInputMapEv <- dynAsEv mapDyn0
@@ -385,7 +384,7 @@ buildLBEMapLVWKSD mf mapDyn0 = mdo
   mapDyn <- R.holdDyn M.empty newMapEv
   return (R.traceDynWith (\m -> "LVWKSD mapDyn: " ++ show (M.keys m)) mapDyn)
   
-editOneSD::(SimpleFormInstanceC t m, VFormBuilderC t m v, Ord k, Show k, Read v, Show v)=>k->v->R.Event t v->SFR t m (R.Event t (Maybe v))
+editOneSD::(SimpleFormInstanceC t m, VFormBuilderC t m v, Ord k, Show k)=>k->v->R.Event t v->SFR t m (R.Event t (Maybe v))
 editOneSD k v0 vEv = R.holdDyn v0 vEv >>= editOneEv (R.constDyn True) k
   
 hiddenCSS::M.Map T.Text T.Text

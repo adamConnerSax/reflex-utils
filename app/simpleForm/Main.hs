@@ -269,6 +269,7 @@ testComplexForm cfg = do
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed C:"
   el "p" blank
+  -- the avMapToMap is necessary to fix some weirdness with the Maybe instance and the dynamics. 
   _ <- flexFill LayoutRight $ observeDynamic cfg (avMapToMap <$> unDynValidation cDynM)
   return ()
 
@@ -301,9 +302,9 @@ test cfg = do
   el "br" blank
   staticTabbedLayout def (complexFormTab cfg)
     [
-{-      userFormTab cfg
-    ,-} complexFormTab cfg {-
-    , flowTestTab cfg -}
+      userFormTab cfg
+    , complexFormTab cfg 
+    , flowTestTab cfg
     ]
   return ()
 
