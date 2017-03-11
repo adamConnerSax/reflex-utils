@@ -270,7 +270,7 @@ testComplexForm cfg = do
   el "p" $ text "Observed C:"
   el "p" blank
   -- the avMapToMap is necessary to fix some weirdness with the Maybe instance and the dynamics. 
-  _ <- flexFill LayoutRight $ observeDynamic cfg (avMapToMap <$> unDynValidation cDynM)
+  _ <- flexFill LayoutRight $ observeDynamic cfg (avToMaybe <$> unDynValidation cDynM)
   return ()
 
 complexFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration t m -> TabInfo t m ()

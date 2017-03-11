@@ -40,6 +40,8 @@ import qualified Data.Text                             as T
 import           Data.Validation                       (AccValidation (..))
 import           Text.Read                             (readMaybe)
 
+import           Control.Lens                          (view)
+import           Control.Lens.Iso                      (Iso', from, iso)
 
 -- types for instances
 import           Data.ByteString                       (ByteString)
@@ -204,31 +206,10 @@ instance (SimpleFormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (R.Dyna
   buildForm va mFN = validateForm va . fmap R.constDyn . buildForm' mFN . fmap join
 
 -- | String and Text
-{-
 instance SimpleFormInstanceC t m=>FormBuilder t m T.Text where
   buildForm va mFN mInitialDyn = makeSimpleFormR $ do
     inputEv <- maybe (return R.never) (traceDynAsEv (const "FormBuilder t m T.Text")) mInitialDyn  -- mDynToInputEv mInitialDyn
     sfWidget' inputEv "" id va id mFN Nothing $ textWidgetValue mFN
--}
-
-{-
-instance SimpleFormInstanceC t m=>FormBuilder t m T.Text where
-  buildForm va mFN mInitialDyn = makeSimpleFormR $ do
-    inputEv <- maybe (return R.never) (traceDynAsEv (const "FormBuilder t m T.Text")) mInitialDyn  -- mDynToInputEv mInitialDyn
-    let wc = WidgetConfig inputEv "" (R.constDyn M.empty)
-    valDyn <- sfWidget id id mFN wc $ (\c -> _hwidget_value <$> htmlTextInput (maybe "" T.pack mFN) c) -- textWidgetValue mFN
-    return . DynValidation $ AccSuccess <$> valDyn 
--}
-
-
-instance SimpleFormInstanceC t m=>FormBuilder t m T.Text where
-  buildForm va mFN mInitialDyn = makeSimpleFormR $ do
-    inputEv <- maybe (return R.never) (traceDynAsEv (const "FormBuilder t m T.Text")) mInitialDyn  -- mDynToInputEv mInitialDyn
---    let config = RD.def {RD._textInputConfig_setValue = inputEv }
-    let wc = WidgetConfig inputEv "" (R.constDyn M.empty)
-    valDyn <- textWidgetValue mFN wc --RD._textInput_value <$> RD.textInput config
-    return . DynValidation $ AccSuccess <$> valDyn 
-
 
 instance {-# OVERLAPPING #-} SimpleFormInstanceC t m=>FormBuilder t m String where
   buildForm va mFN mInitialDyn =
@@ -245,7 +226,7 @@ instance SimpleFormC e t m=>B.Builder (RFormWidget e t m) Char where
 -}
 
 
--- We don't need this.  If we leave it out, the Enum instance will work an we get a dropdown instead of a checkbox.  Which might be better...
+-- We don't need this.  If we leave it out, the Enum instance will work and we get a dropdown instead of a checkbox.  Which might be better...
 instance SimpleFormInstanceC t m=>FormBuilder t m Bool where
   buildForm va mFN mInitialDyn = makeSimpleFormR $ do
     inputEv <- mDynToInputEv mInitialDyn
@@ -316,6 +297,14 @@ instance (SimpleFormC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a)
 
 instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (Either a b)
 
+-- if two things are Isomorphic, we can use one to build the other
+-- NB: Isomorphic sum types will end up using the constructors, etc. of the one used to bootstrap 
+buildFormIso::(SimpleFormC t m, VFormBuilderC t m a)=>Iso' a b->FormValidator b->Maybe FieldName->Maybe (R.Dynamic t b)->SimpleFormR t m b
+buildFormIso isoAB vb mFN mbDyn =
+  let a2b = view isoAB
+      b2a = view $ from isoAB
+  in a2b <$> buildForm (fmap b2a . vb . a2b) mFN (fmap b2a <$> mbDyn)  
+
 avToEither::AccValidation a b -> Either a b
 avToEither (AccSuccess x) = Right x
 avToEither (AccFailure x) = Left x
@@ -324,8 +313,9 @@ eitherToAV::Either a b->AccValidation a b
 eitherToAV (Left x) = AccFailure x
 eitherToAV (Right x) = AccSuccess x
 
+-- NB: Here, AccSuccess will appear as Right and AccFailure as Left in the forms.  To Avoid this we need to build a specific instance.
 instance (SimpleFormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (AccValidation a b) where
-  buildForm va mFN mInitialDyn = eitherToAV <$> buildForm (fmap avToEither . va . eitherToAV) mFN (fmap avToEither <$> mInitialDyn)
+  buildForm = buildFormIso (iso eitherToAV avToEither)
 
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (SimpleFormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=>FormBuilder t m a where

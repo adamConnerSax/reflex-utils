@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Reflex.Dom.Contrib.SimpleForm.DynValidation where
 
 import           Control.Monad     (join)
@@ -8,9 +9,9 @@ import           Data.Text         (Text)
 import           Data.Validation   (AccValidation (..))
 import           DataBuilder.Types (MonadLike (..))
 import           Reflex            (Dynamic, Reflex, constDyn, zipDynWith, never)
+import           GHC.Generics      (Generic)
 
-
-data SimpleFormError  = SFNothing | SFNoParse Text | SFInvalid Text deriving (Show,Eq)
+data SimpleFormError  = SFNothing | SFNoParse Text | SFInvalid Text deriving (Show,Eq,Generic)
 
 type SimpleFormErrors = [SimpleFormError]
 

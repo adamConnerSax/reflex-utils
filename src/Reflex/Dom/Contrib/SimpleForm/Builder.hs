@@ -277,7 +277,7 @@ instance (SimpleFormC t m, RD.PostBuild t m)=> B.Buildable (SFR t m) (R.Dynamic 
     let uncomposed = B.unFGV <$> dynFGV
         newWidgetEv = R.updated uncomposed
         startingWidgetEv = R.tag (R.current uncomposed) postbuild
-    join <$> RD.widgetHold (return $ R.constDyn $ AccFailure [SFNothing]) (R.leftmost [startingWidgetEv, newWidgetEv])
+    join <$> RD.widgetHold (return $ R.constDyn $ AccFailure [SFNothing]) (R.leftmost [newWidgetEv, startingWidgetEv])
 
 
 type SFMDWrapped t m a = B.MDWrapped (SFR t m) (R.Dynamic t) (SFValidation) a
