@@ -42,30 +42,10 @@ main = do
 type ReflexConstraints t m = (MonadWidget t m, DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace)
 type WidgetConstraints t m k v = (ReflexConstraints t m, Show v, Read v, Ord k, Show k, Read k)
 
-type FieldWidgetDyn t m v = Maybe (Dynamic t v)-> m (Dynamic t (Maybe v))
-type FieldWidgetEv t m v = Maybe (Dynamic t v)-> m (Event t (Maybe v))
-
-data FieldWidget t m v = FWDyn (FieldWidgetDyn t m v) | FWEv (FieldWidgetEv t m v)
-
-type FieldWidgetWithKey t m k v = k->FieldWidget t m v
 
 
-addFixedKeyToWidget::ReflexConstraints t m=>(k->T.Text)->FieldWidget t m v -> FieldWidgetWithKey t m k v
-addFixedKeyToWidget printK fw = \k -> case fw of
-  (FWDyn wDyn) -> FWDyn $ \mvDyn -> el "span" $ text (printK k) >> wDyn mvDyn
-  (FWEv wEv) -> FWEv $ \mvDyn -> el "span" $ text (printK k) >> wEv mvDyn
-  
-fieldWidgetEv::(Functor m, Reflex t)=>FieldWidget t m v->FieldWidgetEv t m v
-fieldWidgetEv (FWEv wEv) mvDyn = wEv mvDyn
-fieldWidgetEv (FWDyn wDyn) mvDyn = updated <$> wDyn mvDyn
 
 
-fieldWidgetDyn::MonadHold t m=>FieldWidget t m v->FieldWidgetDyn t m v
-fieldWidgetDyn (FWDyn wDyn) mvDyn = wDyn mvDyn
-fieldWidgetDyn (FWEv wEv) mvDyn = wEv mvDyn >>= holdDyn Nothing 
-
-
-type EditF t m k v = Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
 
 testWidget::JSM()
 testWidget = mainWidget $ do
@@ -125,11 +105,13 @@ bigBreak::DomBuilder t m=>m()
 bigBreak =   el "br" blank >> el "h1" (text "") >> el "br" blank
 
 
+type EditF t m k v = Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
+
 -- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses. 
 buildLBEMapLWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
-buildLBEMapLWK editOneValueWK map0Dyn = do
+buildLBEMapLWK editOneValueWK mapDyn0 = do
   let editW k vDyn = fieldWidgetDyn (editOneValueWK k) (Just vDyn)
-  mapOfDyn <- listWithKey map0Dyn editW -- Dynamic t (M.Map k (Dynamic t (Maybe v)))
+  mapOfDyn <- listWithKey mapDyn0 editW -- Dynamic t (M.Map k (Dynamic t (Maybe v)))
   return $ M.mapMaybe id <$> (join $ distributeMapOverDynPure <$> mapOfDyn)
 
 
@@ -145,7 +127,7 @@ buildLBEMapLVWK editOneValueWK mapDyn0 = mdo
   mapDyn <- holdDyn M.empty mapEv
   return mapDyn
 
--- now with ListViewWithKeyShallowDiff just so I understand things.
+-- now with ListViewWithKeyShallowDiff, just so I understand things.
 buildLBEMapLVWKSD::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
 buildLBEMapLVWKSD editOneValueWK mapDyn0 = mdo
   let editW k v0 vEv = holdDyn v0 vEv >>= \vDyn -> (fieldWidgetEv (editOneValueWK k)) (Just vDyn)
@@ -157,8 +139,6 @@ buildLBEMapLVWKSD editOneValueWK mapDyn0 = mdo
       newMapEv = leftmost [newInputMapEv, editedMapEv]
   mapDyn <- holdDyn M.empty newMapEv
   return $ traceDynWith (\m -> "LVWKSD mapDyn: " ++ show (M.keys m)) mapDyn
-
-
 
 buildLBEMapWithDelete::WidgetConstraints t m k v
   =>(FieldWidgetWithKey t m k v->EditF t m k v)
@@ -190,8 +170,57 @@ buildLBEMapWithAdd baseEditor keyWidget valWidget map0Dyn = mdo
   mapDyn <- holdDyn M.empty (leftmost [initialMapEv, mapWithAdditionEv])
   return editedMapDyn
 
+-- Select-based
+-- This one will use selectListViewWithKey to maintain the widget set and a dropdown for controlling selection
+-- dropdown will switch out if map is empty
+
+-- first just editing
+buildLBEMapWithSLVWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
+buildLBEMapWithSLVWK editOneValueWK mapDyn0 = mdo
+  let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) vDyn -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
+  curSelectionDyn <- do -- Dynamic t (Maybe k)
+    let newDefaultKey m = if M.null m then Nothing else (if M.member k m then k else head $ M.keys m)
+    defaultKeyEv <- dynAsEv $ uniqDyn (newDefaultKey <$> mapDyn0)
+    let mapNullSelWidget = el "h1" $ text "Map is Empty" >> return $ constDyn Nothing
+        mapNonNullSelWidget mapDyn k0 = fmap Just . _dropdown_value <$> dropdown k0 def (M.mapWithKey (\k _ ->show k) <$> mapDyn)
+        selWidget mapDyn mk0 = maybe mapNullSelWidget (mapNonNullSelWidget mapDyn)
+    join <$> widgetHold mapNullSelWidget (selWidget mapDyn0 <$> defaultKeyEv) 
+  let selEv = updated . uniqDyn $ isNothing <$> curSelectionDyn
+      noSelWidget = return never
+      yesSelWidget = selectListViewWithKey (fromJust <$> curSelectionDyn) mapDyn0 editW
+      selWidget noSel = if noSel then noSelWidget else yesSelWidget
+  mapEditEv <- join <$> widgetHold noSelWidget (selWidget <$> selEv)
+  -- apply edit to map so output is correct
+
+  
 -- single field widgets
 
+type FieldWidgetDyn t m v = Maybe (Dynamic t v)-> m (Dynamic t (Maybe v))
+type FieldWidgetEv t m v = Maybe (Dynamic t v)-> m (Event t (Maybe v))
+
+data FieldWidget t m v = FWDyn (FieldWidgetDyn t m v) | FWEv (FieldWidgetEv t m v)
+
+fieldWidgetEv::(Functor m, Reflex t)=>FieldWidget t m v->FieldWidgetEv t m v
+fieldWidgetEv (FWEv wEv) mvDyn = wEv mvDyn
+fieldWidgetEv (FWDyn wDyn) mvDyn = updated <$> wDyn mvDyn
+
+fieldWidgetDyn::MonadHold t m=>FieldWidget t m v->FieldWidgetDyn t m v
+fieldWidgetDyn (FWDyn wDyn) mvDyn = wDyn mvDyn
+fieldWidgetDyn (FWEv wEv) mvDyn = wEv mvDyn >>= holdDyn Nothing 
+
+applyToFieldWidget::(forall a.m a -> m a)->FieldWidget t m v->FieldWidget t m v
+applyToFieldWidget f fw = case fw of
+  FWDyn wDyn -> FWDyn $ \mvDyn -> f (wDyn mvDyn)
+  FWEv  wEv  -> FWEv  $ \mvDyn -> f (wEv mvDyn)
+
+type FieldWidgetWithKey t m k v = k->FieldWidget t m v
+    
+addFixedKeyToWidget::ReflexConstraints t m=>(k->T.Text)->FieldWidget t m v -> FieldWidgetWithKey t m k v
+addFixedKeyToWidget printK fw k =
+  let addKey::ReflexConstraints t m=>m a -> m a
+      addKey x = el "span" $ text (printK k) >> x
+  in applyToFieldWidget addKey fw
+  
 readOnlyFieldWidget::(ReflexConstraints t m, Show v)=>FieldWidgetDyn t m v
 readOnlyFieldWidget = 
   let makeReadOnly wFunc (WidgetConfig setVal initialVal dAttrs) =
@@ -223,7 +252,7 @@ restrictWidget' restrictFunc wFunc cfg = do
 
 
 editAndDeleteFieldWidgetWithKey::(ReflexConstraints t m, Read v, Show v)=>FieldWidgetWithKey t m k v->Dynamic t Bool->FieldWidgetWithKey t m k v
-editAndDeleteFieldWidgetWithKey baseWidgetWK visibleDyn = \k -> FWEv $ \mvDyn -> mdo
+editAndDeleteFieldWidgetWithKey baseWidgetWK visibleDyn k = FWEv $ \mvDyn -> mdo
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
       newInputEv = maybe never updated mvDyn 
   (visibleDyn',outEv) <- elDynAttr "div" widgetAttrs $ do
@@ -244,7 +273,14 @@ editAndDeleteFieldWidgetWithKey baseWidgetWK visibleDyn = \k -> FWEv $ \mvDyn ->
     return (visDyn,outEv')
   return outEv
 
-  
+
+addDynamicVisibility::ReflexConstraints t m=>FieldWidgetWithKey t m k v->Dynamic t Bool->FieldWidgetWithKey t m k v
+addDynamicVisibility fwwk visDyn k =  
+  let divAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
+      addVisDiv::ReflexConstraints t m=>m a -> m a
+      addVisDiv x = elDynAttr "div" divAttrs x
+  in applyToFieldWidget (fwwk k) addVisDiv
+
 buttonNoSubmit::DomBuilder t m=>T.Text -> m (Event t ())
 buttonNoSubmit t = (domEvent Click . fst) <$> elAttr' "button" ("type" =: "button") (text t)
 
