@@ -10,25 +10,26 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TupleSections         #-}
 
-import           GHCJS.DOM.Types                  (JSM)
-import           Language.Javascript.JSaddle.Warp (run)
+import           Control.Monad.Ref
+import           Data.IORef
+import           GHCJS.DOM.Types                   (JSM)
+import           Language.Javascript.JSaddle.Warp  (run)
 import           Reflex
-import           Reflex.Dom                       hiding (mainWidget, run)
-import           Reflex.Dom.Core                  (mainWidget)
-import           Reflex.Dom.Old (MonadWidget)
-import Control.Monad.Ref
-import Data.IORef
+import           Reflex.Dom                        hiding (mainWidget, run)
+import           Reflex.Dom.Core                   (mainWidget)
+import           Reflex.Dom.Old                    (MonadWidget)
 
-import           Control.Monad                    (join)
-import           Control.Monad.Fix                (MonadFix)
+import           Control.Monad                     (join)
+import           Control.Monad.Fix                 (MonadFix)
 
-import qualified Data.Map                         as M
-import           Data.Monoid                      ((<>))
-import qualified Data.Text                        as T
+import qualified Data.Map                          as M
+import           Data.Maybe                        (fromJust, isNothing)
+import           Data.Monoid                       ((<>))
+import qualified Data.Text                         as T
 
-import           System.Process                   (spawnProcess)
-import           Text.Read                        (readMaybe)
-import Reflex.Dom.Contrib.Widgets.Common 
+import           Reflex.Dom.Contrib.Widgets.Common
+import           System.Process                    (spawnProcess)
+import           Text.Read                         (readMaybe)
 
 
 -- NB: This is just for warp.
@@ -61,7 +62,7 @@ testWidget = mainWidget $ do
   testEditorWithWidget "edit only" (buildLBEMapLWK keyedWidget) x0
   testEditorWithWidget "edit and delete" (buildLBEMapWithDelete buildLBEMapLWK keyedWidget) x0
   testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapLWK keyedWidget) textWidget simpleWidget) x0
-  
+
   el "h1" $ text "Using ListViewWithKey"
   testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapLVWK keyedWidget) textWidget simpleWidget) x0
 
@@ -79,7 +80,7 @@ testSingleWidget label valWidget v0 = do
   el "span" (text "dynText of holdDyn of widget events: ")
   dynText $ T.pack . show <$> resDyn
   bigBreak
-  
+
 testEditorWithWidget::WidgetConstraints t m T.Text v
   =>T.Text
   ->EditF t m T.Text v -- editor
@@ -100,14 +101,14 @@ testEditorWithWidget label editWidget map0 = do
 
 smallBreak::DomBuilder t m=>m ()
 smallBreak =   el "br" blank >> el "br" blank
-  
+
 bigBreak::DomBuilder t m=>m()
 bigBreak =   el "br" blank >> el "h1" (text "") >> el "br" blank
 
 
 type EditF t m k v = Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
 
--- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses. 
+-- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses.
 buildLBEMapLWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
 buildLBEMapLWK editOneValueWK mapDyn0 = do
   let editW k vDyn = fieldWidgetDyn (editOneValueWK k) (Just vDyn)
@@ -134,7 +135,7 @@ buildLBEMapLVWKSD editOneValueWK mapDyn0 = mdo
   newInputMapEv <- dynAsEv mapDyn0
   updateEvsDyn <- listWithKeyShallowDiff M.empty diffMapEv editW -- Dynamic t (Map k (Event t (Maybe v)))
   let mapEditsEv =  switch $ mergeMap <$> current updateEvsDyn -- Event t (Map k (Maybe v))
-      diffMapEv = traceEventWith (\m -> "new Input to buildLBEMapLVWKSD: " ++ show (M.keys m)) $ fmap Just <$> newInputMapEv 
+      diffMapEv = traceEventWith (\m -> "new Input to buildLBEMapLVWKSD: " ++ show (M.keys m)) $ fmap Just <$> newInputMapEv
       editedMapEv = attachWith (flip applyMap) (current mapDyn) mapEditsEv
       newMapEv = leftmost [newInputMapEv, editedMapEv]
   mapDyn <- holdDyn M.empty newMapEv
@@ -143,25 +144,25 @@ buildLBEMapLVWKSD editOneValueWK mapDyn0 = mdo
 buildLBEMapWithDelete::WidgetConstraints t m k v
   =>(FieldWidgetWithKey t m k v->EditF t m k v)
   ->FieldWidgetWithKey t m k v->EditF t m k v
-buildLBEMapWithDelete buildBase valWidgetWK = buildBase (editAndDeleteFieldWidgetWithKey valWidgetWK (constDyn True)) 
+buildLBEMapWithDelete buildBase valWidgetWK = buildBase (editAndDeleteFieldWidgetWithKey valWidgetWK (constDyn True))
 
 
 buildLBEMapWithAdd::WidgetConstraints t m k v
   => EditF t m k v -- base map editor
   -> FieldWidget t m k -- single key editor
   -> FieldWidget t m v -- single value editor
-  -> EditF t m k v 
+  -> EditF t m k v
 buildLBEMapWithAdd baseEditor keyWidget valWidget map0Dyn = mdo
   initialMapEv <- dynAsEv map0Dyn
   editedMapDyn <- baseEditor mapDyn -- Dynamic t (M.Map k v)
   el "br" blank
   el "span" $ text "Add: "
   addEv <- mdo -- Event t (k,v)
-    let newMaybePairWidget = mdo 
+    let newMaybePairWidget = mdo
           newKey <- fieldWidgetDyn keyWidget Nothing    -- (Dynamic t (Maybe k)
           newVal <- fieldWidgetDyn valWidget Nothing  -- (Dynamic t (Maybe v)
           return $ (\(ma,mb) -> (,) <$> ma <*> mb) <$> zipDynWith (,) newKey newVal
-        addMaybePairWidget = join <$> widgetHold newMaybePairWidget (newMaybePairWidget <$ newPairEv) 
+        addMaybePairWidget = join <$> widgetHold newMaybePairWidget (newMaybePairWidget <$ newPairEv)
     newMaybePairDyn <- addMaybePairWidget
     addButtonEv <- buttonNoSubmit "+" -- Event t ()
     let newPairEv = fmapMaybe id $ tag (current newMaybePairDyn) addButtonEv
@@ -177,22 +178,29 @@ buildLBEMapWithAdd baseEditor keyWidget valWidget map0Dyn = mdo
 -- first just editing
 buildLBEMapWithSLVWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
 buildLBEMapWithSLVWK editOneValueWK mapDyn0 = mdo
-  let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) vDyn -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
+  let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) (Just vDyn) -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
+  newInputMapEv <- dynAsEv mapDyn0
   curSelectionDyn <- do -- Dynamic t (Maybe k)
-    let newDefaultKey m = if M.null m then Nothing else (if M.member k m then k else head $ M.keys m)
+    let newDefaultKey m = if M.null m then Nothing else Just . head $ M.keys m -- FIXME
     defaultKeyEv <- dynAsEv $ uniqDyn (newDefaultKey <$> mapDyn0)
-    let mapNullSelWidget = el "h1" $ text "Map is Empty" >> return $ constDyn Nothing
-        mapNonNullSelWidget mapDyn k0 = fmap Just . _dropdown_value <$> dropdown k0 def (M.mapWithKey (\k _ ->show k) <$> mapDyn)
-        selWidget mapDyn mk0 = maybe mapNullSelWidget (mapNonNullSelWidget mapDyn)
-    join <$> widgetHold mapNullSelWidget (selWidget mapDyn0 <$> defaultKeyEv) 
+    let mapNullSelWidget::ReflexConstraints t m=>m (Dynamic t (Maybe k))
+        mapNullSelWidget = el "h1" $ text "Map is Empty" >> (return $ constDyn Nothing)
+        mapNonNullSelWidget mapDyn k0 = fmap Just . _dropdown_value <$> dropdown k0 (M.mapWithKey (\k _ ->T.pack . show $ k) <$> mapDyn) def
+        selWidget mapDyn mk0 = maybe mapNullSelWidget (mapNonNullSelWidget mapDyn) mk0
+    join <$> widgetHold mapNullSelWidget (selWidget mapDyn0 <$> defaultKeyEv)
   let selEv = updated . uniqDyn $ isNothing <$> curSelectionDyn
       noSelWidget = return never
-      yesSelWidget = selectListViewWithKey (fromJust <$> curSelectionDyn) mapDyn0 editW
+      yesSelWidget = selectViewListWithKey (fromJust <$> curSelectionDyn) mapDyn0 editW
       selWidget noSel = if noSel then noSelWidget else yesSelWidget
-  mapEditEv <- join <$> widgetHold noSelWidget (selWidget <$> selEv)
-  -- apply edit to map so output is correct
+  mapEditEvDyn <- widgetHold noSelWidget (selWidget <$> selEv) -- Event t (k,Maybe v)
+  mapEditEvBeh <- hold never (updated mapEditEvDyn)
+  let mapEditEv = switch mapEditEvBeh
+      mapPatchEv = uncurry M.singleton <$> mapEditEv
+      editedMapEv = attachWith (flip applyMap) (current mapDyn) mapPatchEv
+      mapEv = leftmost [newInputMapEv, editedMapEv]
+  mapDyn <- holdDyn M.empty mapEv
+  return mapDyn
 
-  
 -- single field widgets
 
 type FieldWidgetDyn t m v = Maybe (Dynamic t v)-> m (Dynamic t (Maybe v))
@@ -206,7 +214,7 @@ fieldWidgetEv (FWDyn wDyn) mvDyn = updated <$> wDyn mvDyn
 
 fieldWidgetDyn::MonadHold t m=>FieldWidget t m v->FieldWidgetDyn t m v
 fieldWidgetDyn (FWDyn wDyn) mvDyn = wDyn mvDyn
-fieldWidgetDyn (FWEv wEv) mvDyn = wEv mvDyn >>= holdDyn Nothing 
+fieldWidgetDyn (FWEv wEv) mvDyn = wEv mvDyn >>= holdDyn Nothing
 
 applyToFieldWidget::(forall a.m a -> m a)->FieldWidget t m v->FieldWidget t m v
 applyToFieldWidget f fw = case fw of
@@ -214,15 +222,15 @@ applyToFieldWidget f fw = case fw of
   FWEv  wEv  -> FWEv  $ \mvDyn -> f (wEv mvDyn)
 
 type FieldWidgetWithKey t m k v = k->FieldWidget t m v
-    
+
 addFixedKeyToWidget::ReflexConstraints t m=>(k->T.Text)->FieldWidget t m v -> FieldWidgetWithKey t m k v
 addFixedKeyToWidget printK fw k =
   let addKey::ReflexConstraints t m=>m a -> m a
       addKey x = el "span" $ text (printK k) >> x
   in applyToFieldWidget addKey fw
-  
+
 readOnlyFieldWidget::(ReflexConstraints t m, Show v)=>FieldWidgetDyn t m v
-readOnlyFieldWidget = 
+readOnlyFieldWidget =
   let makeReadOnly wFunc (WidgetConfig setVal initialVal dAttrs) =
         let dAttrs' = M.insert "readonly" "" <$> dAttrs
         in wFunc (WidgetConfig setVal initialVal dAttrs')
@@ -234,7 +242,7 @@ fieldWidgetDyn' parse f mvDyn = do
   let inputEv = T.pack . show <$> inputEv'
       config = WidgetConfig inputEv "" (constDyn M.empty)
   valDyn <- _hwidget_value <$> f (htmlTextInput "text") config
-  return $ parse <$> valDyn 
+  return $ parse <$> valDyn
 
 -- like Reflex.Dom.Contrib.Widgets.Common.restrictWidget but allows the set event to change the "authoritative value"
 -- Q1:  Why doesn't this version update when built?
@@ -254,7 +262,7 @@ restrictWidget' restrictFunc wFunc cfg = do
 editAndDeleteFieldWidgetWithKey::(ReflexConstraints t m, Read v, Show v)=>FieldWidgetWithKey t m k v->Dynamic t Bool->FieldWidgetWithKey t m k v
 editAndDeleteFieldWidgetWithKey baseWidgetWK visibleDyn k = FWEv $ \mvDyn -> mdo
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
-      newInputEv = maybe never updated mvDyn 
+      newInputEv = maybe never updated mvDyn
   (visibleDyn',outEv) <- elDynAttr "div" widgetAttrs $ do
     resEv <-  fieldWidgetEv (baseWidgetWK k) mvDyn
     delButtonEv <- buttonNoSubmit "-"
@@ -269,24 +277,24 @@ editAndDeleteFieldWidgetWithKey baseWidgetWK visibleDyn k = FWEv $ \mvDyn -> mdo
                  [
                    Just <$> fmapMaybe id resEv
                  , Nothing <$ delButtonEv
-                 ]           
+                 ]
     return (visDyn,outEv')
   return outEv
 
 
 addDynamicVisibility::ReflexConstraints t m=>FieldWidgetWithKey t m k v->Dynamic t Bool->FieldWidgetWithKey t m k v
-addDynamicVisibility fwwk visDyn k =  
-  let divAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
+addDynamicVisibility fwwk visDyn k =
+  let divAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visDyn
       addVisDiv::ReflexConstraints t m=>m a -> m a
       addVisDiv x = elDynAttr "div" divAttrs x
-  in applyToFieldWidget (fwwk k) addVisDiv
+  in applyToFieldWidget addVisDiv (fwwk k)
 
 buttonNoSubmit::DomBuilder t m=>T.Text -> m (Event t ())
 buttonNoSubmit t = (domEvent Click . fst) <$> elAttr' "button" ("type" =: "button") (text t)
 
 
 dynAsEv::PostBuild t m=>Dynamic t a -> m (Event t a)
-dynAsEv dyn = (\x->leftmost [updated dyn, tagPromptlyDyn dyn x]) <$> getPostBuild 
+dynAsEv dyn = (\x->leftmost [updated dyn, tagPromptlyDyn dyn x]) <$> getPostBuild
 
 
 traceDynAsEv::PostBuild t m=>(a->String)->Dynamic t a->m (Event t a)
@@ -295,7 +303,7 @@ traceDynAsEv f dyn = do
   let f' prefix x = prefix ++ f x
       pbEv = traceEventWith (f' "postbuild-") $ tagPromptlyDyn dyn postbuild
       upEv = traceEventWith (f' "update-") $ updated dyn
-  return $ leftmost [upEv, pbEv] 
+  return $ leftmost [upEv, pbEv]
 
 
 hiddenCSS::M.Map T.Text T.Text
