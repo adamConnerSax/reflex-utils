@@ -161,26 +161,28 @@ buildLBEMapSVLWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t
 buildLBEMapSVLWK editOneValueWK mapDyn0 = mdo
   newInputMapEv <- dynAsEv mapDyn0
   let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) (Just vDyn) -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
-      nullWidget = el "div" (text "Empty Map") >> return never
-      nullWidgetEv = nullWidget <$ nullEv -- no edits from nothing.
-      editWidget k0 = mdo
+      selectWidget k0 = mdo
         let ddConfig = def & dropdownConfig_attributes .~ constDyn ("size" =: "1")
             newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m            
-            newk0Ev = attachWithMaybe newK0 (current k0Dyn) (updated mapDyn)
+            newk0Ev = attachWithMaybe newK0 (current k0Dyn) (updated mapDyn) -- has to be old k0, otherwise causality loop
         k0Dyn <- holdDyn k0 newk0Ev
         let dropdownWidget k =  _dropdown_value <$> dropdown k (M.mapWithKey (\k _ ->T.pack . show $ k) <$> mapDyn) ddConfig -- this needs to know about deletes
-        selDyn <- join <$> widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)
+        selDyn <- join <$> widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)        
         selectViewListWithKey selDyn mapDyn0 editW  -- NB: this map doesn't need updating from edits or deletes
+        
       (nonNullEv,nullEv) = fanBool . updated . uniqDyn $ M.null <$> mapDyn
+      nullWidget = el "div" (text "Empty Map") >> return never
+      nullWidgetEv = nullWidget <$ nullEv
       defaultKeyEv = fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> mapDyn) nonNullEv -- headMay and fmapMaybe id are redundant here but...
-      widgetEv = leftmost [nullWidgetEv, editWidget <$> defaultKeyEv]
+      widgetEv = leftmost [nullWidgetEv, selectWidget <$> defaultKeyEv]
+      
   mapEditEvDyn <- widgetHold nullWidget widgetEv -- Dynamic (Event t (k,Maybe v))
   mapEditEvBeh <- hold never (updated mapEditEvDyn)
   let mapEditEv = switch mapEditEvBeh -- Event t (k,Maybe v)
       mapPatchEv = uncurry M.singleton <$> mapEditEv
       editedMapEv = attachWith (flip applyMap) (current mapDyn) mapPatchEv
-      updatedMapEv = leftmost [newInputMapEv, editedMapEv]
-  mapDyn <- holdDyn M.empty updatedMapEv
+      updatedMapEv = leftmost [newInputMapEv, editedMapEv] -- order matters here.  mapEditEv on new map will not have the whole map.  Arbitraru patch.
+      mapDyn <- holdDyn M.empty updatedMapEv
   return mapDyn
 
 
