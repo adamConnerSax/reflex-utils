@@ -31,6 +31,7 @@ import           Reflex.Dom.Contrib.Widgets.Common
 import           System.Process                    (spawnProcess)
 import           Text.Read                         (readMaybe)
 
+import           Safe                              (headMay)
 
 -- NB: This is just for warp.
 main::IO ()
@@ -70,7 +71,7 @@ testWidget = mainWidget $ do
   testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapLVWKSD keyedWidget) textWidget simpleWidget) x0
 
   el "h1" $ text "Using SelectViewListWithKey"
-  testEditorWithWidget "edit only" (buildLBEMapSVLWK keyedWidget) x0
+  testEditorWithWidget "edit only" (buildLBEMapSVLWK' keyedWidget) x0
 
 
 testSingleWidget::(ReflexConstraints t m, Show v, Read v)=>T.Text->FieldWidget t m v->v->m ()
@@ -204,6 +205,37 @@ buildLBEMapSVLWK editOneValueWK mapDyn0 = mdo
       mapEv = leftmost [newInputMapEv, editedMapEv]
   mapDyn <- holdDyn M.empty mapEv
   return mapDyn
+
+boolToEither::Bool -> Either () ()
+boolToEither True = Right ()
+boolToEither False = Left ()
+-- NB: right event fires if true, left if false
+fanBool::Reflex t=>Event t Bool->(Event t (), Event t ())
+fanBool = fanEither . fmap boolToEither
+
+buildLBEMapSVLWK'::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
+buildLBEMapSVLWK' editOneValueWK mapDyn0 = mdo
+  newInputMapEv <- dynAsEv mapDyn0
+  let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) (Just vDyn) -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
+      nullWidget = el "div" (text "Empty Map") >> return never
+      nullWidgetEv = nullWidget <$ nullEv -- no edits from nothing.  This may change with add button?
+      editWidget k0 = do
+        let ddConfig = def & dropdownConfig_attributes .~ constDyn ("size" =: "1")
+        selDyn <- _dropdown_value <$> dropdown k0 (M.mapWithKey (\k _ ->T.pack . show $ k) <$> mapDyn) ddConfig
+        selectViewListWithKey selDyn mapDyn editW        
+      (nonNullEv,nullEv) = fanBool . updated . uniqDyn $ M.null <$> mapDyn
+      defaultKeyEv = fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> mapDyn) nonNullEv -- headMay and fmapMaybe id are redundant here but...
+      widgetEv = leftmost [nullWidgetEv, editWidget <$> defaultKeyEv]
+  mapEditEvDyn <- widgetHold nullWidget widgetEv -- Dynamic (Event t (k,Maybe v))
+  mapEditEvBeh <- hold never (updated mapEditEvDyn)
+  let mapEditEv = switch mapEditEvBeh -- Event t (k,Maybe v)
+      mapPatchEv = uncurry M.singleton <$> mapEditEv
+      editedMapEv = attachWith (flip applyMap) (current mapDyn) mapPatchEv
+      updatedInputEv = leftmost [newInputMapEv] -- adds will come in here as well 
+      updatedOutputEv = leftmost [editedMapEv, updatedInputEv] -- selectViewListWithKey can't be fed it's own output
+  mapDyn <- holdDyn M.empty updatedInputEv
+  outMapDyn <- holdDyn M.empty updatedOutputEv
+  return outMapDyn
 
 -- single field widgets
 

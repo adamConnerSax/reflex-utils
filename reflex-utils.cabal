@@ -273,6 +273,7 @@ executable reflex-utils-forRyan-warp
                      , containers
                      , text
                      , process
+                     , safe
   default-language:    Haskell2010
 
 
