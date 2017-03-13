@@ -58,21 +58,23 @@ testWidget = mainWidget $ do
       keyedWidget::(ReflexConstraints t m, Show v, Read v)=>T.Text->FieldWidget t m v
       keyedWidget = addFixedKeyToWidget id simpleWidget
       x0 = M.fromList [("A",1),("B",2)]
-
+  
   el "h1" $ text "Using ListWithKey"
-  testEditorWithWidget "edit only" (buildLBEMapLWK keyedWidget) x0
-  testEditorWithWidget "edit and delete" (buildLBEMapWithDelete buildLBEMapLWK keyedWidget) x0
-  testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapLWK keyedWidget) textWidget simpleWidget) x0
+  res1 <- testEditorWithWidget "edit only" (buildLBEMapLWK keyedWidget) (constDyn x0)
+  res2 <- testEditorWithWidget "edit and delete" (buildLBEMapWithDelete buildLBEMapLWK keyedWidget) res1
+  res3 <- testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapLWK keyedWidget) textWidget simpleWidget) res2
 
   el "h1" $ text "Using ListViewWithKey"
-  testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapLVWK keyedWidget) textWidget simpleWidget) x0
+  res4 <- testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapLVWK keyedWidget) textWidget simpleWidget) res3
 
   el "h1" $ text "Using ListViewWithKeyShallowDiff"
-  testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapLVWKSD keyedWidget) textWidget simpleWidget) x0
+  res5 <- testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapLVWKSD keyedWidget) textWidget simpleWidget) res4
 
   el "h1" $ text "Using SelectViewListWithKey"
-  testEditorWithWidget "edit only" (buildLBEMapSVLWK' keyedWidget) x0
-
+  res6 <- testEditorWithWidget "edit only" (buildLBEMapSVLWK keyedWidget) res5
+  res7 <- testEditorWithWidget "edit and delete" (buildLBEMapWithDelete buildLBEMapSVLWK keyedWidget) res6
+  _ <- testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapSVLWK keyedWidget) textWidget simpleWidget) res7
+  return ()
 
 testSingleWidget::(ReflexConstraints t m, Show v, Read v)=>T.Text->FieldWidget t m v->v->m ()
 testSingleWidget label valWidget v0 = do
@@ -88,19 +90,17 @@ testSingleWidget label valWidget v0 = do
 testEditorWithWidget::WidgetConstraints t m T.Text v
   =>T.Text
   ->EditF t m T.Text v -- editor
-  ->M.Map T.Text v -- initial map
-  ->m ()
-testEditorWithWidget label editWidget map0 = do
+  ->Dynamic t (M.Map T.Text v) -- initial map
+  ->m (Dynamic t (M.Map T.Text v))
+testEditorWithWidget label editWidget mapDyn0 = do
   el "h2" $ text label >> el "br" blank
   el "span" $ text "editable values:  "
-  resDyn <- editWidget (constDyn map0)
+  resDyn <- editWidget mapDyn0
   smallBreak
-  el "span" $ text "dynText: "
-  dynText $ T.pack . show <$> resDyn
-  smallBreak
-  el "span" $ text "showWidget: "
+  el "span" $ text "result: "
   _ <- buildLBEMapLWK (addFixedKeyToWidget id (FWDyn $ readOnlyFieldWidget)) resDyn
   bigBreak
+  return resDyn
 
 
 smallBreak::DomBuilder t m=>m ()
@@ -145,6 +145,43 @@ buildLBEMapLVWKSD editOneValueWK mapDyn0 = mdo
   mapDyn <- holdDyn M.empty newMapEv
   return $ traceDynWith (\m -> "LVWKSD mapDyn: " ++ show (M.keys m)) mapDyn
 
+
+-- Select-based
+-- This one will use selectListViewWithKey to maintain the widget set and a dropdown for controlling selection
+-- dropdown will switch out if map is empty
+
+boolToEither::Bool -> Either () ()
+boolToEither True = Right ()
+boolToEither False = Left ()
+-- NB: right event fires if true, left if false--(FalseEv,TrueEv)--which fits Either but is not intuitive, at least to me
+fanBool::Reflex t=>Event t Bool->(Event t (), Event t ())
+fanBool = fanEither . fmap boolToEither
+
+buildLBEMapSVLWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
+buildLBEMapSVLWK editOneValueWK mapDyn0 = mdo
+  newInputMapEv <- dynAsEv mapDyn0
+  let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) (Just vDyn) -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
+      nullWidget = el "div" (text "Empty Map") >> return never
+      nullWidgetEv = nullWidget <$ nullEv -- no edits from nothing.  This may change with add button?
+      editWidget k0 = mdo
+        let ddConfig = def & dropdownConfig_attributes .~ constDyn ("size" =: "1")
+            newk0Ev = fmapMaybe id . updated . uniqDyn $ (\m -> if M.member k0 m then Nothing else headMay $ M.keys m) <$> mapDyn
+        let dropdownWidget k =  _dropdown_value <$> dropdown k (M.mapWithKey (\k _ ->T.pack . show $ k) <$> mapDyn) ddConfig -- this needs to know about deletes
+        selDyn <- join <$> widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)
+        selectViewListWithKey selDyn mapDyn0 editW  -- NB: this map doesn't need updating from edits or deletes
+      (nonNullEv,nullEv) = fanBool . updated . uniqDyn $ M.null <$> mapDyn
+      defaultKeyEv = fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> mapDyn) nonNullEv -- headMay and fmapMaybe id are redundant here but...
+      widgetEv = leftmost [nullWidgetEv, editWidget <$> defaultKeyEv]
+  mapEditEvDyn <- widgetHold nullWidget widgetEv -- Dynamic (Event t (k,Maybe v))
+  mapEditEvBeh <- hold never (updated mapEditEvDyn)
+  let mapEditEv = switch mapEditEvBeh -- Event t (k,Maybe v)
+      mapPatchEv = uncurry M.singleton <$> mapEditEv
+      editedMapEv = attachWith (flip applyMap) (current mapDyn) mapPatchEv
+      updatedMapEv = leftmost [newInputMapEv, editedMapEv]
+  mapDyn <- holdDyn M.empty updatedMapEv
+  return mapDyn
+
+
 buildLBEMapWithDelete::WidgetConstraints t m k v
   =>(FieldWidgetWithKey t m k v->EditF t m k v)
   ->FieldWidgetWithKey t m k v->EditF t m k v
@@ -175,67 +212,6 @@ buildLBEMapWithAdd baseEditor keyWidget valWidget map0Dyn = mdo
   mapDyn <- holdDyn M.empty (leftmost [initialMapEv, mapWithAdditionEv])
   return editedMapDyn
 
--- Select-based
--- This one will use selectListViewWithKey to maintain the widget set and a dropdown for controlling selection
--- dropdown will switch out if map is empty
-
--- first just editing
-buildLBEMapSVLWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
-buildLBEMapSVLWK editOneValueWK mapDyn0 = mdo
-  let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) (Just vDyn) -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
-  newInputMapEv <- dynAsEv mapDyn0
-  curSelectionDyn <- do -- Dynamic t (Maybe k)
-    let newDefaultKey m = if M.null m then Nothing else Just . head $ M.keys m -- FIXME
-    defaultKeyEv <- dynAsEv $ uniqDyn (newDefaultKey <$> mapDyn0)
-    let mapNullSelWidget::ReflexConstraints t m=>m (Dynamic t (Maybe k))
-        mapNullSelWidget = el "h1" $ text "Map is Empty" >> (return $ constDyn Nothing)
-        ddConfig = def & dropdownConfig_attributes .~ constDyn ("size" =: "1")
-        mapNonNullSelWidget mapDyn k0 = fmap Just . _dropdown_value <$> dropdown k0 (M.mapWithKey (\k _ ->T.pack . show $ k) <$> mapDyn) ddConfig
-        selWidget mapDyn mk0 = maybe mapNullSelWidget (mapNonNullSelWidget mapDyn) mk0
-    join <$> widgetHold mapNullSelWidget (selWidget mapDyn0 <$> defaultKeyEv)
-  let selEv = updated . uniqDyn $ isNothing <$> curSelectionDyn
-      noSelWidget = return never
-      yesSelWidget = selectViewListWithKey (fromJust <$> curSelectionDyn) mapDyn0 editW
-      selWidget noSel = if noSel then noSelWidget else yesSelWidget
-  mapEditEvDyn <- widgetHold noSelWidget (selWidget <$> selEv) -- Event t (k,Maybe v)
-  mapEditEvBeh <- hold never (updated mapEditEvDyn)
-  let mapEditEv = switch mapEditEvBeh
-      mapPatchEv = uncurry M.singleton <$> mapEditEv
-      editedMapEv = attachWith (flip applyMap) (current mapDyn) mapPatchEv
-      mapEv = leftmost [newInputMapEv, editedMapEv]
-  mapDyn <- holdDyn M.empty mapEv
-  return mapDyn
-
-boolToEither::Bool -> Either () ()
-boolToEither True = Right ()
-boolToEither False = Left ()
--- NB: right event fires if true, left if false
-fanBool::Reflex t=>Event t Bool->(Event t (), Event t ())
-fanBool = fanEither . fmap boolToEither
-
-buildLBEMapSVLWK'::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
-buildLBEMapSVLWK' editOneValueWK mapDyn0 = mdo
-  newInputMapEv <- dynAsEv mapDyn0
-  let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) (Just vDyn) -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
-      nullWidget = el "div" (text "Empty Map") >> return never
-      nullWidgetEv = nullWidget <$ nullEv -- no edits from nothing.  This may change with add button?
-      editWidget k0 = do
-        let ddConfig = def & dropdownConfig_attributes .~ constDyn ("size" =: "1")
-        selDyn <- _dropdown_value <$> dropdown k0 (M.mapWithKey (\k _ ->T.pack . show $ k) <$> mapDyn) ddConfig
-        selectViewListWithKey selDyn mapDyn editW        
-      (nonNullEv,nullEv) = fanBool . updated . uniqDyn $ M.null <$> mapDyn
-      defaultKeyEv = fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> mapDyn) nonNullEv -- headMay and fmapMaybe id are redundant here but...
-      widgetEv = leftmost [nullWidgetEv, editWidget <$> defaultKeyEv]
-  mapEditEvDyn <- widgetHold nullWidget widgetEv -- Dynamic (Event t (k,Maybe v))
-  mapEditEvBeh <- hold never (updated mapEditEvDyn)
-  let mapEditEv = switch mapEditEvBeh -- Event t (k,Maybe v)
-      mapPatchEv = uncurry M.singleton <$> mapEditEv
-      editedMapEv = attachWith (flip applyMap) (current mapDyn) mapPatchEv
-      updatedInputEv = leftmost [newInputMapEv] -- adds will come in here as well 
-      updatedOutputEv = leftmost [editedMapEv, updatedInputEv] -- selectViewListWithKey can't be fed it's own output
-  mapDyn <- holdDyn M.empty updatedInputEv
-  outMapDyn <- holdDyn M.empty updatedOutputEv
-  return outMapDyn
 
 -- single field widgets
 
