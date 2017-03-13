@@ -69,6 +69,9 @@ testWidget = mainWidget $ do
   el "h1" $ text "Using ListViewWithKeyShallowDiff"
   testEditorWithWidget "edit and add and delete" (buildLBEMapWithAdd (buildLBEMapWithDelete buildLBEMapLVWKSD keyedWidget) textWidget simpleWidget) x0
 
+  el "h1" $ text "Using SelectViewListWithKey"
+  testEditorWithWidget "edit only" (buildLBEMapSVLWK keyedWidget) x0
+
 
 testSingleWidget::(ReflexConstraints t m, Show v, Read v)=>T.Text->FieldWidget t m v->v->m ()
 testSingleWidget label valWidget v0 = do
@@ -176,8 +179,8 @@ buildLBEMapWithAdd baseEditor keyWidget valWidget map0Dyn = mdo
 -- dropdown will switch out if map is empty
 
 -- first just editing
-buildLBEMapWithSLVWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
-buildLBEMapWithSLVWK editOneValueWK mapDyn0 = mdo
+buildLBEMapSVLWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
+buildLBEMapSVLWK editOneValueWK mapDyn0 = mdo
   let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) (Just vDyn) -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
   newInputMapEv <- dynAsEv mapDyn0
   curSelectionDyn <- do -- Dynamic t (Maybe k)
@@ -185,7 +188,8 @@ buildLBEMapWithSLVWK editOneValueWK mapDyn0 = mdo
     defaultKeyEv <- dynAsEv $ uniqDyn (newDefaultKey <$> mapDyn0)
     let mapNullSelWidget::ReflexConstraints t m=>m (Dynamic t (Maybe k))
         mapNullSelWidget = el "h1" $ text "Map is Empty" >> (return $ constDyn Nothing)
-        mapNonNullSelWidget mapDyn k0 = fmap Just . _dropdown_value <$> dropdown k0 (M.mapWithKey (\k _ ->T.pack . show $ k) <$> mapDyn) def
+        ddConfig = def & dropdownConfig_attributes .~ constDyn ("size" =: "1")
+        mapNonNullSelWidget mapDyn k0 = fmap Just . _dropdown_value <$> dropdown k0 (M.mapWithKey (\k _ ->T.pack . show $ k) <$> mapDyn) ddConfig
         selWidget mapDyn mk0 = maybe mapNullSelWidget (mapNonNullSelWidget mapDyn) mk0
     join <$> widgetHold mapNullSelWidget (selWidget mapDyn0 <$> defaultKeyEv)
   let selEv = updated . uniqDyn $ isNothing <$> curSelectionDyn
@@ -285,9 +289,9 @@ editAndDeleteFieldWidgetWithKey baseWidgetWK visibleDyn k = FWEv $ \mvDyn -> mdo
 addDynamicVisibility::ReflexConstraints t m=>FieldWidgetWithKey t m k v->Dynamic t Bool->FieldWidgetWithKey t m k v
 addDynamicVisibility fwwk visDyn k =
   let divAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visDyn
-      addVisDiv::ReflexConstraints t m=>m a -> m a
-      addVisDiv x = elDynAttr "div" divAttrs x
-  in applyToFieldWidget addVisDiv (fwwk k)
+--      addVisDiv::ReflexConstraints t m=>m a -> m a
+--      addVisDiv = elDynAttr "div" divAttrs
+  in applyToFieldWidget (elDynAttr "div" divAttrs) (fwwk k)
 
 buttonNoSubmit::DomBuilder t m=>T.Text -> m (Event t ())
 buttonNoSubmit t = (domEvent Click . fst) <$> elAttr' "button" ("type" =: "button") (text t)
