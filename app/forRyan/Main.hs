@@ -162,10 +162,12 @@ buildLBEMapSVLWK editOneValueWK mapDyn0 = mdo
   newInputMapEv <- dynAsEv mapDyn0
   let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) (Just vDyn) -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
       nullWidget = el "div" (text "Empty Map") >> return never
-      nullWidgetEv = nullWidget <$ nullEv -- no edits from nothing.  This may change with add button?
+      nullWidgetEv = nullWidget <$ nullEv -- no edits from nothing.
       editWidget k0 = mdo
         let ddConfig = def & dropdownConfig_attributes .~ constDyn ("size" =: "1")
-            newk0Ev = fmapMaybe id . updated . uniqDyn $ (\m -> if M.member k0 m then Nothing else headMay $ M.keys m) <$> mapDyn
+            newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m            
+            newk0Ev = attachWithMaybe newK0 (current k0Dyn) (updated mapDyn)
+        k0Dyn <- holdDyn k0 newk0Ev
         let dropdownWidget k =  _dropdown_value <$> dropdown k (M.mapWithKey (\k _ ->T.pack . show $ k) <$> mapDyn) ddConfig -- this needs to know about deletes
         selDyn <- join <$> widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)
         selectViewListWithKey selDyn mapDyn0 editW  -- NB: this map doesn't need updating from edits or deletes
