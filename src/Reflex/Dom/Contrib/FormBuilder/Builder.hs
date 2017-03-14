@@ -30,6 +30,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , buildForm'
        , makeForm
        , unF
+       , toReadOnly
        , VFormBuilderC
 --     , FormC
        , CollapsibleInitialState(..)
@@ -129,6 +130,9 @@ type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable (FValidation) a)
 
 buildForm'::VFormBuilderC t m a=>Maybe FieldName->Maybe (R.Dynamic t a)->Form t m a
 buildForm' = buildForm B.validator
+
+toReadOnly::Monad m=>Form t m a -> Form t m a
+toReadOnly form = makeForm . local setToObserve $ unF form 
 
 instance (RD.DomBuilder t m, FormBuilder t m a)=>B.Builder (FR t m) (R.Dynamic t) (FValidation) a where
   buildValidated va mFN = B.FGV . fmap unDynValidation . unF . buildForm va mFN
