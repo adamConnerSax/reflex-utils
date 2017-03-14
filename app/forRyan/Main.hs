@@ -84,6 +84,7 @@ bigBreak =   el "br" blank >> el "h1" (text "") >> el "br" blank
 type EditF t m k v = Dynamic t (M.Map k v)->m (Dynamic t (M.Map k v))
 
 -- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses.
+-- Just make widget into right form and do the distribute over the result
 buildLBEMapLWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
 buildLBEMapLWK editOneValueWK mapDyn0 = do
   let editW k vDyn =  el "br" blank >> fieldWidgetDyn (editOneValueWK k) (Just vDyn)
@@ -92,7 +93,7 @@ buildLBEMapLWK editOneValueWK mapDyn0 = do
 
 
 -- NB: ListViewWithKey returns an Event t (M.Map k v) but it contains only the keys for which things have changed
--- NB: ListViewWithKey gets only mapDyn0 as input.  Only need to update if something *else* changes the map.
+-- So we use applyMap to put those edits into the output.
 buildLBEMapLVWK::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
 buildLBEMapLVWK editOneValueWK mapDyn0 = mdo
   let editW k vDyn = el "br" blank >> fieldWidgetEv (editOneValueWK k) (Just vDyn)
@@ -104,6 +105,8 @@ buildLBEMapLVWK editOneValueWK mapDyn0 = mdo
   return mapDyn
 
 -- now with ListViewWithKeyShallowDiff, just so I understand things.
+-- ListViewWithKeyShallowDiff takes an (Event t (Map k, (Maybe v))) as input rather than the dynamic map.
+-- so there would be more efficient ways to do, e.g., adds, in this case.
 buildLBEMapLVWKSD::WidgetConstraints t m k v=>FieldWidgetWithKey t m k v->EditF t m k v
 buildLBEMapLVWKSD editOneValueWK mapDyn0 = mdo
   let editW k v0 vEv =  holdDyn v0 vEv >>= \vDyn ->   el "br" blank >> (fieldWidgetEv (editOneValueWK k)) (Just vDyn)
@@ -152,7 +155,7 @@ buildLBEMapSVLWK editOneValueWK mapDyn0 = mdo
   let mapEditEv = switch mapEditEvBeh -- Event t (k,Maybe v)
       mapPatchEv = uncurry M.singleton <$> mapEditEv
       editedMapEv = attachWith (flip applyMap) (current mapDyn) mapPatchEv
-      updatedMapEv = leftmost [newInputMapEv, editedMapEv] -- order matters here.  mapEditEv on new map will not have the whole map.  Arbitraru patch.
+      updatedMapEv = leftmost [newInputMapEv, editedMapEv] -- order matters here.  mapEditEv on new map will not have the whole map.  Arbitrary patch.
   mapDyn <- holdDyn M.empty updatedMapEv
   return mapDyn
 

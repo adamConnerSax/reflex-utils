@@ -72,10 +72,10 @@ import           Language.Javascript.JSaddle.Warp            (run)
 
 --import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
 import           DataBuilder                                 as B
-import           Reflex.Dom.Contrib.SimpleForm
-import           Reflex.Dom.Contrib.SimpleForm.Configuration
-import           Reflex.Dom.Contrib.SimpleForm.Instances     (SimpleFormInstanceC)
-import           Reflex.Dom.Contrib.SimpleForm.Instances.Containers
+import           Reflex.Dom.Contrib.FormBuilder
+import           Reflex.Dom.Contrib.FormBuilder.Configuration
+import           Reflex.Dom.Contrib.FormBuilder.Instances     (FormInstanceC)
+import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers
 
 import           Css
 
@@ -85,12 +85,12 @@ import qualified System.Process                              as SP
 newtype Age = Age { unAge::Int } deriving (Show)
 
 liftValidation::(a->Bool)->(a->T.Text)->FormValidator a
-liftValidation test msg = (\a -> if test a then AccSuccess a else AccFailure [SFInvalid (msg a)])
+liftValidation test msg = (\a -> if test a then AccSuccess a else AccFailure [FInvalid (msg a)])
 
-instance B.Validatable SFValidation Age where
+instance B.Validatable FValidation Age where
   validator = liftValidation ((>0) . unAge) (const "Age must be > 0")
 
-instance SimpleFormInstanceC t m => FormBuilder t m Age where
+instance FormInstanceC t m => FormBuilder t m Age where
   buildForm va mFn maDyn =
     let labelCfg = LabelConfig "Age" M.empty
         inputCfg = InputElementConfig (Just "35") (Just "Age") (Just labelCfg)
@@ -105,10 +105,10 @@ validEmail address = let
   in (T.length userPart >= 1) && (T.length domainPart >= 2)
 --  in if valid then Right ea else Left "Email address must be of the form a@b"
 
-instance Validatable SFValidation EmailAddress where
+instance Validatable FValidation EmailAddress where
   validator = liftValidation (validEmail . unEmailAddress) (const "Email address must be of the form a@b")
 
-instance SimpleFormInstanceC t m => FormBuilder t m EmailAddress where
+instance FormInstanceC t m => FormBuilder t m EmailAddress where
   buildForm va mFn maDyn =
     let labelCfg = LabelConfig "Email" M.empty
         inputCfg = InputElementConfig (Just "yourname@emailprovider.com") (Just "Email") (Just labelCfg)
@@ -116,9 +116,9 @@ instance SimpleFormInstanceC t m => FormBuilder t m EmailAddress where
     in validateForm va . (fmap EmailAddress) $ liftF (setInputConfig inputCfg) $ buildForm vText mFn (fmap unEmailAddress <$> maDyn)
 
 newtype Name = Name { unName::T.Text } deriving (Show)
-instance B.Validatable SFValidation Name -- uses default which is that everything is valid
+instance B.Validatable FValidation Name -- uses default which is that everything is valid
 
-instance SimpleFormInstanceC t m => FormBuilder t m Name where
+instance FormInstanceC t m => FormBuilder t m Name where
   buildForm va mFn maDyn =
     let labelCfg = LabelConfig "Name" M.empty
         inputCfg = InputElementConfig (Just "John Doe") (Just "Name") (Just labelCfg)
@@ -129,22 +129,22 @@ data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Gen
 
 instance Generic User
 instance HasDatatypeInfo User
-instance SimpleFormInstanceC t m=>FormBuilder t m User where
-  buildForm va mFN = liftF sfCol . fgvToSimpleFormR . gBuildValidated va mFN
+instance FormInstanceC t m=>FormBuilder t m User where
+  buildForm va mFN = liftF fCol . fgvToForm . gBuildValidated va mFN
 
-testUserForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m->m ()
+testUserForm::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m->m ()
 testUserForm cfg = do
   let user = User (Name "Adam") (EmailAddress "adam@adam") (Age 45)
   el "p" $ text ""
   el "h2" $ text "From a simple data structure, Output is an event, fired when submit button is clicked but only if data is of right types and valid."
-  newUserEv <- flexFill LayoutRight $ makeSimpleForm' cfg (Just user) (buttonNoSubmit' "submit")
+  newUserEv <- flexFill LayoutRight $ formWithSubmitAction cfg (Just user) (buttonNoSubmit' "submit")
   curUserDyn <- foldDyn const user newUserEv
   dynText (printUser <$> curUserDyn)
 
 printUser::User->T.Text
 printUser (User (Name n) (EmailAddress ea) (Age a)) = "User with name " <> n <> " email " <> ea <> " and age " <> (T.pack $ show a)
 
-userFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration t m -> TabInfo t m ()
+userFormTab::FormInstanceC t m=>FormConfiguration t m -> TabInfo t m ()
 userFormTab cfg = TabInfo "userFormTab" "Classic Form" $ testUserForm cfg
 
 buttonNoSubmit'::DomBuilder t m=>T.Text -> m (Event t ())
@@ -159,7 +159,7 @@ data DateOrDateTime = D Day | DT UTCTime deriving (Show)
 
 -- Anything with a Read instance can be built using buildReadMaybe
 data ReadableType = RTI Int | RTS String deriving (Show,Read)
-instance SimpleFormInstanceC t m=>FormBuilder t m ReadableType where
+instance FormInstanceC t m=>FormBuilder t m ReadableType where
   buildForm = buildDynReadMaybe
 
 
@@ -182,38 +182,38 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 {-
 instance Generic A
 instance HasDatatypeInfo A
-instance SimpleFormInstanceC t m=>FormBuilder t m A where
-  buildForm va mFN = liftF sfRow . fgvToSimpleFormR . gBuildValidated va mFN
+instance FormInstanceC t m=>FormBuilder t m A where
+  buildForm va mFN = liftF sfRow . fgvToForm . gBuildValidated va mFN
 
 instance Generic B
 instance HasDatatypeInfo B
-instance SimpleFormInstanceC t m=>FormBuilder t m B where
-  buildForm va mFN = liftF (fieldSet "B" . sfRow) . fgvToSimpleFormR . gBuildValidated va mFN
+instance FormInstanceC t m=>FormBuilder t m B where
+  buildForm va mFN = liftF (fieldSet "B" . sfRow) . fgvToForm . gBuildValidated va mFN
 
 instance Generic MyMap
 instance HasDatatypeInfo MyMap
-instance SimpleFormInstanceC t m=>FormBuilder t m MyMap
+instance FormInstanceC t m=>FormBuilder t m MyMap
 
 instance Generic C
 instance HasDatatypeInfo C
-instance SimpleFormInstanceC t m=>FormBuilder t m C where
-  buildForm va mFN = liftF (fieldSet "C" . sfCol) . fgvToSimpleFormR . gBuildValidated va mFN
+instance FormInstanceC t m=>FormBuilder t m C where
+  buildForm va mFN = liftF (fieldSet "C" . sfCol) . fgvToForm . gBuildValidated va mFN
 
 -- More layout options are available if you write custom instances.
 -- handwritten single constructor instance
-instance SimpleFormInstanceC t m=>FormBuilder t m BRec where
-  buildForm va mFN mBRecDyn = validateForm va . makeSimpleFormR $ do
+instance FormInstanceC t m=>FormBuilder t m BRec where
+  buildForm va mFN mBRecDyn = validateForm va . makeForm $ do
     let b1 = buildForm' Nothing (fmap oneB <$> mBRecDyn)
-        b2 = liftF (sfCenter LayoutHorizontal) $ buildForm' Nothing (fmap seqOfA <$> mBRecDyn)
-        b3 = liftF (sfCenter LayoutHorizontal) $ buildForm' Nothing (fmap hashSetOfString <$> mBRecDyn)
-    sfRow . unSF $ (BRec <$> b1 <*> b2 <*> b3)
+        b2 = liftF (fCenter LayoutHorizontal) $ buildForm' Nothing (fmap seqOfA <$> mBRecDyn)
+        b3 = liftF (fCenter LayoutHorizontal) $ buildForm' Nothing (fmap hashSetOfString <$> mBRecDyn)
+    fRow . unF $ (BRec <$> b1 <*> b2 <*> b3)
 
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
-buildDate::SimpleFormInstanceC t m=>FormValidator DateOrDateTime->
-  Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (SFMDWrapped t m DateOrDateTime)
+buildDate::FormInstanceC t m=>FormValidator DateOrDateTime->
+  Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (FMDWrapped t m DateOrDateTime)
 buildDate va mFN msDyn =
-  let blankBuilder = simpleFormRToFGV $ validateForm va $ D <$> buildForm' Nothing Nothing
+  let blankBuilder = formToFGV $ validateForm va $ D <$> buildForm' Nothing Nothing
   in case msDyn of
     Nothing -> constDyn (MDWrapped False ("Date",mFN) blankBuilder)
     Just ddtDyn ->
@@ -221,13 +221,13 @@ buildDate va mFN msDyn =
             (matched,mDay) = case ms of
                                (D day) -> (True,Just day)
                                _       -> (False, Nothing)
-            bldr = simpleFormRToFGV $ validateForm va $ D <$> buildForm' Nothing (constDyn <$> mDay)
+            bldr = formToFGV $ validateForm va $ D <$> buildForm' Nothing (constDyn <$> mDay)
       in f <$> ddtDyn
 
-buildDateTime::SimpleFormInstanceC t m=>FormValidator DateOrDateTime ->
-  Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (MDWrapped (SFR t m) (Dynamic t) SFValidation DateOrDateTime)
+buildDateTime::FormInstanceC t m=>FormValidator DateOrDateTime ->
+  Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (FMDWrapped t m DateOrDateTime)
 buildDateTime va mFN msDyn =
-  let blankBuilder = simpleFormRToFGV $ validateForm va $ DT <$> buildForm' Nothing Nothing
+  let blankBuilder = formToFGV $ validateForm va $ DT <$> buildForm' Nothing Nothing
   in case msDyn of
     Nothing -> constDyn (MDWrapped False ("DateTime",mFN) blankBuilder)
     Just ddtDyn ->
@@ -235,11 +235,11 @@ buildDateTime va mFN msDyn =
             (matched,mDateTime) = case ms of
                                     (DT dt) -> (True,Just dt)
                                     _       -> (False, Nothing)
-            bldr = simpleFormRToFGV $ validateForm va $ DT <$> buildForm' Nothing (constDyn <$> mDateTime)
+            bldr = formToFGV $ validateForm va $ DT <$> buildForm' Nothing (constDyn <$> mDateTime)
       in f <$> ddtDyn
 
-instance SimpleFormInstanceC t m=>FormBuilder t m DateOrDateTime where
-  buildForm va mFN = fgvToSimpleFormR . B.buildAFromConList [buildDate,buildDateTime] va mFN
+instance FormInstanceC t m=>FormBuilder t m DateOrDateTime where
+  buildForm va mFN = fgvToForm . B.buildAFromConList [buildDate,buildDateTime] va mFN
 
 -- put some data in for demo purposes
 
@@ -253,27 +253,21 @@ testMap = M.fromList [("A",1),("B",2)]
 testMap2::M.Map T.Text (M.Map T.Text T.Text)
 testMap2 = M.fromList [("MapA",M.fromList [("A","a"),("B","b")]),("MapB",M.fromList [("C","c"),("E","e")])]
 
--- Natural Transformation to the rescue
-avMapToMap::AccValidation a (M.Map k v) -> M.Map k v
-avMapToMap (AccFailure _) = M.empty
-avMapToMap (AccSuccess m) = m
-
-testComplexForm::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m -> m ()
+testComplexForm::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
 --  cDynM <- avMapToMap . fmap AccSuccess <$> runReaderT (buildLBEMapLVWK Nothing (constDyn testMap)) cfg
 --  cDynM <- runSimpleFormR cfg (makeSimpleFormR $ (DynValidation . fmap AccSuccess <$> buildLBEMapLVWK Nothing (constDyn testMap))) 
-  cDynM <- flexFill LayoutRight $ makeSimpleForm cfg (Just $ testMap)
+  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just $ testMap)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed C:"
   el "p" blank
-  -- the avMapToMap is necessary to fix some weirdness with the Maybe instance and the dynamics. 
   _ <- flexFill LayoutRight $ observeDynamic cfg (avToMaybe <$> unDynValidation cDynM)
   return ()
 
-complexFormTab::SimpleFormInstanceC t m=>SimpleFormConfiguration t m -> TabInfo t m ()
+complexFormTab::FormInstanceC t m=>FormConfiguration t m -> TabInfo t m ()
 complexFormTab cfg = TabInfo "complexFormTab" "Complex Example" $ testComplexForm cfg
 
 
@@ -285,7 +279,7 @@ flowTestWidget n = do
   forDyn allTrueDyn $ \b -> if b then "All Checked!" else "Some Unchecked."
 
 
-testFlow::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m->m ()
+testFlow::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m->m ()
 testFlow cfg = do
   el "p" $ text ""
   el "h2" $ text "Observe a \"flow\", that is directly see input and output of a function of type WidgetMonad m=>a -> m b"
@@ -293,10 +287,10 @@ testFlow cfg = do
   _ <- observeFlow cfg flowTestWidget 2
   return ()
 
-flowTestTab::SimpleFormInstanceC t m=>SimpleFormConfiguration t m -> TabInfo t m ()
+flowTestTab::FormInstanceC t m=>FormConfiguration t m -> TabInfo t m ()
 flowTestTab cfg = TabInfo "flowTestTab" "Flow Example" $ testFlow cfg
 
-test::(SimpleFormInstanceC t m, MonadIO (PushM t))=>SimpleFormConfiguration t m -> m ()
+test::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m -> m ()
 test cfg = do
   el "p" (text "")
   el "br" blank
@@ -312,21 +306,21 @@ test cfg = do
 linkedCss::CssLinks
 linkedCss = CssLinks []
 
-customizeConfig::SimpleFormConfiguration t m -> SimpleFormConfiguration t m
+customizeConfig::FormConfiguration t m -> FormConfiguration t m
 customizeConfig = id
 
 includedCss = def --bootstrapSFIncludedCss
 toLink = linkedCss <> (cssToLink includedCss)
 toEmbed = flexCssBS <> tabCssBS <> (cssToEmbed includedCss)
 
-simpleFormMain  :: JSM ()
-simpleFormMain  =
-  mainWidgetWithHead (headElt "simpleForm demo" toLink toEmbed) $ test (customizeConfig def)
+formBuilderMain  :: JSM ()
+formBuilderMain  =
+  mainWidgetWithHead (headElt "formBuilder demo" toLink toEmbed) $ test (customizeConfig def)
 
 
 #ifdef USE_WKWEBVIEW
 main::IO ()
-main = run simpleFormMain
+main = run formBuilderMain
 #endif
 
 #ifdef USE_WARP
@@ -334,10 +328,10 @@ main::IO ()
 main = do
   let port :: Int = 3702
   pHandle <- SP.spawnProcess "open" ["http://localhost:" ++ show port]
-  run port simpleFormMain
+  run port formBuilderMain
 #endif
 
 #ifdef USE_GHCJS
 main :: IO ()
-main = simpleFormMain
+main = formBuilderMain
 #endif

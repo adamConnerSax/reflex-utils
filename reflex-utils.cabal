@@ -37,6 +37,7 @@ library
   exposed-modules:
                   Reflex.Dom.Contrib.Layout.All
                   Reflex.Dom.Contrib.ReflexConstraints
+                  Reflex.Dom.Contrib.CssUtils
                   Reflex.Dom.Contrib.Layout.Types
                   Reflex.Dom.Contrib.Layout.ClayUtils
                   Reflex.Dom.Contrib.Layout.FlexLayout
@@ -48,15 +49,14 @@ library
 --                  Reflex.Dom.Contrib.Layout.GridConfigs
 --                  Reflex.Dom.Contrib.Layout.GridLayout                    
 --                  Reflex.Dom.Contrib.StackedMonadWidget             
-                  Reflex.Dom.Contrib.SimpleForm
-                  Reflex.Dom.Contrib.SimpleForm.DynValidation
-                  Reflex.Dom.Contrib.SimpleForm.Configuration
-                  Reflex.Dom.Contrib.SimpleForm.Builder
-                  Reflex.Dom.Contrib.SimpleForm.Instances
-                  Reflex.Dom.Contrib.SimpleForm.AllDefault
-                  Reflex.Dom.Contrib.CssUtils
-                  Reflex.Dom.Contrib.SimpleForm.Instances.Containers
-                  Reflex.Dom.Contrib.SimpleForm.Instances.Basic
+                  Reflex.Dom.Contrib.FormBuilder
+                  Reflex.Dom.Contrib.FormBuilder.DynValidation
+                  Reflex.Dom.Contrib.FormBuilder.Configuration
+                  Reflex.Dom.Contrib.FormBuilder.Builder
+                  Reflex.Dom.Contrib.FormBuilder.Instances
+                  Reflex.Dom.Contrib.FormBuilder.AllDefault
+                  Reflex.Dom.Contrib.FormBuilder.Instances.Containers
+                  Reflex.Dom.Contrib.FormBuilder.Instances.Basic
   other-modules:
 
   if flag(wkwebview) || flag(warp)
@@ -100,10 +100,10 @@ library
   ghc-prof-options: -fprof-auto
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2       
 
-executable reflex-utils-simpleForm
+executable reflex-utils-formBuilder
   if flag(warp)
     buildable: False
-  hs-source-dirs:      app/simpleForm
+  hs-source-dirs:      app/formBuilder
   main-is:             Main.hs
   other-modules:       Css
   ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
@@ -170,10 +170,10 @@ executable reflex-utils-layout
   default-language:    Haskell2010
 
 
-executable reflex-utils-simpleForm-warp
+executable reflex-utils-formBuilder-warp
   if flag(wkwebview)
     buildable: False
-  hs-source-dirs:      app/simpleForm
+  hs-source-dirs:      app/formBuilder
   main-is:             Main.hs
   other-modules:       Css
   ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2

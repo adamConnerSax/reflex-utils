@@ -7,7 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances  #-}
-module Reflex.Dom.Contrib.SimpleForm.AllDefault (DefaultConfigurationC) where
+module Reflex.Dom.Contrib.FormBuilder.AllDefault (DefaultConfigurationC) where
 
 -- | A useful default config for quick form building
 -- | Also serves as an example for building others
@@ -27,10 +27,10 @@ import           Reflex.Dom.Contrib.Layout.Types               (CssClasses (..),
 import           Reflex.Dom.Contrib.CssUtils                   (CssLinks (..))
 import           Reflex.Dom.Contrib.Layout.ClayUtils           (cssToBS)
 import           Reflex.Dom.Contrib.ReflexConstraints          (MonadWidgetExtraC)
-import           Reflex.Dom.Contrib.SimpleForm.Builder
-import           Reflex.Dom.Contrib.SimpleForm.Configuration
-import           Reflex.Dom.Contrib.SimpleForm.Instances       (sfWidget)
-import           Reflex.Dom.Contrib.SimpleForm.Instances.Basic (SimpleFormInstanceC)
+import           Reflex.Dom.Contrib.FormBuilder.Builder
+import           Reflex.Dom.Contrib.FormBuilder.Configuration
+import           Reflex.Dom.Contrib.FormBuilder.Instances       (formWidget)
+import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 
 import qualified DataBuilder                                   as B
 
@@ -56,19 +56,21 @@ import qualified Data.Text                                     as T
 import           Prelude                                       hiding (div, rem,
                                                                 span)
 
-instance Default (SimpleFormIncludedCss) where
-  def = SimpleFormIncludedCss defaultCss (CssLinks [])
+instance Default (FormIncludedCss) where
+  def = FormIncludedCss defaultCss (CssLinks [])
 
 defaultCss::ByteString
-defaultCss = cssToBS simpleFormDefaultCss <> cssToBS simpleObserverDefaultCss
+defaultCss = cssToBS formDefaultCss <> cssToBS observerDefaultCss
 
 
-type DefaultConfigurationC t m =
-  (SimpleFormC t m,
+type DefaultConfigurationC t m = FormInstanceC t m
+{-
+  (FormCC t m,
    RD.PostBuild t m,
    MonadFix m,
    MonadWidgetExtraC t m,
-   SimpleFormInstanceC t m)
+   FormInstanceC t m)
+-}
 
 byFormType::FormType->a->a->a
 byFormType ft ifInteractive ifReadOnly = case ft of
@@ -88,34 +90,34 @@ instance Default (CssConfiguration) where
 instance Default (InputElementConfig t) where
   def = InputElementConfig Nothing Nothing Nothing
 
-defLayoutWrapper::RD.DomBuilder t m=>FormType->SFLayoutF t m
+defLayoutWrapper::RD.DomBuilder t m=>FormType->FLayoutF t m
 defLayoutWrapper _ w = do
   classes <- wrapperClasses
   RD.divClass (toCssString classes) w
 
-defLayoutItem::RD.DomBuilder t m=>FormType->SFLayoutF t m
+defLayoutItem::RD.DomBuilder t m=>FormType->FLayoutF t m
 defLayoutItem _ w = do
   classes <- itemClasses
   liftLF (flexItem' classes) w
 
-defLayoutOriented::RD.DomBuilder t m=>FormType->LayoutOrientation->SFLayoutF t m
+defLayoutOriented::RD.DomBuilder t m=>FormType->LayoutOrientation->FLayoutF t m
 defLayoutOriented _ LayoutHorizontal = liftLF flexRow
 defLayoutOriented _ LayoutVertical = liftLF flexCol
 
-defLayoutFill::RD.DomBuilder t m=>FormType->LayoutDirection->SFLayoutF t m
+defLayoutFill::RD.DomBuilder t m=>FormType->LayoutDirection->FLayoutF t m
 defLayoutFill _ d = liftLF (flexFill d)
 
-defLayoutCentered::RD.DomBuilder t m=>FormType->LayoutOrientation->SFLayoutF t m
+defLayoutCentered::RD.DomBuilder t m=>FormType->LayoutOrientation->FLayoutF t m
 defLayoutCentered _ o = liftLF (flexCenter o)
 
-defLayoutCollapsible::RD.DomBuilder t m=>FormType->T.Text->CollapsibleInitialState->SFLayoutF t m
+defLayoutCollapsible::RD.DomBuilder t m=>FormType->T.Text->CollapsibleInitialState->FLayoutF t m
 defLayoutCollapsible _ t is = liftLF (collapsibleWidget t is)
 
 instance RD.DomBuilder t m=>Default (LayoutConfiguration t m) where
   def = LayoutConfiguration defLayoutWrapper defLayoutItem defLayoutOriented defLayoutFill defLayoutCentered defLayoutCollapsible
 
-instance DefaultConfigurationC t m=> Default (SimpleFormConfiguration t m) where
-  def = SimpleFormConfiguration Interactive def def def def
+instance DefaultConfigurationC t m=> Default (FormConfiguration t m) where
+  def = FormConfiguration Interactive def def def def
 
 collapsibleWidget::RD.DomBuilder t m=>T.Text->CollapsibleInitialState->m a->m a
 collapsibleWidget summary cis w =
@@ -126,32 +128,32 @@ collapsibleWidget summary cis w =
 instance DefaultConfigurationC t m => Default (BuilderFunctions t m) where
   def = BuilderFunctions defFailureF defSumF defDynamicDiv
 
-defDynamicDiv::(RD.DomBuilder t m, RD.PostBuild t m)=>DynAttrs t -> SFLayoutF t m
+defDynamicDiv::(RD.DomBuilder t m, RD.PostBuild t m)=>DynAttrs t -> FLayoutF t m
 defDynamicDiv dynAttrs = liftLF $ RD.elDynAttr "div" dynAttrs
 
-defFailureF::SimpleFormC t m=>T.Text->SFRW t m a
+defFailureF::RD.DomBuilder t m=>T.Text->FRW t m a
 defFailureF msg = do
   RD.text msg
   return dynValidationNothing
 
-data SFRPair t m a = SFRPair { sfrpCN::B.ConName, sfrpV::SFRW t m a }
+data FRPair t m a = FRPair { frpCN::B.ConName, frpV::FRW t m a }
 
-instance Eq (SFRPair t m a) where
-  (SFRPair a _) == (SFRPair b _) = a == b
+instance Eq (FRPair t m a) where
+  (FRPair a _) == (FRPair b _) = a == b
 
-defSumF::DefaultConfigurationC t m=>[(B.ConName,SFRW t m a)]->Maybe B.ConName->SFRW t m a
+defSumF::DefaultConfigurationC t m=>[(B.ConName,FRW t m a)]->Maybe B.ConName->FRW t m a
 defSumF conWidgets mDefCon = do
   let conNames = fst . unzip $ conWidgets
-      getSFRP::B.ConName->[(B.ConName,SFRW t m a)]->SFRPair t m a
-      getSFRP cn = SFRPair cn . fromJust . M.lookup cn . M.fromList
-      pft (x,y) = SFRPair x y
-      defPair = maybe (pft $ head conWidgets) (`getSFRP` conWidgets) mDefCon
+      getFRP::B.ConName->[(B.ConName,FRW t m a)]->FRPair t m a
+      getFRP cn = FRPair cn . fromJust . M.lookup cn . M.fromList
+      pft (x,y) = FRPair x y
+      defPair = maybe (pft $ head conWidgets) (`getFRP` conWidgets) mDefCon
   validClasses <- validDataClasses
   let attrsDyn = R.constDyn (cssClassAttr validClasses <> titleAttr "Constructor")
       wc = WidgetConfig RD.never defPair attrsDyn
-  sfRow $ do
-    sfrpCW <- sfItemL $ (sfWidget id (T.pack . sfrpCN) Nothing wc $ \wc' -> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getSFRP` conWidgets) wc')
-    unSF $ switchingSFR (makeSimpleFormR . sfrpV) defPair (R.updated sfrpCW)
+  fRow $ do
+    frpCW <- fItemL $ (formWidget id (T.pack . frpCN) Nothing wc $ \wc' -> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getFRP` conWidgets) wc')
+    unF $ switchingForm (makeForm . frpV) defPair (R.updated frpCW)
 
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 
@@ -168,7 +170,7 @@ cssSolidTextBox m cBox cText = do
   fontColor cText
 
 -- some styles
-simpleFormBoxes = do
+formBoxes = do
   ".sf-outline-black" ? cssOutlineTextBox 0.1 black black
   ".sf-outline-red" ? cssOutlineTextBox 0.1 red black
   ".sf-outline-blue" ? cssOutlineTextBox 0.1 blue black
@@ -176,14 +178,14 @@ simpleFormBoxes = do
   ".sf-black-on-gray" ? cssSolidTextBox 0.1 gray black
   ".sf-white-on-gray" ? cssSolidTextBox 0.1 gray white
 
-isSimpleFormContainer::Selector
-isSimpleFormContainer = ".sf-container"
+isFormContainer::Selector
+isFormContainer = ".sf-container"
 
-isSimpleFormItem::Selector
-isSimpleFormItem = div # ".sf-item"
+isFormItem::Selector
+isFormItem = div # ".sf-item"
 
-simpleFormElements = do
-  isSimpleFormContainer ? do
+formElements = do
+  isFormContainer ? do
     fontSize (rem 1)
     border solid (px 1) black
     sym borderRadius (rem 0.2)
@@ -206,7 +208,7 @@ simpleFormElements = do
     input # ".sf-invalid" ? cssOutlineTextBox 0.1 red black -- invalid
     span ? do
       verticalAlign middle
-  isSimpleFormItem ? do
+  isFormItem ? do
     label ? do
       display flex
       flexDirection Flexbox.row
@@ -218,21 +220,21 @@ simpleFormElements = do
       span |+ star ? do
         Flexbox.flex 2 0 auto --sfInputWidth
 
-simpleFormDefaultCss = do
-  simpleFormBoxes
-  simpleFormElements
+formDefaultCss = do
+  formBoxes
+  formElements
 
-isSimpleObserver = C.div # ".sf-observer"
+isObserver = C.div # ".sf-observer"
 
-isSimpleObserverItem::Selector
-isSimpleObserverItem = C.div # ".sf-observer-item"
+isObserverItem::Selector
+isObserverItem = C.div # ".sf-observer-item"
 
 
-simpleObserverDefaultCss = do
-  isSimpleObserver ? do
+observerDefaultCss = do
+  isObserver ? do
     background ghostwhite
     summary ? cursor pointer
-    isSimpleObserverItem ? do
+    isObserverItem ? do
       cssSolidTextBox 0.1 lightslategrey black
       sym padding (rem 0.1)
 
