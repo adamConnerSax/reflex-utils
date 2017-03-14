@@ -31,7 +31,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , makeForm
        , unF
        , VFormBuilderC
-       , FormC
+--     , FormC
        , CollapsibleInitialState(..)
        , runForm
        , module ReflexExport
@@ -97,7 +97,7 @@ import           Language.Haskell.TH
 -- This is necessary because this functor and applicative are different from that of SFRW
 type Form t m a = Compose (FR t m) (DynValidation t) a
 
-type FormC t m = (RD.DomBuilder t m, R.MonadHold t m)
+--type FormC t m = (RD.DomBuilder t m, R.MonadHold t m -})
 
 makeForm::FRW t m a -> Form t m a
 makeForm = Compose
@@ -119,7 +119,7 @@ validateForm::(Functor m, R.Reflex t)=>FormValidator a->Form t m a->Form t m a
 validateForm va = makeForm . fmap DynValidation . B.unFGV . B.validateFGV va . B.FGV . fmap unDynValidation . unF
 
 
-class (FormC t m, RD.PostBuild t m) => FormBuilder t m a where
+class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
   buildForm::FormValidator a->Maybe FieldName->Maybe (R.Dynamic t a)->Form t m a
   default buildForm::(GBuilder (FR t m) (R.Dynamic t) (FValidation) a)
                    =>FormValidator a->Maybe FieldName->Maybe (R.Dynamic t a)->Form t m a
@@ -130,7 +130,7 @@ type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable (FValidation) a)
 buildForm'::VFormBuilderC t m a=>Maybe FieldName->Maybe (R.Dynamic t a)->Form t m a
 buildForm' = buildForm B.validator
 
-instance (FormC t m, FormBuilder t m a)=>B.Builder (FR t m) (R.Dynamic t) (FValidation) a where
+instance (RD.DomBuilder t m, FormBuilder t m a)=>B.Builder (FR t m) (R.Dynamic t) (FValidation) a where
   buildValidated va mFN = B.FGV . fmap unDynValidation . unF . buildForm va mFN
 
 runForm::Monad m=>FormConfiguration t m->Form t m a->m (DynValidation t a)
@@ -141,19 +141,19 @@ runForm' cfg fra f = runReaderT (fWrapper $ unF fra >>= lift . f) cfg
 
 
 
-switchingForm::FormC t m=>(a->Form t m b)->a->R.Event t a->Form t m b
+switchingForm::(RD.DomBuilder t m, R.MonadHold t m)=>(a->Form t m b)->a->R.Event t a->Form t m b
 switchingForm widgetGetter widgetHolder0 newWidgetHolderEv = makeForm $ do
   cfg <- ask
   let f = runForm cfg . widgetGetter
   lift $ joinDynOfDynValidation <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)
 
 
-dynamicForm::(FormC t m, VFormBuilderC t m a)=>FormConfiguration t m->Maybe a->m (DynValidation t a)
+dynamicForm::(RD.DomBuilder t m, VFormBuilderC t m a)=>FormConfiguration t m->Maybe a->m (DynValidation t a)
 dynamicForm cfg ma = runForm cfg $ buildForm' Nothing (R.constDyn <$> ma)
 
 
 --TODO: is attachPromptlyDynWithMaybe the right thing here?
-formWithSubmitAction::(FormC t m, VFormBuilderC t m a)
+formWithSubmitAction::(RD.DomBuilder t m, VFormBuilderC t m a)
                     =>FormConfiguration t m
                     -> Maybe a -- initial values
                     -> m (RD.Event t ()) -- submit control
@@ -165,16 +165,17 @@ formWithSubmitAction cfg ma submitWidget = do
   runForm' cfg (buildForm' Nothing (R.constDyn <$> ma)) f
 
 
-observeDynamic::(FormC t m, VFormBuilderC t m a)=>FormConfiguration t m->R.Dynamic t a->m (DynValidation t a)
+observeDynamic::(RD.DomBuilder t m, VFormBuilderC t m a)=>FormConfiguration t m->R.Dynamic t a->m (DynValidation t a)
 observeDynamic cfg = runForm (setToObserve cfg) . buildForm' Nothing . Just
 
 
-observeWidget::(FormC t m ,VFormBuilderC t m a)=>FormConfiguration t m->m a->m (DynValidation t a)
+observeWidget::(RD.DomBuilder t m ,VFormBuilderC t m a)=>FormConfiguration t m->m a->m (DynValidation t a)
 observeWidget cfg wa =
   runForm (setToObserve cfg) . makeForm $ lift wa >>= unF . buildForm' Nothing . Just . R.constDyn
 
 
-observeFlow::(FormC t m
+observeFlow::(RD.DomBuilder t m
+             , R.MonadHold t m
              , MonadFix m
              , VFormBuilderC t m a
              , VFormBuilderC t m b)
@@ -250,7 +251,7 @@ componentTitle mFN mType =
   in if isJust mFN && isJust mType then fnS <> "::" <> tnS else fnS <> tnS
 
 
-instance (FormC t m, RD.PostBuild t m)=> B.Buildable (FR t m) (R.Dynamic t) (FValidation) where
+instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m)=> B.Buildable (FR t m) (R.Dynamic t) (FValidation) where
   bFail msg = B.FGV . fmap unDynValidation $ do
     failF <- failureF . _builderFunctions <$> ask
     failF $ T.pack msg

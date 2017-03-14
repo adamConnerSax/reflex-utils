@@ -19,7 +19,7 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        , traceDynAsEv
        , buildDynReadMaybe
        , buildDynReadable
-       , BasicC
+--       , BasicC
        , FormInstanceC
        , buildFormIso
        ) where
@@ -67,21 +67,21 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder
 showText::Show a=>a->T.Text
 showText = T.pack . show
 
-type BasicC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
-type FormInstanceC t m = (FormC t m, MonadWidgetExtraC t m, RD.PostBuild t m, MonadFix m)
+type WidgetC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
+type FormInstanceC t m = (WidgetC t m, MonadWidgetExtraC t m, RD.PostBuild t m)
 --type VBuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
 
 instance {-# OVERLAPPABLE #-} B.Validatable (FValidation) a where
   validator a = AccSuccess a
 
-readOnlyW::(BasicC t m, RD.PostBuild t m)=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
+readOnlyW::(RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m)=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
 readOnlyW f wc = do
   da <- R.holdDyn (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
   let ds = f <$> da
   RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
   return da
 
-formWidget::forall t m a b.(R.Reflex t,FormC t m, RD.PostBuild t m,MonadFix m)
+formWidget::forall t m a b.(R.Reflex t,RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m,MonadFix m)
   =>(a->b) -- map in/out type to widget type (int to text, e.g.,)
   ->(a->T.Text) -- show in/out type
   ->Maybe FieldName -- field name ?
@@ -108,7 +108,7 @@ formWidget f fString mFN wc widget = do
         Just (LabelConfig t attrs) -> RD.elAttr "label" attrs  $ (RD.el "span" $ RD.text t) >> iw
   lift . labeledWidget $ (fmap f <$> (if isObserver then readOnlyW fString wcAll else widget wcInput))
 
-formWidget'::(R.Reflex t,FormC t m, RD.PostBuild t m,MonadFix m)
+formWidget'::(RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m,MonadFix m)
   =>R.Event t a -- update value events
   ->b -- initial value to display in b-widget
   ->(a->b) -- map in/out type to widget type
@@ -289,13 +289,13 @@ instance FormInstanceC t m=>FormBuilder t m Day where
 
 
 -- uses generics to build instances
-instance (FormC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a) 
+instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a) 
 
-instance (FormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (Either a b)
+instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (Either a b)
 
 -- if two things are Isomorphic, we can use one to build the other
 -- NB: Isomorphic sum types will end up using the constructors, etc. of the one used to bootstrap 
-buildFormIso::(FormC t m, VFormBuilderC t m a)=>Iso' a b->FormValidator b->Maybe FieldName->Maybe (R.Dynamic t b)->Form t m b
+buildFormIso::(FormInstanceC t m, VFormBuilderC t m a)=>Iso' a b->FormValidator b->Maybe FieldName->Maybe (R.Dynamic t b)->Form t m b
 buildFormIso isoAB vb mFN mbDyn =
   let a2b = view isoAB
       b2a = view $ from isoAB
@@ -310,7 +310,7 @@ eitherToAV (Left x) = AccFailure x
 eitherToAV (Right x) = AccSuccess x
 
 -- NB: Here, AccSuccess will appear as Right and AccFailure as Left in the forms.  To Avoid this we need to build a specific instance.
-instance (FormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (AccValidation a b) where
+instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (AccValidation a b) where
   buildForm = buildFormIso (iso eitherToAV avToEither)
 
 -- | Enums become dropdowns
@@ -324,9 +324,12 @@ instance {-# OVERLAPPABLE #-} (FormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
 -- generics for (,) since mkDyn is not an optimization here
-instance (FormC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
+instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
 
-instance (FormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c)=>FormBuilder t m (a,b,c) where
+instance (FormInstanceC t m
+         , VFormBuilderC t m a
+         , VFormBuilderC t m b
+         , VFormBuilderC t m c)=>FormBuilder t m (a,b,c) where
   buildForm va mFN mTupDyn = validateForm va . makeForm $ do
       maW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
       mbW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
@@ -334,7 +337,11 @@ instance (FormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m
       return $ (,,) <$> maW <*> mbW <*> mcW
 
 
-instance (FormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d)=>FormBuilder t m (a,b,c,d) where
+instance (FormInstanceC t m
+         , VFormBuilderC t m a
+         , VFormBuilderC t m b
+         , VFormBuilderC t m c
+         , VFormBuilderC t m d)=>FormBuilder t m (a,b,c,d) where
   buildForm va mFN mTupDyn = validateForm va . makeForm $ do
       maW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
       mbW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
@@ -342,7 +349,12 @@ instance (FormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m
       mdW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel4) mTupDyn
       return $ (,,,) <$> maW <*> mbW <*> mcW <*> mdW
 
-instance (FormC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d, VFormBuilderC t m e)=>FormBuilder t m (a,b,c,d,e) where
+instance (FormInstanceC t m
+         , VFormBuilderC t m a
+         , VFormBuilderC t m b
+         , VFormBuilderC t m c
+         , VFormBuilderC t m d
+         , VFormBuilderC t m e)=>FormBuilder t m (a,b,c,d,e) where
   buildForm va mFN mTupDyn = validateForm va . makeForm $ do
       maW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
       mbW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
