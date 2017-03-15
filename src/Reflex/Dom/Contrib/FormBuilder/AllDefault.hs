@@ -184,6 +184,13 @@ isFormContainer = ".sf-container"
 isFormItem::Selector
 isFormItem = div # ".sf-item"
 
+isValidData::Selector
+isValidData = div # ".sf-valid"
+
+isInvalidData::Selector
+isInvalidData = div # ".sf-invalid"
+
+
 formElements = do
   isFormContainer ? do
     fontSize (rem 1)
@@ -224,6 +231,7 @@ formDefaultCss = do
   formBoxes
   formElements
 
+isObserver::Selector
 isObserver = C.div # ".sf-observer"
 
 isObserverItem::Selector
@@ -234,7 +242,8 @@ observerDefaultCss = do
   isObserver ? do
     background ghostwhite
     summary ? cursor pointer
-    isObserverItem ? do
-      cssSolidTextBox 0.1 lightslategrey black
+--    isFormItem ? do
+--      cssSolidTextBox 0.1 lightslategrey black
+    isValidData ? do
+      cssOutlineTextBox 0.1 black black
       sym padding (rem 0.1)
-
