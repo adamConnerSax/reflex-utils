@@ -162,14 +162,14 @@ parseAndValidate mFN parse va t =
 -- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
 -- that's the value we want not the tagged current value. 
 dynAsEv::RD.PostBuild t m=>R.Dynamic t a->m (R.Event t a)
-dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tagPromptlyDyn dyn x]) <$> RD.getPostBuild
+dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD.getPostBuild
 
 traceDynAsEv::RD.PostBuild t m=>(a->String)->R.Dynamic t a->m (R.Event t a)
 traceDynAsEv f dyn = do
   postbuild <- RD.getPostBuild
   let f' prefix x = prefix ++ f x
       upEv = R.traceEventWith (f' "update-") $ R.updated dyn
-      pbEv = R.traceEventWith (f' "postbuild-") $ R.tagPromptlyDyn dyn postbuild
+      pbEv = R.traceEventWith (f' "postbuild-") $ R.tag (R.current dyn) postbuild
   return $ R.leftmost [upEv, pbEv] 
 
 
