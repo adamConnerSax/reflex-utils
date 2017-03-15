@@ -167,8 +167,8 @@ instance (FormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a,Sho
   buildForm va mFN mfaDyn =  validateForm va . makeForm  $ do
     fType <- getFormType
     case fType of
-      Interactive ->  unF $ buildListViewable mapLV mFN mfaDyn --toBuildF buildLBEMapLVWK mFN mfaDyn
-      ObserveOnly ->  unF $ buildListViewable mapLV mFN mfaDyn --toBuildF buildLBEMapLWK mFN mfaDyn
+      Interactive ->  unF $ buildLBAddDelete mapLV mFN mfaDyn --toBuildF buildLBEMapLVWK mFN mfaDyn
+      ObserveOnly ->  unF $ buildLBEditOnly mapLV mFN mfaDyn --toBuildF buildLBEMapLWK mFN mfaDyn
       
 --  buildForm = buildAdjustableContainer (SFAdjustableI mapSFA mapSFD)
 --  buildForm va mFN ma = validateForm va . makeSimpleFormR $ toBuildF buildLBEMapLVWK mFN ma
@@ -240,21 +240,22 @@ toBuildF lbbf mFN mMapDyn =
 -}
 
 
-
+data ContainerFormType = EditOnly | AddDelete
 
 data ListViewable t m f a k v = ListViewable
                                {
                                   toMap::f a->M.Map k v
                                ,  fromMap::M.Map k v->f a
                                ,  itemName::k->a->T.Text
-                               ,  editOneW::ElemWidget t m k v
+                               ,  elemW::ElemWidget t m k v
+                               ,  newOneWF::M.Map k v->FRW t m (k,v) -- might need existing map to choose a new key
                                }
 
 mapLV::(FormInstanceC t m
        , Ord k, Show k
        , VFormBuilderC t m k
        , VFormBuilderC t m v)=>ListViewable t m (M.Map k) v k v
-mapLV = ListViewable id id (\k _ ->T.pack $ show k) simpleEditWidget
+mapLV = ListViewable id id (\k _ ->T.pack $ show k) simpleEditWidget (const . unF $ buildForm' Nothing Nothing)
 
 type ElemWidget t m k v = k->R.Dynamic t v->FRW t m v 
 type LBWidget t m k v = k->R.Dynamic t v->FR t m (R.Dynamic t (Maybe (FValidation v)))
@@ -262,7 +263,7 @@ type LBWidget t m k v = k->R.Dynamic t v->FR t m (R.Dynamic t (Maybe (FValidatio
 elemWidgetToLBWidget::(R.Reflex t, Functor m)=>ElemWidget t m k v->LBWidget t m k v
 elemWidgetToLBWidget ew k vDyn = fmap Just . unDynValidation <$> ew k vDyn
 
-buildListViewable::(FormInstanceC t m
+buildLBEditOnly::(FormInstanceC t m
                    , Ord k
                    , VFormBuilderC t m k
                    , VFormBuilderC t m v)
@@ -270,10 +271,60 @@ buildListViewable::(FormInstanceC t m
   ->Maybe FieldName
   ->Maybe (R.Dynamic t (f a))
   ->Form t m (f a)
-buildListViewable (ListViewable to from _ eW) mFN faDyn =  makeForm $ do
+buildLBEditOnly (ListViewable to from _ eW _) mFN faDyn =  makeForm $ do
   let mapDyn0 = maybe (R.constDyn M.empty) (fmap to) faDyn
   fmap from <$> buildLBEMapLWK' (elemWidgetToLBWidget eW) mFN mapDyn0
-  
+
+buildLBDelete::(FormInstanceC t m
+                   , Ord k
+                   , VFormBuilderC t m k
+                   , VFormBuilderC t m v)
+  =>ListViewable t m f a k v
+  ->Maybe FieldName
+  ->Maybe (R.Dynamic t (f a))
+  ->Form t m (f a)
+buildLBDelete (ListViewable to from _ eW _) mFN faDyn = makeForm $ do
+  let eW' = editAndDeleteElemWidget eW (R.constDyn True)
+      mapDyn0 = maybe (R.constDyn M.empty) (fmap to) faDyn
+  fmap from <$> buildLBEMapLWK' eW' mFN mapDyn0      
+
+
+buildLBAddDelete::(FormInstanceC t m
+                  , Ord k
+                  , VFormBuilderC t m k
+                  , VFormBuilderC t m v)
+  =>ListViewable t m f a k v
+  ->Maybe FieldName
+  ->Maybe (R.Dynamic t (f a))
+  ->Form t m (f a)
+buildLBAddDelete (ListViewable to from _ eW nWF) mFN faDyn = makeForm $ fCol $ mdo
+  let eW' k v0 vEv = R.holdDyn v0 vEv >>= \vDyn -> editAndDeleteElemWidget eW (R.constDyn True) k vDyn
+      mapDyn0 = maybe (R.constDyn M.empty) (fmap to) faDyn
+      diffMap' avOld new = case avOld of
+        AccSuccess old -> RD.diffMapNoEq old new
+        AccFailure _ -> Just <$> new
+  newInputMapEv <- dynAsEv mapDyn0 
+  updateMapDyn <- fItem $ RD.listWithKeyShallowDiff M.empty diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
+  addEv <- fRow $ mdo
+    let pairWidgetEv = R.fmapMaybe (fmap nWF) $ R.tag (R.current $ avToMaybe . sequenceA <$> mapDyn) $ R.leftmost [() <$ newPairEv, () <$ newInputMapEv]
+    addPairDV <- fRow $ joinDynOfDynValidation <$> RD.widgetHold (return $ dynValidationNothing) pairWidgetEv -- DynValidation (k,v)
+    let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
+    addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
+    let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
+    return newPairEv
+  let newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv -- Event t (Map k (Maybe v))
+      insertDiffEv = fmap Just . uncurry M.singleton <$> addEv  
+      diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
+      mapEditsFVEv = R.updated . join $ R.distributeMapOverDynPure <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v)))
+      editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
+  mapDyn <- R.holdDyn M.empty $ R.leftmost
+            [
+              fmap AccSuccess <$> newInputMapEv
+            , editedMapEv
+            ]
+  return . DynValidation $ fmap from . sequenceA <$> mapDyn
+
+
 
 dynValidationToDynMaybe::R.Reflex t=>DynValidation t a -> R.Dynamic t (Maybe a)
 dynValidationToDynMaybe = fmap avToMaybe . unDynValidation 
@@ -299,6 +350,33 @@ simpleEditWidget k vDyn = do
     fItem . unF $ showKey k
     fItem . unF $ buildForm' Nothing (Just vDyn)
 
+
+editAndDeleteElemWidget::(FormInstanceC t m
+                         , VFormBuilderC t m k
+                         , VFormBuilderC t m v)
+  =>ElemWidget t m k v
+  ->R.Dynamic t Bool
+  ->LBWidget t m k v
+editAndDeleteElemWidget eW visibleDyn k vDyn = mdo
+  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
+  (visibleDyn',outDyn') <- RD.elDynAttr "div" widgetAttrs . fRow $ do
+    resDyn <- fItem $ eW k vDyn -- DynValidation t v
+    resEv <- dynAsEv $ unDynValidation resDyn -- Event t (FValidation v)  
+    delButtonEv <- fItem $ buttonNoSubmit' "-"
+    selEv <- dynAsEv visibleDyn
+    visDyn <-  R.holdDyn True $ R.leftmost
+               [
+                 selEv
+               , False <$ delButtonEv -- delete button pressed, so hide
+               , True <$ resEv -- value updated so make sure it's visible (in case of re-use of deleted key)
+               ]
+    outDyn <- R.holdDyn Nothing $ R.leftmost
+              [
+                Just <$> resEv
+              , Nothing <$ delButtonEv
+              ]
+    return (visDyn,outDyn)
+  return outDyn'
 
 
 type LBBuildF t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FR t m (R.Dynamic t (M.Map k v))
