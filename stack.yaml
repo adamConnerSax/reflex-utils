@@ -7,9 +7,9 @@ resolver: lts-8.2
 packages:
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
-#    commit: "b2a4542c32025a04782f3d578e7a3d16c1e27d36"
     commit: "7e97197027d6b09f35013aa630a1f5df7f27ea9e"
-  extra-dep: true
+#- '../dataBuilder'
+#  extra-dep: true
 - location:
     git: https://github.com/ghcjs/jsaddle
 #    commit: "1db6c74bed4cd8c033dc72aace535b08ee8d34c1"

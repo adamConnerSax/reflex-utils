@@ -61,6 +61,7 @@ import           Reflex.Dom.Contrib.Layout.Types             (CssClass,
                                                               LayoutOrientation (..),
                                                               emptyCss)
 
+import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv)
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation
 
@@ -85,8 +86,10 @@ import           Control.Monad.Morph
 import           Control.Monad.Reader                        (MonadReader (..),
                                                               runReaderT)
 import           Data.Functor.Compose                        (Compose (..))
+import           Data.These                                  (These(..))
+import           Data.Align                                  (align)
 import qualified Data.Map                                    as M
-import           Data.Maybe                                  (fromMaybe, isJust)
+import           Data.Maybe                                  (fromMaybe, isJust,fromJust)
 import           Data.Monoid                                 ((<>))
 import qualified Data.Text                                   as T
 import           Data.Validation                             (AccValidation (..))
@@ -143,8 +146,6 @@ runForm cfg sfra = runForm' cfg sfra return
 runForm'::Monad m=>FormConfiguration t m->Form t m a->(DynValidation t a->m b)->m b
 runForm' cfg fra f = runReaderT (fWrapper $ unF fra >>= lift . f) cfg
 
-
-
 switchingForm::(RD.DomBuilder t m, R.MonadHold t m)=>(a->Form t m b)->a->R.Event t a->Form t m b
 switchingForm widgetGetter widgetHolder0 newWidgetHolderEv = makeForm $ do
   cfg <- ask
@@ -170,7 +171,10 @@ formWithSubmitAction cfg ma submitWidget = do
 
 
 observeDynamic::(RD.DomBuilder t m, VFormBuilderC t m a)=>FormConfiguration t m->R.Dynamic t a->m (DynValidation t a)
-observeDynamic cfg = runForm (setToObserve cfg) . buildForm' Nothing . Just
+observeDynamic cfg aDyn = do
+  aEv <- traceDynAsEv (const "observeDynamic") aDyn
+  aDyn' <- R.holdDyn Nothing (Just <$> aEv) 
+  runForm (setToObserve cfg) $ buildForm' Nothing (Just (fromJust <$> aDyn')) 
 
 
 observeWidget::(RD.DomBuilder t m ,VFormBuilderC t m a)=>FormConfiguration t m->m a->m (DynValidation t a)
@@ -277,6 +281,36 @@ instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m)=> B.Buildable (F
         startingWidgetEv = R.tag (R.current uncomposed) postbuild
     join <$> RD.widgetHold (return $ R.constDyn $ AccFailure [FNothing]) (R.leftmost [newWidgetEv, startingWidgetEv])
 
+{-
+  bCollapseAndSum mdwListDyn = B.FGV $ do    -- FIXME, empty list case
+    postbuild <- getPostBuild
+    cF <- chooserF . _builderFunctions <$> ask
+    let toKeyValue mdw = (fst . metadata $ mdw, mdw)
+        mdwMapDyn = M.fromList . toKeyValue <$> mdwListDyn
+        conNamesDyn = R.uniqDyn $ M.keys <$> mdwMapDyn -- should never change.  An invariant I wish I could express in the types
+        mInputSelDyn = R.uniqDyn $ headMaybe . fst . filter (hasDefault . snd) . toList <$> mdwMapDyn  -- Dynamic t (Maybe ConName)
+        inputSelDyn = R.zipDynWith (\mi cns -> fromMaybe (head cns) mi) mInputSelDyn conNamesDyn
+        chooserEv = cF conNamesDyn <$> R.updated inputSelDyn -- Event t (FRW t m B.ConName)
+    vselDyn <- RD.widgetHold (return $ unDynValidation dynValidationNothing) (chooserEv) -- Dynamic t (FValidation B.ConName)
+    let hiddenCSS  = "style" RD.=: "display: none"
+        visibleCSS = "style" RD.=: "display: inline"
+        dAttrs cn = accValidation (const hiddenCss) (==cn) <$> visDyn -- Dynamic t (Map Text Text)
+        diffOnlyKeyChanges olds news = flip M.mapMaybe (align olds news) $ \case
+          This _ -> Just Nothing
+          These _ _ -> Nothing
+          That new -> Just $ Just new
+    rec sentVals :: Dynamic t (Map B.ConName (FMDWrapped t m a)) <- foldDyn applyMap Map.empty changeVals
+        let changeVals :: Event t (Map B.ConName (Maybe (FMDWrapped t m a)))
+            changeVals = RD.attachWith diffOnlyKeyChanges (R.current sentVals) $ R.leftmost
+                         [ R.updated mdwMapDyn
+                         , R.tag (current mdwMapDyn) postBuild 
+                         ]
+        
+
+-}
+
+
+    
 
 type FMDWrapped t m a = B.MDWrapped (FR t m) (R.Dynamic t) (FValidation) a
 

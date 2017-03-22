@@ -29,7 +29,7 @@ import           Control.Monad                         (join)
 import           Control.Monad.Fix                     (MonadFix)
 import           Control.Monad.Reader                  (lift)
 import qualified Data.Map                              as M
-import           Data.Maybe                            (fromMaybe)
+import           Data.Maybe                            (fromMaybe,fromJust) --FIX FromJust
 import           Data.Monoid                           ((<>))
 import           Data.Readable                         (Readable, fromText)
 import qualified Data.Text                             as T
@@ -58,6 +58,7 @@ import           Reflex.Dom.Contrib.Widgets.Common
 -- From this lib
 
 import qualified DataBuilder                           as B
+import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv,traceMDynAsEv)
 import           Reflex.Dom.Contrib.Layout.Types       (emptyCss, toCssString)
 import           Reflex.Dom.Contrib.ReflexConstraints
 import           Reflex.Dom.Contrib.FormBuilder.Builder
@@ -159,23 +160,6 @@ parseAndValidate mFN parse va t =
     Nothing -> AccFailure [FNoParse $ parseError mFN t]
     Just y -> va y
 
--- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
--- that's the value we want not the tagged current value. 
-dynAsEv::RD.PostBuild t m=>R.Dynamic t a->m (R.Event t a)
-dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD.getPostBuild
-
-traceDynAsEv::RD.PostBuild t m=>(a->String)->R.Dynamic t a->m (R.Event t a)
-traceDynAsEv f dyn = do
-  postbuild <- RD.getPostBuild
-  let f' prefix x = prefix ++ f x
-      upEv = R.traceEventWith (f' "update-") $ R.updated dyn
-      pbEv = R.traceEventWith (f' "postbuild-") $ R.tag (R.current dyn) postbuild
-  return $ R.leftmost [upEv, pbEv] 
-
-
--- turn a Dynamic into an Event with an initial firing to represent the value at postbuild.  Should we sample and return (a,Event t a)?
-mDynToInputEv::(R.Reflex t,RD.PostBuild t m)=>Maybe (R.Dynamic t a)-> m (R.Event t a)
-mDynToInputEv mDyn = maybe (return R.never) dynAsEv mDyn
 
 buildDynReadable::(FormInstanceC t m, Readable a, Show a)
   =>FormValidator a
@@ -184,7 +168,7 @@ buildDynReadable::(FormInstanceC t m, Readable a, Show a)
   ->Form t m a
 buildDynReadable va mFN maDyn = makeForm $ do
   let vfwt = parseAndValidate mFN fromText va
-  inputEv <- mDynToInputEv maDyn
+  inputEv <- mDynAsEv maDyn
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
 buildDynReadMaybe::(FormInstanceC t m, Read a, Show a)
@@ -194,7 +178,7 @@ buildDynReadMaybe::(FormInstanceC t m, Read a, Show a)
   ->Form t m a
 buildDynReadMaybe va mFN maDyn = makeForm $ do
   let vfwt = parseAndValidate mFN (readMaybe . T.unpack) va
-  inputEv <- mDynToInputEv maDyn
+  inputEv <- mDynAsEv maDyn
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
 -- NB this will handle Dynamic t (Dynamic t a)) inputs
@@ -204,7 +188,8 @@ instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (R.Dynamic t 
 -- | String and Text
 instance FormInstanceC t m=>FormBuilder t m T.Text where
   buildForm va mFN mInitialDyn = makeForm $ do
-    inputEv <- maybe (return R.never) (traceDynAsEv (const "FormBuilder t m T.Text")) mInitialDyn  -- mDynToInputEv mInitialDyn
+    inputEv <- traceMDynAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")") mInitialDyn -- FIXTrace
+--    inputEv <- maybe (return R.never) (traceDynAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")")) mInitialDyn  -- mDynAsEv mInitialDyn
     formWidget' inputEv "" id va id mFN Nothing $ textWidgetValue mFN
 
 instance {-# OVERLAPPING #-} FormInstanceC t m=>FormBuilder t m String where
@@ -225,7 +210,7 @@ instance FormC e t m=>B.Builder (RFormWidget e t m) Char where
 -- We don't need this.  If we leave it out, the Enum instance will work and we get a dropdown instead of a checkbox.  Which might be better...
 instance FormInstanceC t m=>FormBuilder t m Bool where
   buildForm va mFN mInitialDyn = makeForm $ do
-    inputEv <- mDynToInputEv mInitialDyn
+    inputEv <- mDynAsEv mInitialDyn
     formWidget' inputEv False id va showText mFN Nothing $ (\c -> _hwidget_value <$> htmlCheckbox c)
 
 instance FormInstanceC t m=>FormBuilder t m Double where
@@ -274,7 +259,7 @@ instance FormInstanceC t m=>FormBuilder t m UTCTime where
           Nothing -> AccFailure [FNoParse "Couldn't parse as UTCTime."]
           Just y -> va y
         initialDateTime = Just $ UTCTime (fromGregorian 1971 1 1) (secondsToDiffTime 0)
-    inputEv <- mDynToInputEv mInitialDyn
+    inputEv <- mDynAsEv mInitialDyn
     formWidget' inputEv initialDateTime Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
 
 
@@ -284,7 +269,7 @@ instance FormInstanceC t m=>FormBuilder t m Day where
           Nothing -> AccFailure [FNoParse "Couldn't parse as Day."]
           Just y -> va y
         initialDay = Just $ fromGregorian 1971 1 1
-    inputEv <- mDynToInputEv mInitialDyn
+    inputEv <- mDynAsEv mInitialDyn
     formWidget' inputEv initialDay Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
 
 
@@ -296,10 +281,10 @@ instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuil
 -- if two things are Isomorphic, we can use one to build the other
 -- NB: Isomorphic sum types will end up using the constructors, etc. of the one used to bootstrap 
 buildFormIso::(FormInstanceC t m, VFormBuilderC t m a)=>Iso' a b->FormValidator b->Maybe FieldName->Maybe (R.Dynamic t b)->Form t m b
-buildFormIso isoAB vb mFN mbDyn =
+buildFormIso isoAB vb mFN mbDyn = makeForm $ do
   let a2b = view isoAB
       b2a = view $ from isoAB
-  in a2b <$> buildForm (fmap b2a . vb . a2b) mFN (fmap b2a <$> mbDyn)  
+  unF $ a2b <$> buildForm (fmap b2a . vb . a2b) mFN (fmap b2a <$> mbDyn)  
 
 avToEither::AccValidation a b -> Either a b
 avToEither (AccSuccess x) = Right x
@@ -318,14 +303,18 @@ instance {-# OVERLAPPABLE #-} (FormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=
   buildForm va mFN mInitialDyn = makeForm $ do
     let values = [minBound..] :: [a]
         initial = head values
-    inputEv <- mDynToInputEv mInitialDyn
+    inputEv <- mDynAsEv mInitialDyn
     formWidget' inputEv initial id va showText mFN Nothing $ (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
 
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
 -- generics for (,) since mkDyn is not an optimization here
-instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
-
+instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b) where
+  buildForm va mFN mTupDyn = validateForm va . makeForm $ do
+      maW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
+      mbW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
+      return $ (,) <$> maW <*> mbW 
+  
 instance (FormInstanceC t m
          , VFormBuilderC t m a
          , VFormBuilderC t m b

@@ -35,9 +35,11 @@ library
    cpp-options: -DUSE_WKWEBVIEW -DUSE_JSADDLE
   hs-source-dirs: src
   exposed-modules:
-                  Reflex.Dom.Contrib.Layout.All
+                  Reflex.Dom.Contrib.DynamicUtils
+                  Reflex.Dom.Contrib.SumType      
                   Reflex.Dom.Contrib.ReflexConstraints
                   Reflex.Dom.Contrib.CssUtils
+                  Reflex.Dom.Contrib.Layout.All
                   Reflex.Dom.Contrib.Layout.Types
                   Reflex.Dom.Contrib.Layout.ClayUtils
                   Reflex.Dom.Contrib.Layout.FlexLayout
@@ -74,6 +76,7 @@ library
                      , mtl
                      , file-embed
                      , monad-control
+                     , generics-sop
                      , lens
                      , data-default
                      , ref-tf
@@ -88,6 +91,7 @@ library
                      , readable
                      , mmorph
                      , time
+                     , these
                      , tuple
                      , hashable
                      , unordered-containers

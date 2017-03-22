@@ -151,9 +151,11 @@ defSumF conWidgets mDefCon = do
   validClasses <- validDataClasses
   let attrsDyn = R.constDyn (cssClassAttr validClasses <> titleAttr "Constructor")
       wc = WidgetConfig RD.never defPair attrsDyn
+      constructorDD x = R.uniqDyn <$> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getFRP` conWidgets) x -- m (Dynamic t (FRPair t m a))
   fRow $ do
-    frpCW <- fItemL $ (formWidget id (T.pack . frpCN) Nothing wc $ \wc' -> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getFRP` conWidgets) wc')
-    unF $ switchingForm (makeForm . frpV) defPair (R.updated frpCW)
+    frpCW <- fItemL $ formWidget id (T.pack . frpCN) Nothing wc constructorDD
+    let rebuildEv = R.traceEventWith (const "defSumF!!") $ R.updated frpCW
+    unF $ switchingForm (makeForm . frpV) defPair rebuildEv
 
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 

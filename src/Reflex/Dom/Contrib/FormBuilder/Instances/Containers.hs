@@ -19,6 +19,7 @@ import Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC,dynAsEv,tra
 import Reflex.Dom.Contrib.FormBuilder.Builder
 import Reflex.Dom.Contrib.FormBuilder.DynValidation (accValidation)
 import Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
+import Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv)
 
 -- reflex imports
 import qualified Reflex as R 
@@ -44,7 +45,7 @@ import qualified Data.Set as S
 import Data.Hashable (Hashable)
 import qualified Data.HashMap.Lazy as HML
 import qualified Data.HashSet as HS
-import Data.Maybe (fromMaybe,catMaybes,isNothing)
+import Data.Maybe (fromMaybe,catMaybes,isNothing,fromJust)
 import Data.Monoid ((<>))
 -- my libs
 import qualified DataBuilder as B
@@ -332,7 +333,9 @@ buildLBEMapLWK'::(FormInstanceC t m
                  , VFormBuilderC t m v)
   =>LBWidget t m k v->LBBuildF' t m k v
 buildLBEMapLWK' editW _ mapDyn0 = do
-  mapOfDyn <- RD.listWithKey mapDyn0 editW -- Dynamic t (M.Map k (Dynamic t (Maybe (FValidation v)))
+  mapDynEv <- traceDynAsEv (const "buildLBEMapLWK'") mapDyn0
+  mapDyn' <- R.holdDyn M.empty mapDynEv
+  mapOfDyn <- RD.listWithKey (R.traceDynWith (const "LWK' mapDyn0") mapDyn') editW -- Dynamic t (M.Map k (Dynamic t (Maybe (FValidation v)))
   let mapFValDyn = M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
   return . DynValidation $ sequenceA <$> mapFValDyn
 
@@ -340,10 +343,12 @@ simpleEditWidget::(FormInstanceC t m
                   , VFormBuilderC t m k
                   , VFormBuilderC t m v)=>ElemWidget t m k v
 simpleEditWidget k vDyn = do
+  vEv <- traceDynAsEv (const "simpleEditWidget") vDyn
+  mvDyn <- R.holdDyn Nothing (Just <$> vEv)
   let showKey k = toReadOnly $ buildForm' Nothing (Just $ R.constDyn k)
   fRow $ do
     fItem . unF $ showKey k
-    fItem . unF $ buildForm' Nothing (Just vDyn)
+    fItem . unF $ buildForm' Nothing (Just $ fromJust <$> mvDyn)
 
 
 editAndDeleteElemWidget::(FormInstanceC t m

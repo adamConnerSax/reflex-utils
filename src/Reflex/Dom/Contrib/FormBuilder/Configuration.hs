@@ -115,6 +115,7 @@ data BuilderFunctions t m = BuilderFunctions
   {
     failureF::forall a. Text->FRW t m a
   , sumF::forall a.[(B.ConName,FRW t m a)]->Maybe B.ConName->FRW t m a
+--  , chooserF::Dynamic t [B.ConName]->ConName->FR t m (Dynamic t B.ConName)
   , dynamicDiv::DynAttrs t->FLayoutF t m
   }
 
