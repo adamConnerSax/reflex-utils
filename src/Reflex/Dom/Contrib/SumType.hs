@@ -1,12 +1,14 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE DataKinds           #-}
 module Reflex.Dom.Contrib.SumType () where
 
 
 -- FIXME:  make imports specific or qualify them
 import           Generics.SOP hiding (Compose)
+import           Generics.SOP.NP
 import qualified GHC.Generics as GHC
 
 import           Reflex
@@ -32,30 +34,52 @@ Trying to make a smart dynamic of sum type widget builder
 whichFired::Reflex t=>[Event t a]->Event t Int
 whichFired = leftmost . zipWith (\n e -> n <$ e) [1..]
 
+expand::forall f xs.(Functor f,SListI xs)=>NS f xs -> NP (Compose Maybe f) xs
+expand ns = go sList (Just ns) where
+  go::forall ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (Compose Maybe f) ys
+  go SNil _ = Nil  
+  go SCons mNS = case mNS of
+    Nothing -> Compose Nothing :* go sList Nothing -- after Z
+    Just ns -> case ns of
+      Z fx -> Compose (Just fx) :* go sList Nothing -- at Z
+      S ns' -> Compose Nothing :* go sList (Just ns') -- before Z
+
+
+
+distribute::(Functor g, SListI xss, xss ~ Code a)=> g (SOP I xss) -> NP (Compose g (Compose Maybe (NP I))) xss
+distribute gsop =
+  let d1 = expand . unSOP <$> gsop -- g (NP (Compose Maybe (NP I)) xss)
+      
+
+
+expandFunctor::(Functor g, SListI xss, xss ~ Code a)=> g (SOP I xss) -> NP (Compose Maybe (Compose g (NP I))) xss
+expandFunctor gsop = go sList gsop where
+  go::forall ys.SListI ys=>SList ys -> g (SOP I xss) -> NP (Compose Maybe (Compose g (NP I))) ys
+  go SNil _ = Nil
+  go SCons gsop = 
+-- steps
+
 step1::(Functor g,Generic a)=>g a -> g (SOP I (Code a))
 step1 = fmap from
 
-step2a::forall f xs.(Functor f,SListI xs)=>NS f xs -> NP (Compose Maybe f) xs
-step2a ns =
-  let length = lengthSList (Proxy :: Proxy xs)
-      nothingList::Int -> NP (Compose Maybe f) xs'
-      nothingList 0 = Nil
-      nothingList n = Compose Nothing :* nothingList (n-1)
-      go::Maybe (NS f xs') -> Int -> NP (Compose Maybe f) xs''
-      go (Just ns) depth = case ns of
-        Z fx  -> Compose (Just fx) :* nothingList (length - depth - 1) --go Nothing (depth+1)
-        S ns' -> (Compose Nothing) :* go (Just ns') (depth + 1)
-      go Nothing depth = undefined -- if (depth < length) then (Compose Nothing) :* go Nothing (depth + 1) else Nil
-  in go (Just ns) 0
-      
+type GMaybe = Compose g Maybe
+
+step2::(Reflex t, Functor g, Generic a)=>g (SOP I (Code a)) -> NP (Compose GMaybe (NP I)) (Code a)
+step2 gsop =
+  let step2a::SOP I (Code a) -> NS (NP I) (Code a)
+      step2a = unSOP
+      step2b::NS (NP I) (Code a) -> NP (Compose Maybe (NP I)) (Code a)
+      step2b = expand
+      step2c:: g (NP (Compose Maybe (NP I)) (Code a)) -> NP (Compose g (Compose Maybe (NP I))) (Code a)
+      step2c 
+
+        
+
 {-
 step2b::(Generic a,Functor f)=>SOP f (Code a) -> NP (Compose Maybe (NP f)) (Code a)
 step2b sop =
   let nsnp = unSOP sop
       
 
-type GMaybe = Compose g Maybe
 
-step2::(Reflex t, Functor g)=>g (SOP I (Code a)) -> NP (Compose GMaybe (NP I)) (Code a)
-step2 
 -}
