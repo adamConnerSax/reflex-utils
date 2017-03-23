@@ -114,9 +114,10 @@ executable reflex-utils-formBuilder
   if flag(wkwebview)
    cpp-options: -DUSE_WKWEBVIEW -DUSE_JSADDLE
    build-depends: jsaddle-wkwebview
+                , cabal-macosx >= 0.2.3.4 && < 0.3
   if flag(ghcjs)
    cpp-options: -DUSE_GHCJS
-                , cabal-macosx >= 0.2.3.4 && < 0.3
+                
   build-depends:       base
                      , reflex
                      , reflex-dom
@@ -184,9 +185,10 @@ executable reflex-utils-formBuilder-warp
   if flag(warp)
    cpp-options: -DUSE_WARP -DUSE_JSADDLE
    build-depends: jsaddle-warp
+                , cabal-macosx >= 0.2.3.4 && < 0.3
   if flag(ghcjs)
    cpp-options: -DUSE_GHCJS 
-                , cabal-macosx >= 0.2.3.4 && < 0.3
+
   build-depends:       base
                      , reflex
                      , reflex-dom

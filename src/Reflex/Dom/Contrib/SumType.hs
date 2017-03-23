@@ -3,12 +3,16 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE PolyKinds           #-}
 module Reflex.Dom.Contrib.SumType () where
 
 
 -- FIXME:  make imports specific or qualify them
 import           Generics.SOP hiding (Compose)
 import           Generics.SOP.NP
+import           Generics.SOP.Constraint (SListIN)
 import qualified GHC.Generics as GHC
 
 import           Reflex
@@ -34,7 +38,8 @@ Trying to make a smart dynamic of sum type widget builder
 whichFired::Reflex t=>[Event t a]->Event t Int
 whichFired = leftmost . zipWith (\n e -> n <$ e) [1..]
 
-expand::forall f xs.(Functor f,SListI xs)=>NS f xs -> NP (Compose Maybe f) xs
+
+expand::forall f xs.(SListI xs)=>NS f xs -> NP (Compose Maybe f) xs
 expand ns = go sList (Just ns) where
   go::forall ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (Compose Maybe f) ys
   go SNil _ = Nil  
@@ -45,11 +50,60 @@ expand ns = go sList (Just ns) where
       S ns' -> Compose Nothing :* go sList (Just ns') -- before Z
 
 
+-- why doesn't the function above work? 
+expandNSNP::SListI xs=>NS (NP I) xs -> NP (Compose Maybe (NP I)) xs
+expandNSNP ns = go sList (Just ns) where
+  go::forall (f :: [*] -> *) ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (Compose Maybe f) ys
+  go SNil _ = Nil  
+  go SCons mNS = case mNS of
+    Nothing -> Compose Nothing :* go sList Nothing -- after Z
+    Just ns -> case ns of
+      Z fx -> Compose (Just fx) :* go sList Nothing -- at Z
+      S ns' -> Compose Nothing :* go sList (Just ns') -- before Z
 
+  
+expandA::Generic a=>a->NP (Compose Maybe (NP I)) (Code a)
+expandA = expandNSNP . unSOP . from
+
+type MyProjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = K (g (NP f xs)) -.-> Compose g f 
+
+myProjections::forall xs g f.SListI xs => NP (MyProjections g f xs) xs
+myProjections = case sList :: SList xs of
+  SNil -> Nil
+  SCons -> fn (hd . unK) :* liftA_NP shiftMyProjection myProjections
+
+{-
+step2a::forall g a xss.(Functor g,Generic a)=>g a -> NP (Compose g (Compose Maybe (NP I))) (Code a)
+step2a ga = hliftA2 _ projections (hpure $ K ga) where
+--  q prj kga = Compose $ (prj . K . expandA) <$> unK kga
+-}
+
+{-
+fmapConMaybe::(Functor g, Generic a, SListI xs)=>K (g a) xs -> Compose g (Compose Maybe (NP I)) xs
+fmapConMaybe = fmap () unK
+-}
+
+-- this compiles!!
+projectors::SListI xs=>NP (Compose ((->) (NP f xs)) f) xs
+projectors = hliftA (\(Fn prj) -> Compose $ prj . K) projections
+
+{-
+step2a::(Generic a, Functor g,SListI xs)=>g a -> NP (Compose g (Compose Maybe (NP I))) xs
+step2a ga = hliftA q (hpure (K ga)) where
+  q kga = Compose $ (hap projections . K . expandA) <$> (unK kga)
+-}
+{-
+-- So wrong!!
+f::forall g a xss.(Functor g,Generic a, SListI2 xss, xss ~ Code a)=>g a -> NP (Compose g (Compose Maybe (NP I))) xss
+f ga = hliftA2 q projectors (hpure (K ga)) where
+--  q::forall (f :: [*] -> *)  g xs x.(Functor g, SListI xs)=>(Compose ((->) (NP f xs)) f) x -> K (g a) x -> Compose g (Compose Maybe (NP I)) x 
+  q p kga = Compose $ fmap ((getCompose p) . expandA) $ unK kga
+-}
+{-
 distribute::(Functor g, SListI xss, xss ~ Code a)=> g (SOP I xss) -> NP (Compose g (Compose Maybe (NP I))) xss
 distribute gsop =
   let d1 = expand . unSOP <$> gsop -- g (NP (Compose Maybe (NP I)) xss)
-      
+ 
 
 
 expandFunctor::(Functor g, SListI xss, xss ~ Code a)=> g (SOP I xss) -> NP (Compose Maybe (Compose g (NP I))) xss
@@ -73,7 +127,7 @@ step2 gsop =
       step2c:: g (NP (Compose Maybe (NP I)) (Code a)) -> NP (Compose g (Compose Maybe (NP I))) (Code a)
       step2c 
 
-        
+-}        
 
 {-
 step2b::(Generic a,Functor f)=>SOP f (Code a) -> NP (Compose Maybe (NP f)) (Code a)
