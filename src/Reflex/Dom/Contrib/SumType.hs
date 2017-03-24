@@ -89,13 +89,19 @@ wrappedInjections = case sList :: SList xs of
 shiftWrappedInjection:: Functor g=>WrappedInjection g f xs a -> WrappedInjection g f (x ': xs) a
 shiftWrappedInjection (Fn f) = Fn $ K . fmap S . unK . f
 
--- steps
+-- NB: For applicatve h, this is an inverse of hsequence.  If h is not applicative, then this is not invertible.
+distribute::(Functor h, SListI xs)=>h (NP g xs) -> NP (h :.: g) xs
+distribute x = hap wrappedProjections (hpure $ K x)
+
+distributeI::(Functor h, SListI xs)=>h (NP I xs) -> NP h xs
+distributeI = hliftA (fmap unI . getComp) . distribute 
+
+
 -- This was a doozy...
 functorToMaybeNP::forall g a xss.(Functor g,Generic a)=>g a -> NP (g :.: (Maybe :.: (NP I))) (Code a)
 functorToMaybeNP ga = hap wrappedProjections (hpure $ K (expandA <$> ga))
 
-distribute::(Functor h, SListI xs)=>h (NP I xs) -> NP h xs
-distribute x = hliftA (fmap unI . getComp) $ hap wrappedProjections (hpure $ K x) 
+
 
 
 
