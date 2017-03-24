@@ -87,22 +87,36 @@ shiftWrappedInjection (Fn f) = Fn $ K . fmap S . unK . f
 
 -- steps
 -- This was a doozy...
-step1::forall g a xss.(Functor g,Generic a)=>g a -> NP (Compose g (Compose Maybe (NP I))) (Code a)
-step1 ga = hap wrappedProjections (hpure $ K (expandA <$> ga))
+functorToMaybeNP::forall g a xss.(Functor g,Generic a)=>g a -> NP (Compose g (Compose Maybe (NP I))) (Code a)
+functorToMaybeNP ga = hap wrappedProjections (hpure $ K (expandA <$> ga))
 
-step2::(Reflex t, SListI2 xss)=> NP (Compose (Dynamic t) (Compose Maybe (NP I))) xss -> NP (Compose (Event t) (NP I)) xss
-step2 = hmap (Compose . fmapMaybe id . fmap getCompose . updated . getCompose)
+-- should "updated" in the below be dynAsEv?
+dynMaybeNPToEventNP::(Reflex t, SListI2 xss)=> NP (Compose (Dynamic t) (Compose Maybe (NP I))) xss -> NP (Compose (Event t) (NP I)) xss
+dynMaybeNPToEventNP = hmap (Compose . fmapMaybe id . fmap getCompose . updated . getCompose)
 
 -- this would have been a doozy but wasn't because step 1 was already this doozy
-step3a::(Reflex t, SListI2 xss)=> NP (Compose (Event t) (NP I)) xss -> NP (K ((Event t) (NS (NP I) xss))) xss
-step3a = hap wrappedInjections
+eventNPToEventNSNP::(Reflex t, SListI2 xss)=> NP (Compose (Event t) (NP I)) xss -> NP (K ((Event t) (NS (NP I) xss))) xss
+eventNPToEventNSNP = hap wrappedInjections
 
-step3b::(Reflex t, SListI2 xss,Generic a, xss ~ Code a) =>NP (K ((Event t) (NS (NP I) xss))) xss -> NP (K (Event t a)) xss
-step3b = hliftA (K  . fmap (to . SOP) . unK)
+-- SIDEBAR
 
-step3c::(SListI2 xss) =>NP (K (Event t a)) xss -> [Event t a]
-step3c = hcollapse
+eventNSNPToEvent::(Reflex t, SListI2 xss,Generic a, xss ~ Code a) =>NP (K ((Event t) (NS (NP I) xss))) xss -> NP (K (Event t a)) xss
+eventNSNPToEvent = hliftA (K  . fmap (to . SOP) . unK)
+
+npEventsToList::SListI2 xss=>NP (K (Event t a)) xss -> [Event t a]
+npEventsToList = hcollapse
+
+
+-- NB: we now have Dynamic t a -> NP (K (Event t a)) xss, a constructor indexed product of per-constructor events
+dynamicToNPEvent::(Reflex t, Generic a)=>Dynamic t a -> NP (K (Event t a)) (Code a)
+dynamicToNPEvent = eventNSNPToEvent . eventNPToEventNSNP . dynMaybeNPToEventNP . functorToMaybeNP
+
 
 -- NB: we now have Dynamic t a -> [Event t a] where each is only for one constructor
 eventPerConstructor::(Reflex t, Generic a)=>Dynamic t a -> [Event t a]
-eventPerConstructor = step3c . step3b . step3a . step2 . step1
+eventPerConstructor = npEventsToList . dynamicToNPEvent
+
+-- END SIDEBAR
+
+
+
