@@ -9,7 +9,7 @@ packages:
     git: https://github.com/adamConnerSax/dataBuilder
     commit: "7e97197027d6b09f35013aa630a1f5df7f27ea9e"
 #- '../dataBuilder'
-#  extra-dep: true
+  extra-dep: true
 - location:
     git: https://github.com/ghcjs/jsaddle
 #    commit: "1db6c74bed4cd8c033dc72aace535b08ee8d34c1"
