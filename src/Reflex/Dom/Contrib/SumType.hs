@@ -35,67 +35,76 @@ Trying to make a smart dynamic of sum type widget builder
 
 -- utilities
 
+getComp::(f :.: g) a -> f (g a)
+getComp (Comp x) = x
+
+
 whichFired::Reflex t=>[Event t a]->Event t Int
 whichFired = leftmost . zipWith (\n e -> n <$ e) [1..]
 
 
-expand::forall f xs.(SListI xs)=>NS f xs -> NP (Compose Maybe f) xs
+expand::forall f xs.(SListI xs)=>NS f xs -> NP (Maybe :.: f) xs
 expand ns = go sList (Just ns) where
-  go::forall ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (Compose Maybe f) ys
+  go::forall ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (Maybe :.: f) ys
   go SNil _ = Nil
   go SCons mNS = case mNS of
-    Nothing -> Compose Nothing :* go sList Nothing -- after Z
+    Nothing -> Comp Nothing :* go sList Nothing -- after Z
     Just ns -> case ns of
-      Z fx -> Compose (Just fx) :* go sList Nothing -- at Z
-      S ns' -> Compose Nothing :* go sList (Just ns') -- before Z
+      Z fx -> Comp (Just fx) :* go sList Nothing -- at Z
+      S ns' -> Comp Nothing :* go sList (Just ns') -- before Z
 
 
 -- why doesn't the function above work?
-expandNSNP::SListI xs=>NS (NP I) xs -> NP (Compose Maybe (NP I)) xs
+expandNSNP::SListI xs=>NS (NP I) xs -> NP (Maybe :.: (NP I)) xs
 expandNSNP ns = go sList (Just ns) where
-  go::forall (f :: [*] -> *) ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (Compose Maybe f) ys
+  go::forall (f :: [*] -> *) ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (Maybe :.: f) ys
   go SNil _ = Nil
   go SCons mNS = case mNS of
-    Nothing -> Compose Nothing :* go sList Nothing -- after Z
+    Nothing -> Comp Nothing :* go sList Nothing -- after Z
     Just ns -> case ns of
-      Z fx -> Compose (Just fx) :* go sList Nothing -- at Z
-      S ns' -> Compose Nothing :* go sList (Just ns') -- before Z
+      Z fx -> Comp (Just fx) :* go sList Nothing -- at Z
+      S ns' -> Comp Nothing :* go sList (Just ns') -- before Z
 
 
-expandA::Generic a=>a->NP (Compose Maybe (NP I)) (Code a)
+expandA::Generic a=>a->NP (Maybe :.: (NP I)) (Code a)
 expandA = expandNSNP . unSOP . from
 
-type WrappedProjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = K (g (NP f xs)) -.-> Compose g f
+type WrappedProjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = K (g (NP f xs)) -.-> g :.: f
 
 wrappedProjections::forall xs g f.(Functor g,SListI xs) => NP (WrappedProjection g f xs) xs
 wrappedProjections = case sList :: SList xs of
   SNil -> Nil
-  SCons -> fn (Compose . fmap hd . unK) :* liftA_NP shiftWrappedProjection wrappedProjections
+  SCons -> fn (Comp . fmap hd . unK) :* liftA_NP shiftWrappedProjection wrappedProjections
 
 shiftWrappedProjection :: Functor g=>WrappedProjection g f xs a -> WrappedProjection g f (x ': xs) a
 shiftWrappedProjection (Fn f) = Fn $ f . K . fmap tl . unK
 
-type WrappedInjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = Compose g f -.-> K (g (NS f xs))
+type WrappedInjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = g :.: f -.-> K (g (NS f xs))
 
 wrappedInjections::forall xs g f. (Functor g, SListI xs) => NP (WrappedInjection g f xs) xs
 wrappedInjections = case sList :: SList xs of
   SNil   -> Nil
-  SCons  -> fn (K . fmap Z . getCompose) :* liftA_NP shiftWrappedInjection wrappedInjections
+  SCons  -> fn (K . fmap Z . getComp) :* liftA_NP shiftWrappedInjection wrappedInjections
 
 shiftWrappedInjection:: Functor g=>WrappedInjection g f xs a -> WrappedInjection g f (x ': xs) a
 shiftWrappedInjection (Fn f) = Fn $ K . fmap S . unK . f
 
 -- steps
 -- This was a doozy...
-functorToMaybeNP::forall g a xss.(Functor g,Generic a)=>g a -> NP (Compose g (Compose Maybe (NP I))) (Code a)
+functorToMaybeNP::forall g a xss.(Functor g,Generic a)=>g a -> NP (g :.: (Maybe :.: (NP I))) (Code a)
 functorToMaybeNP ga = hap wrappedProjections (hpure $ K (expandA <$> ga))
 
+distribute::(Functor h, SListI xs)=>h (NP I xs) -> NP h xs
+distribute x = hliftA (fmap unI . getComp) $ hap wrappedProjections (hpure $ K x) 
+
+
+
 -- should "updated" in the below be dynAsEv?
-dynMaybeNPToEventNP::(Reflex t, SListI2 xss)=> NP (Compose (Dynamic t) (Compose Maybe (NP I))) xss -> NP (Compose (Event t) (NP I)) xss
-dynMaybeNPToEventNP = hmap (Compose . fmapMaybe id . fmap getCompose . updated . getCompose)
+dynMaybeNPToEventNP::(Reflex t, SListI2 xss)=> NP ((Dynamic t) :.: (Maybe :.: (NP I))) xss -> NP ((Event t) :.: (NP I)) xss
+dynMaybeNPToEventNP = hmap (Comp . fmapMaybe id . fmap getComp . updated . getComp)
 
 -- this would have been a doozy but wasn't because step 1 was already this doozy
-eventNPToEventNSNP::(Reflex t, SListI2 xss)=> NP (Compose (Event t) (NP I)) xss -> NP (K ((Event t) (NS (NP I) xss))) xss
+eventNPToEventNSNP::(Reflex t, SListI2 xss)=> NP ((Event t) :.: (NP I)) xss -> NP (K ((Event t) (NS (NP I) xss))) xss
 eventNPToEventNSNP = hap wrappedInjections
 
 -- SIDEBAR
