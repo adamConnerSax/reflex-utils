@@ -1,11 +1,12 @@
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE KindSignatures      #-}
-{-# LANGUAGE PolyKinds           #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE PolyKinds                  #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeOperators              #-}
 module Reflex.Dom.Contrib.SumType () where
 
 
@@ -35,38 +36,41 @@ Trying to make a smart dynamic of sum type widget builder
 
 -- utilities
 
-getComp::(f :.: g) a -> f (g a)
-getComp (Comp x) = x
-
-
 whichFired::Reflex t=>[Event t a]->Event t Int
 whichFired = leftmost . zipWith (\n e -> n <$ e) [1..]
 
+newtype IsCon a = IsCon { unIsCon::Maybe a} deriving (Functor,Applicative,Monad,Show)
 
-expand::forall f xs.(SListI xs)=>NS f xs -> NP (Maybe :.: f) xs
+notCon::IsCon a
+notCon = IsCon Nothing
+
+con::a -> IsCon a
+con = IsCon . Just
+
+expand::forall f xs.(SListI xs)=>NS f xs -> NP (IsCon :.: f) xs
 expand ns = go sList (Just ns) where
-  go::forall ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (Maybe :.: f) ys
+  go::forall ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (IsCon :.: f) ys
   go SNil _ = Nil
   go SCons mNS = case mNS of
-    Nothing -> Comp Nothing :* go sList Nothing -- after Z
+    Nothing -> Comp notCon :* go sList Nothing -- after Z
     Just ns -> case ns of
-      Z fx -> Comp (Just fx) :* go sList Nothing -- at Z
-      S ns' -> Comp Nothing :* go sList (Just ns') -- before Z
+      Z fx -> Comp (con fx) :* go sList Nothing -- at Z
+      S ns' -> Comp notCon :* go sList (Just ns') -- before Z
 
 
 -- why doesn't the function above work?
-expandNSNP::SListI xs=>NS (NP I) xs -> NP (Maybe :.: (NP I)) xs
+expandNSNP::SListI xs=>NS (NP I) xs -> NP (IsCon :.: (NP I)) xs
 expandNSNP ns = go sList (Just ns) where
-  go::forall (f :: [*] -> *) ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (Maybe :.: f) ys
+  go::forall (f :: [*] -> *) ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (IsCon :.: f) ys
   go SNil _ = Nil
   go SCons mNS = case mNS of
-    Nothing -> Comp Nothing :* go sList Nothing -- after Z
+    Nothing -> Comp notCon :* go sList Nothing -- after Z
     Just ns -> case ns of
-      Z fx -> Comp (Just fx) :* go sList Nothing -- at Z
-      S ns' -> Comp Nothing :* go sList (Just ns') -- before Z
+      Z fx -> Comp (con fx) :* go sList Nothing -- at Z
+      S ns' -> Comp notCon :* go sList (Just ns') -- before Z
 
 
-expandA::Generic a=>a->NP (Maybe :.: (NP I)) (Code a)
+expandA::Generic a=>a->NP (IsCon :.: (NP I)) (Code a)
 expandA = expandNSNP . unSOP . from
 
 type WrappedProjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = K (g (NP f xs)) -.-> g :.: f
@@ -84,30 +88,44 @@ type WrappedInjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = g :.: f -.-> K (
 wrappedInjections::forall xs g f. (Functor g, SListI xs) => NP (WrappedInjection g f xs) xs
 wrappedInjections = case sList :: SList xs of
   SNil   -> Nil
-  SCons  -> fn (K . fmap Z . getComp) :* liftA_NP shiftWrappedInjection wrappedInjections
+  SCons  -> fn (K . fmap Z . unComp) :* liftA_NP shiftWrappedInjection wrappedInjections
 
 shiftWrappedInjection:: Functor g=>WrappedInjection g f xs a -> WrappedInjection g f (x ': xs) a
 shiftWrappedInjection (Fn f) = Fn $ K . fmap S . unK . f
 
--- NB: For applicatve h, this is an inverse of hsequence.  If h is not applicative, then this is not invertible.
+-- NB: For applicative h, this is an inverse of hsequence.  If h is not applicative, then this is not invertible.
 distribute::(Functor h, SListI xs)=>h (NP g xs) -> NP (h :.: g) xs
 distribute x = hap wrappedProjections (hpure $ K x)
 
 distributeI::(Functor h, SListI xs)=>h (NP I xs) -> NP h xs
-distributeI = hliftA (fmap unI . getComp) . distribute 
+distributeI = hliftA (fmap unI . unComp) . distribute
+
+functorToIsConNP::forall g a xss.(Functor g,Generic a)=>g a -> NP (g :.: (IsCon :.: (NP I))) (Code a)
+functorToIsConNP ga = hap wrappedProjections (hpure $ K (expandA <$> ga))
+
+reAssociate::Functor g=>(g :.: (f :.: h)) a -> ((g :.: f) :.: h) a
+reAssociate = Comp . Comp . fmap unComp . unComp
+
+reAssociateNP::(Functor g, SListI xss)=>NP (g :.: (f :.: h)) xss->NP ((g :.: f) :.: h) xss
+reAssociateNP = hmap reAssociate
+
+isConNPToPOPIsCon::(Functor g, SListI2 xss)=>NP (g :.: (IsCon :.: (NP I))) xss -> POP (g :.: IsCon) xss
+isConNPToPOPIsCon =
+  let proxyC = Proxy :: Proxy (SListI)
+  in POP . hcliftA proxyC (distributeI . unComp . reAssociate)
+
+f1::SListI2 xss=>(forall a.f a -> h a) -> POP f xss -> POP h xss
+f1 = hliftA
 
 
--- This was a doozy...
-functorToMaybeNP::forall g a xss.(Functor g,Generic a)=>g a -> NP (g :.: (Maybe :.: (NP I))) (Code a)
-functorToMaybeNP ga = hap wrappedProjections (hpure $ K (expandA <$> ga))
-
-
+f2::(Applicative h, SListI2 xss)=>(forall a.f a -> h a) -> POP f xss -> NP (h :.: (NP I)) xss
+f2 q = . hliftA q 
 
 
 
 -- should "updated" in the below be dynAsEv?
-dynMaybeNPToEventNP::(Reflex t, SListI2 xss)=> NP ((Dynamic t) :.: (Maybe :.: (NP I))) xss -> NP ((Event t) :.: (NP I)) xss
-dynMaybeNPToEventNP = hmap (Comp . fmapMaybe id . fmap getComp . updated . getComp)
+dynIsConNPToEventNP::(Reflex t, SListI2 xss)=> NP ((Dynamic t) :.: (IsCon :.: (NP I))) xss -> NP ((Event t) :.: (NP I)) xss
+dynIsConNPToEventNP = hmap (Comp . fmapMaybe unIsCon . fmap unComp . updated . unComp)
 
 -- this would have been a doozy but wasn't because step 1 was already this doozy
 eventNPToEventNSNP::(Reflex t, SListI2 xss)=> NP ((Event t) :.: (NP I)) xss -> NP (K ((Event t) (NS (NP I) xss))) xss
@@ -124,7 +142,7 @@ npEventsToList = hcollapse
 
 -- NB: we now have Dynamic t a -> NP (K (Event t a)) xss, a constructor indexed product of per-constructor events
 dynamicToNPEvent::(Reflex t, Generic a)=>Dynamic t a -> NP (K (Event t a)) (Code a)
-dynamicToNPEvent = eventNSNPToEvent . eventNPToEventNSNP . dynMaybeNPToEventNP . functorToMaybeNP
+dynamicToNPEvent = eventNSNPToEvent . eventNPToEventNSNP . dynIsConNPToEventNP . functorToIsConNP
 
 
 -- NB: we now have Dynamic t a -> [Event t a] where each is only for one constructor
