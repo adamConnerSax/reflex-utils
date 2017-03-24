@@ -70,16 +70,16 @@ type MyProjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = K (g (NP f xs)) -.->
 myProjections::forall xs g f.(Functor g,SListI xs) => NP (MyProjection g f xs) xs
 myProjections = case sList :: SList xs of
   SNil -> Nil
-  SCons -> fn (fmap hd . unK) :* liftA_NP shiftMyProjection myProjections
+  SCons -> fn (Compose . fmap hd . unK) :* liftA_NP shiftMyProjection myProjections
 
 shiftMyProjection :: Functor g=>MyProjection g f xs a -> MyProjection g f (x ': xs) a
 shiftMyProjection (Fn f) = Fn $ f . K . fmap tl . unK 
 
-{-
+
 step2a::forall g a xss.(Functor g,Generic a)=>g a -> NP (Compose g (Compose Maybe (NP I))) (Code a)
-step2a ga = hliftA2 _ projections (hpure $ K ga) where
---  q prj kga = Compose $ (prj . K . expandA) <$> unK kga
--}
+step2a ga = hap myProjections (hpure $ K (expandA <$> ga))
+
+
 
 {-
 fmapConMaybe::(Functor g, Generic a, SListI xs)=>K (g a) xs -> Compose g (Compose Maybe (NP I)) xs
