@@ -114,12 +114,10 @@ isConNPToPOPIsCon =
   let proxyC = Proxy :: Proxy (SListI)
   in POP . hcliftA proxyC (distributeI . unComp . reAssociate)
 
-f1::SListI2 xss=>(forall a.f a -> h a) -> POP f xss -> POP h xss
-f1 = hliftA
-
-
-f2::(Applicative h, SListI2 xss)=>(forall a.f a -> h a) -> POP f xss -> NP (h :.: (NP I)) xss
-f2 q = . hliftA q 
+doAndSequence::(Applicative h, SListI2 xss)=>(forall a.f a -> h a) -> POP f xss -> NP (h :.: (NP I)) xss
+doAndSequence q =
+  let sListIC = Proxy :: Proxy (SListI)
+  in hcliftA sListIC (Comp . hsequence) . unPOP . hliftA q
 
 
 
