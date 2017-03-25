@@ -7,15 +7,20 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Contrib.SumType where
 
 
 -- FIXME:  make imports specific or qualify them
 import           Generics.SOP            hiding (Compose)
-import           Generics.SOP.Constraint (SListIN)
+import           Generics.SOP.Constraint (SListIN,And)
 import           Generics.SOP.NP
 import qualified GHC.Generics            as GHC
-
+--import           Data.Type.Equality
+--import           Data.Type.Bool
+import           Control.Monad (join)  
 import           Data.Functor.Compose
 import           Reflex
 import           Reflex.Dom
@@ -47,6 +52,11 @@ notCon = IsCon Nothing
 con::a -> IsCon a
 con = IsCon . Just
 
+
+instance (Applcative f, Applicative g) => Applicative (f :.: g) where
+  pure = Comp . pure $ pure
+  fgF <*> fgA = (unComp fgF
+
 expand::forall f xs.(SListI xs)=>NS f xs -> NP (IsCon :.: f) xs
 expand ns = go sList (Just ns) where
   go::forall ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (IsCon :.: f) ys
@@ -72,6 +82,7 @@ expandNSNP ns = go sList (Just ns) where
 
 expandA::Generic a=>a->NP (IsCon :.: (NP I)) (Code a)
 expandA = expandNSNP . unSOP . from
+
 
 type WrappedProjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = K (g (NP f xs)) -.-> g :.: f
 
@@ -100,8 +111,18 @@ distribute x = hap wrappedProjections (hpure $ K x)
 distributeI::(Functor h, SListI xs)=>h (NP I xs) -> NP h xs
 distributeI = hliftA (fmap unI . unComp) . distribute
 
-functorToIsConNP::forall g a xss.(Functor g,Generic a)=>g a -> NP (g :.: (IsCon :.: (NP I))) (Code a)
+functorToIsConNP::forall g a.(Functor g,Generic a)=>g a -> NP (g :.: (IsCon :.: (NP I))) (Code a)
 functorToIsConNP ga = hap wrappedProjections (hpure $ K (expandA <$> ga))
+
+{-
+functorMaybeToIsConNP::forall g a.(Functor g,Generic a)=>(g :.: Maybe) a -> NP (g :.: (IsCon :.: (NP I))) (Code a)
+functorMaybeToIsConNP =
+  let joinMIC::Maybe (IsCon a) -> IsCon a 
+      joinMIC = IsCon . join . fmap unIsCon
+      q::SListI xs=>((g :.: Maybe) :.: (IsCon :.: (NP I))) xs -> (g :.: (IsCon :.: (NP I))) xs
+      q = Comp . fmap Comp . hmap (fmap joinMIC) . unComp . fmap unComp . unComp
+  in hmap q . functorToIsConNP 
+-}
 
 reAssociate::Functor g=>(g :.: (f :.: h)) a -> ((g :.: f) :.: h) a
 reAssociate = Comp . Comp . fmap unComp . unComp
@@ -114,29 +135,38 @@ isConNPToPOPIsCon =
   let proxyC = Proxy :: Proxy (SListI)
   in POP . hcliftA proxyC (distributeI . unComp . reAssociate)
 
-doAndSequence::(Applicative h, SListI2 xss)=>(forall a.f a -> h a) -> POP f xss -> NP (h :.: (NP I)) xss
+
+type DoAndSequence f h xss = POP f xss -> NP (h :.: (NP I)) xss 
+
+doAndSequence::(Applicative h, SListI2 xss)=>(forall a.f a->h a) -> DoAndSequence f h xss --POP f xss -> NP (h :.: (NP I)) xss
 doAndSequence q =
   let sListIC = Proxy :: Proxy (SListI)
   in hcliftA sListIC (Comp . hsequence) . unPOP . hliftA q
 
+class Map (f :: k -> *) (h :: k -> *) (a :: k) where
+  doMap::f a -> h a
+
+doAndSequence'::forall f h xss.(Applicative h, SListI2 xss, All2 (Map f h) xss)=>DoAndSequence f h xss --POP f xss -> NP (h :.: (NP I)) xss
+doAndSequence' =
+  let sListIC = Proxy :: Proxy SListI
+      mapIC = Proxy :: Proxy (Map f h)
+  in hcliftA sListIC (Comp . hsequence) . unPOP . hcliftA mapIC doMap
+
 reconstructA::(Functor h, Generic a) => NP (h :.: (NP I)) (Code a) -> NP (K (h a)) (Code a)
 reconstructA = hliftA (K. fmap (to . SOP) . unK) . hap wrappedInjections
 
-functorDoPerConstructor::(Generic a, Functor g, Applicative h)=>(forall a.(g :.: IsCon) a -> h a)->g a->[h a]  -- one per constructor
-functorDoPerConstructor doF = hcollapse . reconstructA . doAndSequence doF . isConNPToPOPIsCon . functorToIsConNP
 
-{-
-conNames::forall a xss.(HasDatatypeInfo a, SListI2 xss)=>NP (ConstructorInfo) xss
-conNames = datatypeInfo (Proxy :: Proxy a)  -- NP (K ConstructorName) (Code a)
--}
+functorDoPerConstructor::(Generic a, Functor g, Applicative h)=>DoAndSequence (g :.: IsCon) h (Code a)->g a->[h a]  -- one per constructor
+functorDoPerConstructor doAndS = hcollapse . reconstructA . doAndS . isConNPToPOPIsCon . functorToIsConNP
 
 functorDoPerConstructor'::forall a g h.(Generic a, HasDatatypeInfo a, Functor g, Applicative h)
-    =>(forall x.(g :.: IsCon) x -> h x)
+    =>DoAndSequence (g :.: IsCon) h (Code a)
     ->g a
     ->[(ConstructorName,h a)]  -- one per constructor
-functorDoPerConstructor' doF ga =
+functorDoPerConstructor' doAndS ga =
   let conNames = hcollapse . hliftA (K . constructorName) . constructorInfo $ datatypeInfo (Proxy :: Proxy a)  -- [ConstructorName]
-  in zip conNames (functorDoPerConstructor doF ga)
+  in zip conNames (functorDoPerConstructor doAndS ga)
+
 
 -- should "updated" in the below be dynAsEv?
 dynIsConNPToEventNP::(Reflex t, SListI2 xss)=> NP ((Dynamic t) :.: (IsCon :.: (NP I))) xss -> NP ((Event t) :.: (NP I)) xss
@@ -167,4 +197,32 @@ eventPerConstructor = npEventsToList . dynamicToNPEvent
 -- END SIDEBAR
 
 
+{-
+functorDoPerConstructor::(Generic a, Functor g, Applicative h)=>(forall a.(g :.: IsCon) a -> h a)->g a->[h a]  -- one per constructor
+functorDoPerConstructor doF = hcollapse . reconstructA . doAndSequence doF . isConNPToPOPIsCon . functorToIsConNP
 
+functorDoPerConstructor'::forall a g h.(Generic a, HasDatatypeInfo a, Functor g, Applicative h)
+    =>(forall x.(g :.: IsCon) x -> h x)
+    ->g a
+    ->[(ConstructorName,h a)]  -- one per constructor
+functorDoPerConstructor' doF ga =
+  let conNames = hcollapse . hliftA (K . constructorName) . constructorInfo $ datatypeInfo (Proxy :: Proxy a)  -- [ConstructorName]
+  in zip conNames (functorDoPerConstructor doF ga)
+-}
+
+{-
+type family IsIn (x :: k) (xs :: [k]) :: Bool where
+  IsIn _ '[] = False
+  IsIn x (y ': ys) = (x == y) || (IsIn x ys)
+
+type family IsIn2 (x :: k) (xss :: [[k]]) :: Bool where
+  IsIn2 _ '[] = False
+  IsIn2 x (ys ': yss) = (IsIn x ys) || (IsIn2 x yss) 
+
+
+doAndSequence''::(Applicative h, SListI2 xss)=>(forall x.(IsIn2 x xss ~ True)=>f x->h x) -> POP f xss -> NP (h :.: (NP I)) xss
+doAndSequence'' q =
+  let sListIC = Proxy :: Proxy (SListI)
+      qC = 
+  in hcliftA sListIC (Comp . hsequence) . unPOP . hliftA q
+-}

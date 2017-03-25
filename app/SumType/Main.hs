@@ -24,11 +24,12 @@ import qualified Data.Map                         as M
 import           Data.Maybe                       (isNothing)
 import qualified Data.Text                        as T
 import           Data.Traversable                 (sequenceA)
+import           Control.Monad                    (join)
 
 import           System.Process                   (spawnProcess)
 import           Text.Read                        (readMaybe)
 
-import           Generics.SOP                     ((:.:) (..), ConstructorName,
+import           Generics.SOP                     ((:.:) (..), ConstructorName, Generic, HasDatatypeInfo, All2,Code,
                                                    unComp)
 import           Reflex.Dom.Contrib.DynamicUtils
 import           Reflex.Dom.Contrib.SumType
@@ -39,6 +40,8 @@ main = do
   let port :: Int = 3702
   pHandle <- spawnProcess "open" ["http://localhost:" ++ show port]
   run port testWidget
+
+testWidget = return ()
 
 type ReflexConstraints t m = (MonadWidget t m, DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace)
 type WidgetConstraints t m a = (ReflexConstraints t m, Show a, Read a)
@@ -53,13 +56,13 @@ di2dm::Reflex t=>DynIsCon t a -> DynMaybe t a
 di2dm = Comp . fmap unIsCon . unComp
 
 -- These don't "fire" on Nothing/Nothing updates.  But they do fire on Nothing/Just, Just/Nothing and Just/Just
-uniqDynJust::DynMaybe t a -> DynMaybe t a
+uniqDynJust::Reflex t=>DynMaybe t a -> DynMaybe t a
 uniqDynJust = Comp . uniqDynBy (\a b->isNothing a && isNothing b) . unComp
 
-uniqDynIsCon::DynIsCon t a -> DynIsCon t a
+uniqDynIsCon::Reflex t=>DynIsCon t a -> DynIsCon t a
 uniqDynIsCon = dm2di . uniqDynJust . di2dm
 
-isConDyn::DynIsCon t a -> Dynamic t Bool
+isConDyn::Reflex t=>DynIsCon t a -> Dynamic t Bool
 isConDyn = fmap (not . isNothing . unIsCon) . unComp
 
 
@@ -89,9 +92,10 @@ hiddenCSS  = "style" =: "display: none"
 visibleCSS::M.Map T.Text T.Text
 visibleCSS = "style" =: "display: inline"
 
-sumChooser::WidgetConstraints t m a=>[(ConstructorName,m (DynIsCon t a))]->m (DynMaybe t a)
+sumChooser::WidgetConstraints t m a=>[(ConstructorName, (m :.: (DynIsCon t)) a)]->m (DynMaybe t a)
 sumChooser namedWidgets = mdo
-  let (conNames, widgets) = unzip namedWidgets
+  let (conNames, widgets') = unzip namedWidgets
+      widgets = unComp <$> widgets'
       indexedNames = zip [1..] (T.pack <$> conNames)
       boolList n = (==n) <$> [1..]
       visWidgets = (\(vd,w) -> hideableW vd w) <$> zip visDyns widgets
@@ -105,14 +109,22 @@ sumChooser namedWidgets = mdo
       visDyns = zipWith (\a b -> leftmost [a,b]) visEvsInput chooserEvs
   Comp <$> holdDyn Nothing (Just <$> leftmost eventAs)
 
-chooserIndexedEvs::Event t Int -> Int -> [Event t Bool]
+chooserIndexedEvs::Reflex t=>Event t Int -> Int -> [Event t Bool]
 chooserIndexedEvs intEv size = (\n -> (==n) <$> intEv) <$> [1..size]
-
---buildSum::(Generic a, HasDatatypeInfo a, WidgetConstraints t m a)
-
 
 class WidgetConstraints t m a => TestBuilder t m a where
   build::DynMaybe t a -> m (DynMaybe t a)
+
+q::Reflex t=>(DynMaybe t :.: IsCon) a -> DynMaybe t a
+q = Comp . fmap (join . fmap unIsCon) . unComp . unComp
+
+instance TestBuilder t m a=>Map (DynMaybe t :.: IsCon) (m :.: DynIsCon t) a where
+  doMap = Comp . fmap dm2di . build . q
+
+buildSum::(Generic a, HasDatatypeInfo a, WidgetConstraints t m a, Applicative m, All2 (Map (DynMaybe t :.: IsCon) (m :.: (DynIsCon t))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
+buildSum = sumChooser . functorDoPerConstructor' doAndSequence'
+
+
 
 instance WidgetConstraints t m Int => TestBuilder t m Int where
   build = fieldWidget
