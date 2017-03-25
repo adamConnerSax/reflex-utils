@@ -7,7 +7,7 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeOperators              #-}
-module Reflex.Dom.Contrib.SumType () where
+module Reflex.Dom.Contrib.SumType where
 
 
 -- FIXME:  make imports specific or qualify them
