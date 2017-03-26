@@ -154,6 +154,10 @@ functorDoPerConstructor' doAndS ga =
   in zip conNames (functorDoPerConstructor doAndS ga)
 
 
+-- now Reflex specific
+
+data ConWidget t h a = ConWidget { conName::ConstructorName, switchedTo::Event t a, widget::h a }
+
 -- should "updated" in the below be dynAsEv?
 dynIsConNPToEventNP::(Reflex t, SListI2 xss)=> NP ((Dynamic t) :.: (IsCon :.: (NP I))) xss -> NP ((Event t) :.: (NP I)) xss
 dynIsConNPToEventNP = hmap (Comp . fmapMaybe unIsCon . fmap unComp . updated . unComp)
@@ -162,7 +166,7 @@ dynIsConNPToEventNP = hmap (Comp . fmapMaybe unIsCon . fmap unComp . updated . u
 eventNPToEventNSNP::(Reflex t, SListI2 xss)=> NP ((Event t) :.: (NP I)) xss -> NP (K ((Event t) (NS (NP I) xss))) xss
 eventNPToEventNSNP = hap wrappedInjections
 
--- SIDEBAR
+
 
 eventNSNPToEvent::(Reflex t, SListI2 xss,Generic a, xss ~ Code a) =>NP (K ((Event t) (NS (NP I) xss))) xss -> NP (K (Event t a)) xss
 eventNSNPToEvent = hliftA (K  . fmap (to . SOP) . unK)
@@ -180,8 +184,36 @@ dynamicToNPEvent = eventNSNPToEvent . eventNPToEventNSNP . dynIsConNPToEventNP .
 eventPerConstructor::(Reflex t, Generic a)=>Dynamic t a -> [Event t a]
 eventPerConstructor = npEventsToList . dynamicToNPEvent
 
--- END SIDEBAR
 
+dynamicToConWidgets::(Reflex t, Generic a,HasDatatypeInfo a, Applicative h)
+  =>DoAndSequence (Dynamic t :.: IsCon) (h :.: Maybe) (Code a)
+  ->Dynamic t a
+  -> [ConWidget t (h :.: Maybe) a]
+dynamicToConWidgets doAndS dynA =
+  let switchEvents = eventPerConstructor dynA
+      namedWidgets = functorDoPerConstructor' doAndS dynA
+  in zipWith (\ev (n,w) -> ConWidget n ev w) switchEvents namedWidgets
+
+{-
+maybeDynToConWidgets::(Reflex t, Generic a,HasDatatypeInfo a, Applicative h)
+  =>DoAndSequence (Dynamic t :.: IsCon) h (Code a)
+  ->(Dynamic t :.: Maybe) a
+  -> [ConWidget t h a]
+maybeDynToConWidgets doAndS dynMA =
+  let cws = dynamicToConWidgets doAndS (unComp dynMA)
+      cws' = \ConWidget n ev w -> ConWidget n (fmapMaybe id ev) 
+  in 
+-}
+{-
+dynamicToWidgetEvent::(Reflex t, Generic a,HasDatatypeInfo a, Applicative h)
+  =>DoAndSequence (Dynamic t :.: IsCon) (h :.: Maybe) (Code a)
+  ->Dynamic t a
+  ->Event t (h a)
+dynamicToWidgetEvent doAndS dynA =
+  let conWidgets = dynamicToConWidgets doAndS dynA
+      f (ConWidget _ ev w) = w <$ ev
+  in leftmost $ f <$> conWidgets
+-}
 
 {-
 functorDoPerConstructor::(Generic a, Functor g, Applicative h)=>(forall a.(g :.: IsCon) a -> h a)->g a->[h a]  -- one per constructor
