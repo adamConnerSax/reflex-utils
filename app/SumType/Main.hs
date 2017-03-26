@@ -20,17 +20,18 @@ import           Reflex.Dom.Old                   (MonadWidget)
 
 import           Control.Monad.Fix                (MonadFix)
 
+import           Control.Monad                    (join)
 import qualified Data.Map                         as M
 import           Data.Maybe                       (isNothing)
 import qualified Data.Text                        as T
 import           Data.Traversable                 (sequenceA)
-import           Control.Monad                    (join)
 
 import           System.Process                   (spawnProcess)
 import           Text.Read                        (readMaybe)
 
-import           Generics.SOP                     ((:.:) (..), ConstructorName, Generic, HasDatatypeInfo, All2,Code,
-                                                   unComp)
+import           Generics.SOP                     ((:.:) (..), All2, Code,
+                                                   ConstructorName, Generic,
+                                                   HasDatatypeInfo, unComp)
 import           Reflex.Dom.Contrib.DynamicUtils
 import           Reflex.Dom.Contrib.SumType
 
@@ -41,7 +42,14 @@ main = do
   pHandle <- spawnProcess "open" ["http://localhost:" ++ show port]
   run port testWidget
 
-testWidget = return ()
+testWidget::JSM ()
+testWidget = mainWidget $ do
+  dynMInt <- build (Comp . constDyn $ Just (2::Int))
+  dynMText <- build (Comp $ constDyn (Nothing :: Maybe T.Text))
+  dynME <- build (Left <$> dynMInt)
+  let dynMResult = either (T.pack . show) id <$> dynME
+  dynText (T.pack . show <$> unComp dynMResult)
+  return ()
 
 type ReflexConstraints t m = (MonadWidget t m, DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace)
 type WidgetConstraints t m a = (ReflexConstraints t m, Show a, Read a)
@@ -115,15 +123,25 @@ chooserIndexedEvs intEv size = (\n -> (==n) <$> intEv) <$> [1..size]
 class WidgetConstraints t m a => TestBuilder t m a where
   build::DynMaybe t a -> m (DynMaybe t a)
 
+
 q::Reflex t=>(DynMaybe t :.: IsCon) a -> DynMaybe t a
 q = Comp . fmap (join . fmap unIsCon) . unComp . unComp
 
 instance TestBuilder t m a=>Map (DynMaybe t :.: IsCon) (m :.: DynIsCon t) a where
-  doMap = Comp . fmap dm2di . build . q
+  doMap = Comp . fmap dm2di . build . uniqDynJust . q
 
-buildSum::(Generic a, HasDatatypeInfo a, WidgetConstraints t m a, Applicative m, All2 (Map (DynMaybe t :.: IsCon) (m :.: (DynIsCon t))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
-buildSum = sumChooser . functorDoPerConstructor' doAndSequence'
-
+buildSum::forall a t m.(Generic a, HasDatatypeInfo a
+          , WidgetConstraints t m a
+          , All2 (Map (DynMaybe t :.: IsCon) (m :.: (DynIsCon t))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
+--buildSum = sumChooser . functorDoPerConstructor' doAndSequence'
+buildSum x =
+  let listOfWidgets::Reflex t=>[(m :.: (DynIsCon t)) a]
+      listOfWidgets = snd <$> functorDoPerConstructor' doAndSequence' x
+      widgetOfList::m [DynIsCon t a]
+      widgetOfList = sequenceA $ unComp <$> listOfWidgets
+      widgetOfList'::m [DynMaybe t a]
+      widgetOfList' = fmap di2dm <$> widgetOfList
+  in head <$> widgetOfList'
 
 
 instance WidgetConstraints t m Int => TestBuilder t m Int where
@@ -134,6 +152,14 @@ instance WidgetConstraints t m Double => TestBuilder t m Double where
 
 instance WidgetConstraints t m T.Text => TestBuilder t m T.Text where
   build = fieldWidget
+
+instance TestBuilder t m a => TestBuilder t m (Maybe a) where
+  build = buildSum
+
+instance (TestBuilder t m a, TestBuilder t m b) => TestBuilder t m (Either a b) where
+  build = buildSum
+
+
 
 
 

@@ -3,41 +3,27 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures             #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE PolyKinds                  #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TypeOperators              #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE UndecidableInstances       #-}
 module Reflex.Dom.Contrib.SumType where
 
 
 -- FIXME:  make imports specific or qualify them
 import           Generics.SOP            hiding (Compose)
-import           Generics.SOP.Constraint (SListIN,And)
+import           Generics.SOP.Constraint (And, SListIN)
 import           Generics.SOP.NP
 import qualified GHC.Generics            as GHC
 --import           Data.Type.Equality
 --import           Data.Type.Bool
-import           Control.Monad (join)  
+import           Control.Monad           (join)
 import           Data.Functor.Compose
 import           Reflex
 import           Reflex.Dom
-
-{-
-Trying to make a smart dynamic of sum type widget builder
-
-
-1. Functor g=>g a -> NP (Compose g (Compose Maybe (NP I))) (Code a)  -- Done
-2. NP (Compose (Compose (Dynamic t) Maybe) (NP I)) (Code a) -> NP (Compose (Event t) (NP I)) (Code a)
-3. NP (Compose (Event t) (NP I)) (Code a) -> NP (Compose K (m (Event t a))) xs -- ?? xs::'[a,a,...] length of number of constructors
-4. NP (Compose K (m (Event t a))) xs -> (Event t Int, [m (Event t a)]) where the first event tells you which of the second is active.
-5. (Event t Int,[m (Event t a)]) -> m (Event t a) -- could use widgetHold or visibility here
-6. m (Event t a) -> m (Dynamic t a)
-
--}
-
 
 -- utilities
 
@@ -53,9 +39,9 @@ con::a -> IsCon a
 con = IsCon . Just
 
 
-instance (Applcative f, Applicative g) => Applicative (f :.: g) where
-  pure = Comp . pure $ pure
-  fgF <*> fgA = (unComp fgF
+instance (Applicative f, Applicative g) => Applicative (f :.: g) where
+  pure x= Comp (pure (pure x))
+  fgF <*> fgA = Comp $ ((<*>) <$> (unComp fgF) <*> (unComp fgA))
 
 expand::forall f xs.(SListI xs)=>NS f xs -> NP (IsCon :.: f) xs
 expand ns = go sList (Just ns) where
@@ -117,11 +103,11 @@ functorToIsConNP ga = hap wrappedProjections (hpure $ K (expandA <$> ga))
 {-
 functorMaybeToIsConNP::forall g a.(Functor g,Generic a)=>(g :.: Maybe) a -> NP (g :.: (IsCon :.: (NP I))) (Code a)
 functorMaybeToIsConNP =
-  let joinMIC::Maybe (IsCon a) -> IsCon a 
+  let joinMIC::Maybe (IsCon a) -> IsCon a
       joinMIC = IsCon . join . fmap unIsCon
       q::SListI xs=>((g :.: Maybe) :.: (IsCon :.: (NP I))) xs -> (g :.: (IsCon :.: (NP I))) xs
       q = Comp . fmap Comp . hmap (fmap joinMIC) . unComp . fmap unComp . unComp
-  in hmap q . functorToIsConNP 
+  in hmap q . functorToIsConNP
 -}
 
 reAssociate::Functor g=>(g :.: (f :.: h)) a -> ((g :.: f) :.: h) a
@@ -136,7 +122,7 @@ isConNPToPOPIsCon =
   in POP . hcliftA proxyC (distributeI . unComp . reAssociate)
 
 
-type DoAndSequence f h xss = POP f xss -> NP (h :.: (NP I)) xss 
+type DoAndSequence f h xss = POP f xss -> NP (h :.: (NP I)) xss
 
 doAndSequence::(Applicative h, SListI2 xss)=>(forall a.f a->h a) -> DoAndSequence f h xss --POP f xss -> NP (h :.: (NP I)) xss
 doAndSequence q =
@@ -217,12 +203,12 @@ type family IsIn (x :: k) (xs :: [k]) :: Bool where
 
 type family IsIn2 (x :: k) (xss :: [[k]]) :: Bool where
   IsIn2 _ '[] = False
-  IsIn2 x (ys ': yss) = (IsIn x ys) || (IsIn2 x yss) 
+  IsIn2 x (ys ': yss) = (IsIn x ys) || (IsIn2 x yss)
 
 
 doAndSequence''::(Applicative h, SListI2 xss)=>(forall x.(IsIn2 x xss ~ True)=>f x->h x) -> POP f xss -> NP (h :.: (NP I)) xss
 doAndSequence'' q =
   let sListIC = Proxy :: Proxy (SListI)
-      qC = 
+      qC =
   in hcliftA sListIC (Comp . hsequence) . unPOP . hliftA q
 -}
