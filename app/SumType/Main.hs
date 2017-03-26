@@ -55,13 +55,19 @@ testWidget = mainWidget $ do
   el "span" $ text "Int: "
   dynMInt <- build (Comp . constDyn $ Just (2::Int))
   el "br" $ blank
+  el "span" $ text "Either Int Text: "
+  dynMTE1 <- buildSum (LeftInt <$> dynMInt)
+  el "br" blank
+  dynMaybeText dynMTE1
+  el "br" blank
   el "span" $ text "Text: "
   dynMText <- build (Comp $ constDyn (Nothing :: Maybe T.Text))
   el "br" blank
   el "span" $ text "Either Int Text: "
-  dynMTE <- buildSum (LeftInt <$> dynMInt)
+  dynMTE2 <- buildSum (RightText <$> dynMText)
   el "br" blank
-  dynMaybeText dynMTE
+  dynMaybeText dynMTE2
+
   return ()
 
 dynMaybeText::(ReflexConstraints t m, Show a)=>DynMaybe t a->m ()
@@ -104,34 +110,6 @@ fieldWidget = fieldWidget' (readMaybe . T.unpack)
 fieldWidgetIC::(WidgetConstraints t m a,Read a)=>DynIsCon t a -> m (DynIsCon t a)
 fieldWidgetIC = fmap dm2di . fieldWidget . di2dm
 
-hideableW::ReflexConstraints t m=>Event t Bool -> m a -> m a
-hideableW visEv w = do
-  visDyn <- holdDyn False visEv
-  let attrsDyn = (\x -> if x then visibleCSS else hiddenCSS) <$> visDyn
-  elDynAttr "div" attrsDyn w
-
-hiddenCSS::M.Map T.Text T.Text
-hiddenCSS  = "style" =: "display: none"
-
-visibleCSS::M.Map T.Text T.Text
-visibleCSS = "style" =: "display: inline"
-
-sumChooser::WidgetConstraints t m a=>[(ConstructorName, (m :.: (DynIsCon t)) a)]->m (DynMaybe t a)
-sumChooser namedWidgets = mdo
-  let (conNames, widgets') = unzip namedWidgets
-      widgets = unComp <$> widgets' -- [m (DynIsCon t a)]
-      indexedNames = zip [1..] (T.pack <$> conNames) 
-      visWidgets = {- zipWith hideableW visEvs -} widgets -- [m (DynIsCon t a)]  with visEvs built in 
-      ddConfig = DropdownConfig inputIndexEv (constDyn mempty)
-  chooserEv <- _dropdown_change <$> dropdown 1 (constDyn $ M.fromList indexedNames) ddConfig -- put dropdown in DOM
-  dynIsCons <- sequenceA visWidgets -- [DynIsCon t a], put widgets in DOM
-  let eventAs = (fmapMaybe id . updated . fmap unIsCon . unComp) <$> dynIsCons -- [Event t a], only firing on updates to "Just"
-      visEvsInput = updated . isConDyn <$> dynIsCons -- [Event t Bool]
-      inputIndexEv = whichFired eventAs -- Event t Int
---      chooserEvs = chooserIndexedEvs chooserEv (length conNames) 
---      visEvs = zipWith (\a b -> leftmost [a,b])  visEvsInput  chooserEvs
-  Comp <$> holdDyn Nothing (Just <$> leftmost eventAs)
-
 sumChooserSimple::WidgetConstraints t m a=>[(ConstructorName, (m :.: (DynIsCon t)) a)]->m (DynMaybe t a)
 sumChooserSimple namedWidgets = do
   let (conNames, widgets') = unzip namedWidgets
@@ -145,8 +123,20 @@ sumChooserSimple namedWidgets = do
       maybeDyn = (headMay . catMaybes) <$> listMaybeDyn
   return $ Comp maybeDyn
   
-chooserIndexedEvs::Reflex t=>Event t Int -> Int -> [Event t Bool]
-chooserIndexedEvs intEv size = (\n -> (==n) <$> intEv) <$> [1..size]
+
+sumChooserWH::WidgetConstraints t m a=>[ConWidget t m a]->m (DynMaybe t a)
+sumChooserWH cws = mdo
+  let indexedCN = zip [0..] (T.pack . conName <$> cws)
+      inputIndexEv = whichFired (switchedTo <$> cws)
+      ddConfig = DropdownConfig inputIndexEv (constDyn mempty)
+  chosenIndexEv <- _dropdown_change <$> dropdown 0 (constDyn $ M.fromList indexedCN) ddConfig -- put dropdown in DOM
+  let newIndexEv = leftmost [inputIndexEv,chosenIndexEv]
+  let newWidgetEv = (\n -> (unComp . widget <$> cws) !! n) <$> newIndexEv -- Event t (m (DynMaybe t a))
+  curIndex <- holdDyn 0 newIndexEv
+  dynText $ T.pack .show <$> curIndex
+  Comp . join . fmap unComp <$> widgetHold (head $ unComp . widget <$> cws) newWidgetEv
+  
+  
 
 class WidgetConstraints t m a => TestBuilder t m a where
   build::DynMaybe t a -> m (DynMaybe t a)
@@ -155,23 +145,19 @@ class WidgetConstraints t m a => TestBuilder t m a where
 q::Reflex t=>(DynMaybe t :.: IsCon) a -> DynMaybe t a
 q = Comp . fmap (join . fmap unIsCon) . unComp . unComp
 
-instance TestBuilder t m a=>Map (DynMaybe t :.: IsCon) (m :.: DynIsCon t) a where
-  doMap = Comp . fmap dm2di . build . uniqDynJust . q
+instance TestBuilder t m a=>Map (Dynamic t :.: IsCon) (m :.: Dynamic t :.: Maybe) a where
+  doMap = Comp . build . di2dm . uniqDynIsCon
+
+buildSum'::forall a t m.(Generic a, HasDatatypeInfo a
+          , WidgetConstraints t m a
+          , All2 (Map (DynMaybe t :.: IsCon) (m :.: (DynIsCon t))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
+buildSum' = sumChooserSimple . functorDoPerConstructor' doAndSequence'
 
 buildSum::forall a t m.(Generic a, HasDatatypeInfo a
           , WidgetConstraints t m a
-          , All2 (Map (DynMaybe t :.: IsCon) (m :.: (DynIsCon t))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
-buildSum = sumChooser . functorDoPerConstructor' doAndSequence'
-{-
-buildSum x =
-  let listOfWidgets::Reflex t=>[(m :.: (DynIsCon t)) a]
-      listOfWidgets = snd <$> functorDoPerConstructor' doAndSequence' x
-      widgetOfList::m [DynIsCon t a]
-      widgetOfList = sequenceA $ unComp <$> listOfWidgets
-      widgetOfList'::m [DynMaybe t a]
-      widgetOfList' = fmap di2dm <$> widgetOfList
-  in head <$> widgetOfList'
--}
+          , All2 (Map (Dynamic t :.: IsCon) (m :.: (Dynamic t :.: Maybe))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
+buildSum = sumChooserWH . maybeDynToConWidgets doAndSequence'
+
 
 instance WidgetConstraints t m Int => TestBuilder t m Int where
   build = fieldWidget
@@ -182,12 +168,13 @@ instance WidgetConstraints t m Double => TestBuilder t m Double where
 instance WidgetConstraints t m T.Text => TestBuilder t m T.Text where
   build = fieldWidget
 
+{-
 instance TestBuilder t m a => TestBuilder t m (Maybe a) where
   build = buildSum
 
 instance (TestBuilder t m a, TestBuilder t m b) => TestBuilder t m (Either a b) where
   build = buildSum
-
+-}
 
 
 

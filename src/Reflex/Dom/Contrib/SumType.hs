@@ -27,9 +27,6 @@ import           Reflex.Dom
 
 -- utilities
 
-whichFired::Reflex t=>[Event t a]->Event t Int
-whichFired = leftmost . zipWith (\n e -> n <$ e) [1..]
-
 newtype IsCon a = IsCon { unIsCon::Maybe a} deriving (Functor,Applicative,Monad,Show)
 
 notCon::IsCon a
@@ -153,67 +150,73 @@ functorDoPerConstructor' doAndS ga =
   let conNames = hcollapse . hliftA (K . constructorName) . constructorInfo $ datatypeInfo (Proxy :: Proxy a)  -- [ConstructorName]
   in zip conNames (functorDoPerConstructor doAndS ga)
 
+-- above is all Reflex independent and belongs in its own lib, perhaps
 
 -- now Reflex specific
 
-data ConWidget t h a = ConWidget { conName::ConstructorName, switchedTo::Event t a, widget::h a }
-
 -- should "updated" in the below be dynAsEv?
-dynIsConNPToEventNP::(Reflex t, SListI2 xss)=> NP ((Dynamic t) :.: (IsCon :.: (NP I))) xss -> NP ((Event t) :.: (NP I)) xss
-dynIsConNPToEventNP = hmap (Comp . fmapMaybe unIsCon . fmap unComp . updated . unComp)
-
--- this would have been a doozy but wasn't because step 1 was already this doozy
-eventNPToEventNSNP::(Reflex t, SListI2 xss)=> NP ((Event t) :.: (NP I)) xss -> NP (K ((Event t) (NS (NP I) xss))) xss
-eventNPToEventNSNP = hap wrappedInjections
-
-
-
-eventNSNPToEvent::(Reflex t, SListI2 xss,Generic a, xss ~ Code a) =>NP (K ((Event t) (NS (NP I) xss))) xss -> NP (K (Event t a)) xss
-eventNSNPToEvent = hliftA (K  . fmap (to . SOP) . unK)
-
-npEventsToList::SListI2 xss=>NP (K (Event t a)) xss -> [Event t a]
-npEventsToList = hcollapse
-
+dynIsConToEvent::forall a t (f :: k -> *).Reflex t=>(Dynamic t :.: (IsCon :.: f)) a -> (Event t :.: f) a
+dynIsConToEvent = Comp . fmapMaybe unIsCon . fmap unComp . updated . unComp
 
 -- NB: we now have Dynamic t a -> NP (K (Event t a)) xss, a constructor indexed product of per-constructor events
 dynamicToNPEvent::(Reflex t, Generic a)=>Dynamic t a -> NP (K (Event t a)) (Code a)
-dynamicToNPEvent = eventNSNPToEvent . eventNPToEventNSNP . dynIsConNPToEventNP . functorToIsConNP
-
+dynamicToNPEvent = reconstructA . hmap dynIsConToEvent . functorToIsConNP
 
 -- NB: we now have Dynamic t a -> [Event t a] where each is only for one constructor
 eventPerConstructor::(Reflex t, Generic a)=>Dynamic t a -> [Event t a]
-eventPerConstructor = npEventsToList . dynamicToNPEvent
+eventPerConstructor = hcollapse . dynamicToNPEvent 
 
+whichFired::Reflex t=>[Event t a]->Event t Int
+whichFired = leftmost . zipWith (\n e -> n <$ e) [0..]
 
-dynamicToConWidgets::(Reflex t, Generic a,HasDatatypeInfo a, Applicative h)
-  =>DoAndSequence (Dynamic t :.: IsCon) (h :.: Maybe) (Code a)
+data ConWidget t m a = ConWidget { conName::ConstructorName, switchedTo::Event t a, widget::(m :.: (Dynamic t :.: Maybe)) a }
+
+dynamicToConWidgets::(Reflex t, Generic a,HasDatatypeInfo a, Applicative m)
+  =>DoAndSequence (Dynamic t :.: IsCon) (m :.: (Dynamic t :.: Maybe)) (Code a)
   ->Dynamic t a
-  -> [ConWidget t (h :.: Maybe) a]
+  -> [ConWidget t m a]
 dynamicToConWidgets doAndS dynA =
   let switchEvents = eventPerConstructor dynA
       namedWidgets = functorDoPerConstructor' doAndS dynA
   in zipWith (\ev (n,w) -> ConWidget n ev w) switchEvents namedWidgets
 
-{-
-maybeDynToConWidgets::(Reflex t, Generic a,HasDatatypeInfo a, Applicative h)
-  =>DoAndSequence (Dynamic t :.: IsCon) h (Code a)
+
+joinCW::(Reflex t, Functor m)=>(m :.: (Dynamic t :.: Maybe)) (Maybe a) -> (m :.: (Dynamic t :.: Maybe)) a
+joinCW = Comp . fmap (Comp . fmap join . unComp) . unComp
+
+
+joinMaybeIsCon::Functor g=>((g :.: Maybe) :.: IsCon) a -> (g :.: IsCon) a
+joinMaybeIsCon = Comp . fmap (IsCon . join . fmap unIsCon) . unComp . unComp
+
+maybeDynToConWidgets::(Reflex t, Generic a,HasDatatypeInfo a, Applicative m)
+  =>DoAndSequence (Dynamic t :.: IsCon) (m :.: (Dynamic t :.: Maybe)) (Code a)
   ->(Dynamic t :.: Maybe) a
-  -> [ConWidget t h a]
+  -> [ConWidget t m a]
 maybeDynToConWidgets doAndS dynMA =
-  let cws = dynamicToConWidgets doAndS (unComp dynMA)
-      cws' = \ConWidget n ev w -> ConWidget n (fmapMaybe id ev) 
-  in 
--}
-{-
-dynamicToWidgetEvent::(Reflex t, Generic a,HasDatatypeInfo a, Applicative h)
-  =>DoAndSequence (Dynamic t :.: IsCon) (h :.: Maybe) (Code a)
+  let switchEvents = fmapMaybe id <$> eventPerConstructor (unComp dynMA)
+      namedWidgets = functorDoPerConstructor' (doAndS . hmap joinMaybeIsCon) dynMA
+  in zipWith (\ev (n,w) -> ConWidget n ev w) switchEvents namedWidgets
+
+
+dynamicToWidgetEvent::(Reflex t, Generic a,HasDatatypeInfo a, Applicative m)
+  =>DoAndSequence (Dynamic t :.: IsCon) (m :.: (Dynamic t :.: Maybe)) (Code a)
   ->Dynamic t a
-  ->Event t (h a)
+  ->Event t ((m :.: (Dynamic t :.: Maybe)) a)
 dynamicToWidgetEvent doAndS dynA =
   let conWidgets = dynamicToConWidgets doAndS dynA
       f (ConWidget _ ev w) = w <$ ev
   in leftmost $ f <$> conWidgets
--}
+
+maybeDynToWidgetEvent::(Reflex t, Generic a,HasDatatypeInfo a, Applicative m)
+  =>DoAndSequence (Dynamic t :.: IsCon) (m :.: (Dynamic t :.: Maybe)) (Code a)
+  ->(Dynamic t :.: Maybe) a
+  ->Event t ((m :.: (Dynamic t :.: Maybe)) a)
+maybeDynToWidgetEvent doAndS dynA =
+  let conWidgets = maybeDynToConWidgets doAndS dynA
+      f (ConWidget _ ev w) = w <$ ev
+  in leftmost $ f <$> conWidgets
+
+
 
 {-
 functorDoPerConstructor::(Generic a, Functor g, Applicative h)=>(forall a.(g :.: IsCon) a -> h a)->g a->[h a]  -- one per constructor
