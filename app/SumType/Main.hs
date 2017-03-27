@@ -61,7 +61,7 @@ testWidget = mainWidget $ do
   dynMaybeText dynMTE1
   el "br" blank
   el "span" $ text "Text: "
-  dynMText <- build (Comp $ constDyn (Nothing :: Maybe T.Text))
+  dynMText <- build (Comp $ constDyn (Just $ ("ABC"::T.Text)))
   el "br" blank
   el "span" $ text "Either Int Text: "
   dynMTE2 <- buildSum (RightText <$> dynMText)
@@ -96,16 +96,16 @@ isConDyn::Reflex t=>DynIsCon t a -> Dynamic t Bool
 isConDyn = fmap (not . isNothing . unIsCon) . unComp
 
 
-fieldWidget'::(WidgetConstraints t m a,Read a)=>(T.Text -> Maybe a) -> DynMaybe t a -> m (DynMaybe t a)
-fieldWidget' parse dma = do
-  inputEv <- fmapMaybe id <$> dynAsEv (unComp dma) -- Event t a
-  let inputEvT = T.pack . show <$> inputEv
+fieldWidget'::(WidgetConstraints t m a)=>(T.Text -> Maybe a) -> (a -> T.Text)->DynMaybe t a -> m (DynMaybe t a)
+fieldWidget' parse print dma = do
+  inputEv <- fmapMaybe id <$> traceDynAsEv (const "fieldWidget'-") (unComp dma) -- Event t a
+  let inputEvT = print <$> inputEv
       config = TextInputConfig "text" "" inputEvT (constDyn M.empty)
   aDyn <- _textInput_value <$> textInput config
   return . Comp $ parse <$> aDyn
 
 fieldWidget::(WidgetConstraints t m a,Read a)=>DynMaybe t a -> m (DynMaybe t a)
-fieldWidget = fieldWidget' (readMaybe . T.unpack)
+fieldWidget = fieldWidget' (readMaybe . T.unpack) (T.pack . show)
 
 fieldWidgetIC::(WidgetConstraints t m a,Read a)=>DynIsCon t a -> m (DynIsCon t a)
 fieldWidgetIC = fmap dm2di . fieldWidget . di2dm
@@ -131,8 +131,9 @@ sumChooserWH cws = mdo
       ddConfig = DropdownConfig inputIndexEv (constDyn mempty)
   chosenIndexEv <- _dropdown_change <$> dropdown 0 (constDyn $ M.fromList indexedCN) ddConfig -- put dropdown in DOM
   let newIndexEv = leftmost [inputIndexEv,chosenIndexEv]
-  let newWidgetEv = (\n -> (unComp . widget <$> cws) !! n) <$> newIndexEv -- Event t (m (DynMaybe t a))
   curIndex <- holdDyn 0 newIndexEv
+  let switchWidgetEv = updated . uniqDyn $ curIndex 
+      newWidgetEv = (\n -> (unComp . widget <$> cws) !! n) <$> switchWidgetEv -- Event t (m (DynMaybe t a))
   dynText $ T.pack .show <$> curIndex
   Comp . join . fmap unComp <$> widgetHold (head $ unComp . widget <$> cws) newWidgetEv
   
@@ -166,7 +167,7 @@ instance WidgetConstraints t m Double => TestBuilder t m Double where
   build = fieldWidget
 
 instance WidgetConstraints t m T.Text => TestBuilder t m T.Text where
-  build = fieldWidget
+  build = fieldWidget' Just id
 
 {-
 instance TestBuilder t m a => TestBuilder t m (Maybe a) where
