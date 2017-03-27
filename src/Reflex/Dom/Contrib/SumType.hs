@@ -66,7 +66,6 @@ expandNSNP ns = go sList (Just ns) where
 expandA::Generic a=>a->NP (IsCon :.: (NP I)) (Code a)
 expandA = expandNSNP . unSOP . from
 
-
 type WrappedProjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = K (g (NP f xs)) -.-> g :.: f
 
 wrappedProjections::forall xs g f.(Functor g,SListI xs) => NP (WrappedProjection g f xs) xs
@@ -96,16 +95,6 @@ distributeI = hliftA (fmap unI . unComp) . distribute
 
 functorToIsConNP::forall g a.(Functor g,Generic a)=>g a -> NP (g :.: (IsCon :.: (NP I))) (Code a)
 functorToIsConNP ga = hap wrappedProjections (hpure $ K (expandA <$> ga))
-
-{-
-functorMaybeToIsConNP::forall g a.(Functor g,Generic a)=>(g :.: Maybe) a -> NP (g :.: (IsCon :.: (NP I))) (Code a)
-functorMaybeToIsConNP =
-  let joinMIC::Maybe (IsCon a) -> IsCon a
-      joinMIC = IsCon . join . fmap unIsCon
-      q::SListI xs=>((g :.: Maybe) :.: (IsCon :.: (NP I))) xs -> (g :.: (IsCon :.: (NP I))) xs
-      q = Comp . fmap Comp . hmap (fmap joinMIC) . unComp . fmap unComp . unComp
-  in hmap q . functorToIsConNP
--}
 
 reAssociate::Functor g=>(g :.: (f :.: h)) a -> ((g :.: f) :.: h) a
 reAssociate = Comp . Comp . fmap unComp . unComp
@@ -154,7 +143,6 @@ functorDoPerConstructor' doAndS ga =
 
 -- now Reflex specific
 
--- should "updated" in the below be dynAsEv?
 dynIsConToEvent::forall a t (f :: k -> *).Reflex t=>(Dynamic t :.: (IsCon :.: f)) a -> (Event t :.: f) a
 dynIsConToEvent = Comp . fmapMaybe unIsCon . fmap unComp . updated . unComp
 
@@ -167,7 +155,7 @@ eventPerConstructor::(Reflex t, Generic a)=>Dynamic t a -> [Event t a]
 eventPerConstructor = hcollapse . dynamicToNPEvent 
 
 whichFired::Reflex t=>[Event t a]->Event t Int
-whichFired = leftmost . zipWith (\n e -> n <$ e) [0..]
+whichFired = leftmost . zipWith (\n e -> traceEventWith (\nIn -> show nIn ++ " " ++ show n) (n <$ e)) [0..]
 
 data ConWidget t m a = ConWidget { conName::ConstructorName, switchedTo::Event t a, widget::(m :.: (Dynamic t :.: Maybe)) a }
 
@@ -180,10 +168,10 @@ dynamicToConWidgets doAndS dynA =
       namedWidgets = functorDoPerConstructor' doAndS dynA
   in zipWith (\ev (n,w) -> ConWidget n ev w) switchEvents namedWidgets
 
-
+{-
 joinCW::(Reflex t, Functor m)=>(m :.: (Dynamic t :.: Maybe)) (Maybe a) -> (m :.: (Dynamic t :.: Maybe)) a
 joinCW = Comp . fmap (Comp . fmap join . unComp) . unComp
-
+-}
 
 joinMaybeIsCon::Functor g=>((g :.: Maybe) :.: IsCon) a -> (g :.: IsCon) a
 joinMaybeIsCon = Comp . fmap (IsCon . join . fmap unIsCon) . unComp . unComp
