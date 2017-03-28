@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -17,17 +18,19 @@ module Reflex.Dom.Contrib.SumType where
 import           Generics.SOP            hiding (Compose)
 import           Generics.SOP.Constraint (And, SListIN)
 import           Generics.SOP.NP
+import           Generics.SOP.NS
 import qualified GHC.Generics            as GHC
 --import           Data.Type.Equality
 --import           Data.Type.Bool
 import           Control.Monad           (join)
+import           Data.Functor.Classes    (Show1, showsPrec1)
 import           Data.Functor.Compose
 import           Reflex
 import           Reflex.Dom
 
 -- utilities
 
-newtype IsCon a = IsCon { unIsCon::Maybe a} deriving (Functor,Applicative,Monad,Show)
+newtype IsCon a = IsCon { unIsCon::Maybe a} deriving (Functor,Applicative,Monad,Show,Show1)
 
 notCon::IsCon a
 notCon = IsCon Nothing
@@ -40,7 +43,7 @@ instance (Applicative f, Applicative g) => Applicative (f :.: g) where
   pure x= Comp (pure (pure x))
   fgF <*> fgA = Comp $ ((<*>) <$> (unComp fgF) <*> (unComp fgA))
 
-expand::forall f xs.(SListI xs)=>NS f xs -> NP (IsCon :.: f) xs
+expand::forall (f :: [k] -> *) xs.(SListI xs)=>NS f xs -> NP (IsCon :.: f) xs
 expand ns = go sList (Just ns) where
   go::forall ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (IsCon :.: f) ys
   go SNil _ = Nil
@@ -50,8 +53,19 @@ expand ns = go sList (Just ns) where
       Z fx -> Comp (con fx) :* go sList Nothing -- at Z
       S ns' -> Comp notCon :* go sList (Just ns') -- before Z
 
+{-
+genNS::forall (f :: k -> *) xs.SListI xs=>NS (IsCon :.: f) xs
+genNS = ana_NS (\_ -> Comp notCon) (
 
--- why doesn't the function above work?
+expand'::forall (f :: [k] -> *) xs.(SListI xs)=>NS f xs -> NP (IsCon :.: f) xs
+expand' = ana_NP g . hmap (Comp . con) where
+--  remainder::forall ys.NS (IsCon :.: f) ys
+--  remainder = ana_NS (const $ Comp notCon) (\_ -> Left $ Comp notCon) (pure_NP $ Comp notCon)
+  g::(forall y ys. NS (IsCon :.: f) (y ': ys) -> ((IsCon :.: f) y, NS (IsCon :.: f) ys))
+  g (Z ifx) = (ifx, S )
+  g (S ns') = (Comp notCon, ns')
+-}
+{-
 expandNSNP::SListI xs=>NS (NP I) xs -> NP (IsCon :.: (NP I)) xs
 expandNSNP ns = go sList (Just ns) where
   go::forall (f :: [*] -> *) ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (IsCon :.: f) ys
@@ -61,10 +75,11 @@ expandNSNP ns = go sList (Just ns) where
     Just ns -> case ns of
       Z fx -> Comp (con fx) :* go sList Nothing -- at Z
       S ns' -> Comp notCon :* go sList (Just ns') -- before Z
+-}
 
 
 expandA::Generic a=>a->NP (IsCon :.: (NP I)) (Code a)
-expandA = expandNSNP . unSOP . from
+expandA = expand . unSOP . from
 
 type WrappedProjection (g :: * -> *) (f :: k -> *) (xs :: [k]) = K (g (NP f xs)) -.-> g :.: f
 
@@ -140,6 +155,21 @@ functorDoPerConstructor' doAndS ga =
   in zip conNames (functorDoPerConstructor doAndS ga)
 
 -- above is all Reflex independent and belongs in its own lib, perhaps
+{-
+data SumType = A Int | B Int | C String deriving (GHC.Generic, Show)
+instance Generic SumType
+instance HasDatatypeInfo SumType
+
+test::IO ()
+test = do
+  let x = A 12
+      ix = I x
+      expandedX = expandA x
+--      expandedIX = expand ix
+  putStrLn $ show x
+  putStrLn $ showsPrec1 0 expandedX ""
+--  putStrLn $ show expandedIX
+-}
 
 -- now Reflex specific
 
@@ -152,7 +182,7 @@ dynamicToNPEvent = reconstructA . hmap dynIsConToEvent . functorToIsConNP
 
 -- NB: we now have Dynamic t a -> [Event t a] where each is only for one constructor
 eventPerConstructor::(Reflex t, Generic a)=>Dynamic t a -> [Event t a]
-eventPerConstructor = hcollapse . dynamicToNPEvent 
+eventPerConstructor = hcollapse . dynamicToNPEvent
 
 whichFired::Reflex t=>[Event t a]->Event t Int
 whichFired = leftmost . zipWith (\n e -> traceEventWith (\nIn -> show nIn ++ " " ++ show n) (n <$ e)) [0..]

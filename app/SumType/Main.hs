@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -10,7 +11,6 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeOperators         #-}
-{-# LANGUAGE DeriveGeneric #-}
 import           GHCJS.DOM.Types                  (JSM)
 import           Language.Javascript.JSaddle.Warp (run)
 import           Reflex
@@ -22,10 +22,10 @@ import           Control.Monad.Fix                (MonadFix)
 
 import           Control.Monad                    (join)
 import qualified Data.Map                         as M
-import           Data.Maybe                       (isNothing,catMaybes)
+import           Data.Maybe                       (catMaybes, isNothing)
+import           Data.Monoid                      ((<>))
 import qualified Data.Text                        as T
 import           Data.Traversable                 (sequenceA)
-import           Data.Monoid ((<>))
 
 import           System.Process                   (spawnProcess)
 import           Text.Read                        (readMaybe)
@@ -34,10 +34,10 @@ import           Generics.SOP                     ((:.:) (..), All2, Code,
                                                    ConstructorName, Generic,
                                                    HasDatatypeInfo, unComp)
 import           Reflex.Dom.Contrib.DynamicUtils
-import           Reflex.Dom.Contrib.SumType
+import           Reflex.Dom.Contrib.SumType       hiding (SumType)
 
 
-import qualified GHC.Generics as GHC 
+import qualified GHC.Generics                     as GHC
 
 -- NB: This is just for warp.
 main::IO ()
@@ -130,16 +130,16 @@ sumChooserWH cws = mdo
   let indexedCN = zip [0..] (T.pack . conName <$> cws)
       inputIndexEv = whichFired (switchedTo <$> cws)
       ddConfig = DropdownConfig inputIndexEv (constDyn mempty)
-  el "div" $ text ("length cws" <> (T.pack $ show (length cws))) 
+  el "div" $ text ("length cws" <> (T.pack $ show (length cws)))
   chosenIndexEv <- _dropdown_change <$> dropdown 0 (constDyn $ M.fromList indexedCN) ddConfig -- put dropdown in DOM
   let newIndexEv = leftmost [traceEventWith (\n -> "inputFired: " ++ show n) inputIndexEv
                             ,traceEventWith (\n -> "chooserFired: " ++ show n) chosenIndexEv]
   curIndex <- holdDyn 0 newIndexEv
-  let switchWidgetEv = updated . uniqDyn $ curIndex 
+  let switchWidgetEv = updated . uniqDyn $ curIndex
       newWidgetEv = (\n -> (unComp . widget <$> cws) !! n) <$> switchWidgetEv -- Event t (m (DynMaybe t a))
   dynText $ T.pack .show <$> curIndex
   Comp . join . fmap unComp <$> widgetHold (head $ unComp . widget <$> cws) newWidgetEv
-    
+
 
 class WidgetConstraints t m a => TestBuilder t m a where
   build::DynMaybe t a -> m (DynMaybe t a)
