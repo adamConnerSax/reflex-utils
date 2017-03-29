@@ -34,7 +34,7 @@ import           Generics.SOP                     ((:.:) (..), All2, Code,
                                                    ConstructorName, Generic,
                                                    HasDatatypeInfo, unComp)
 import           Reflex.Dom.Contrib.DynamicUtils
-import           Reflex.Dom.Contrib.SumType       hiding (SumType)
+import           Reflex.Dom.Contrib.SumType
 
 
 import qualified GHC.Generics                     as GHC
@@ -52,10 +52,13 @@ instance Generic TestEither
 instance HasDatatypeInfo TestEither
 
 
-data TestSum = A Int | B T.Text | C Double deriving (Show, GHC.Generic)
+data TestSum = A Int | B T.Text | C Double | D T.Text deriving (Show, GHC.Generic)
 instance Generic TestSum
 instance HasDatatypeInfo TestSum
 
+data TestProd = TestProd Int Double deriving (Show,GHC.Generic)
+instance Generic TestProd
+instance HasDatatypeInfo TestProd
 
 
 testWidget::JSM ()
@@ -83,6 +86,11 @@ testWidget = mainWidget $ do
   dynMTS <- buildSum (C <$> dynMDouble)
   el "br" blank
   dynMaybeText dynMTS
+  el "br" blank
+  el "span" $ text "TestProd: "
+  dynMTP <- buildSum (Comp . constDyn . Just $ TestProd 2 2.0)
+  el "br" blank
+  dynMaybeText dynMTP
   return ()
 
 dynMaybeText::(ReflexConstraints t m, Show a)=>DynMaybe t a->m ()
@@ -130,10 +138,9 @@ sumChooserWH cws = mdo
   let indexedCN = zip [0..] (T.pack . conName <$> cws)
       inputIndexEv = whichFired (switchedTo <$> cws)
       ddConfig = DropdownConfig inputIndexEv (constDyn mempty)
-  el "div" $ text ("length cws" <> (T.pack $ show (length cws)))
   chosenIndexEv <- _dropdown_change <$> dropdown 0 (constDyn $ M.fromList indexedCN) ddConfig -- put dropdown in DOM
-  let newIndexEv = leftmost [traceEventWith (\n -> "inputFired: " ++ show n) inputIndexEv
-                            ,traceEventWith (\n -> "chooserFired: " ++ show n) chosenIndexEv]
+  let newIndexEv = leftmost [inputIndexEv
+                            ,chosenIndexEv]
   curIndex <- holdDyn 0 newIndexEv
   let switchWidgetEv = updated . uniqDyn $ curIndex
       newWidgetEv = (\n -> (unComp . widget <$> cws) !! n) <$> switchWidgetEv -- Event t (m (DynMaybe t a))
@@ -167,13 +174,13 @@ instance WidgetConstraints t m Double => TestBuilder t m Double where
 instance WidgetConstraints t m T.Text => TestBuilder t m T.Text where
   build = fieldWidget' Just id
 
-{-
+
 instance TestBuilder t m a => TestBuilder t m (Maybe a) where
   build = buildSum
 
 instance (TestBuilder t m a, TestBuilder t m b) => TestBuilder t m (Either a b) where
   build = buildSum
--}
+
 
 
 
