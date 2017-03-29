@@ -38,7 +38,6 @@ notCon = IsCon Nothing
 con::a -> IsCon a
 con = IsCon . Just
 
-
 instance (Applicative f, Applicative g) => Applicative (f :.: g) where
   pure x= Comp (pure (pure x))
   fgF <*> fgA = Comp $ ((<*>) <$> (unComp fgF) <*> (unComp fgA))
@@ -52,42 +51,6 @@ expand ns = go sList (Just ns) where
     Just ns -> case ns of
       Z fx -> Comp (con fx) :* go sList Nothing -- at Z
       S ns' -> Comp notCon :* go sList (Just ns') -- before Z
-
-
-{-
-genNS::forall (f :: k -> *) xs.SListI xs=>NS (IsCon :.: f) xs
-genNS = go sList where
-  go::forall y ys.SListI ys=>SList (y ': ys) -> NS (IsCon :.: f) (y ': ys)
-  go sNil = Z $ Comp notCon
-  go SCons = S (go sList)
-
-genNS::forall (f :: k -> *) xs.SListI xs=>NS (IsCon :.: f) xs
-genNS = ana_NS refute decide (hpure $ K ()) where
-  refute::forall r.NP (K ()) '[] -> r
-  refute = const . Z $ Comp notCon
-  decide::forall y ys.NP (K ()) (y ': ys) -> Either ((IsCon :.: f) y) (NP (K ()) ys)
-  decide _ = Right $ hpure (K ())
--}
-{-
-expand'::forall (f :: [k] -> *) xs.(SListI xs)=>NS f xs -> NP (IsCon :.: f) xs
-expand' = ana_NP g . hmap (Comp . con) where
---  remainder::forall ys.NS (IsCon :.: f) ys
---  remainder = ana_NS (const $ Comp notCon) (\_ -> Left $ Comp notCon) (pure_NP $ Comp notCon)
-  g::(forall y ys. NS (IsCon :.: f) (y ': ys) -> ((IsCon :.: f) y, NS (IsCon :.: f) ys))
-  g (Z ifx) = (ifx, S )
-  g (S ns') = (Comp notCon, ns')
--}
-{-
-expandNSNP::SListI xs=>NS (NP I) xs -> NP (IsCon :.: (NP I)) xs
-expandNSNP ns = go sList (Just ns) where
-  go::forall (f :: [*] -> *) ys.SListI ys => SList ys -> Maybe (NS f ys) -> NP (IsCon :.: f) ys
-  go SNil _ = Nil
-  go SCons mNS = case mNS of
-    Nothing -> Comp notCon :* go sList Nothing -- after Z
-    Just ns -> case ns of
-      Z fx -> Comp (con fx) :* go sList Nothing -- at Z
-      S ns' -> Comp notCon :* go sList (Just ns') -- before Z
--}
 
 
 expandA::Generic a=>a->NP (IsCon :.: (NP I)) (Code a)
@@ -157,6 +120,7 @@ doAndSequence' =
 {-
 This is the heart of it.  Take a functorial value (Functor g=>g a) and a natural transformation (?), (g :.: IsCon) ~> h, and you get
 a list of [Functor h=>h a], one per constructor of a.
+(g :.: IsCon) is isomorphic to (g :.: Maybe)
 -}
 type TransformEach g h xss = NP ((g :.: IsCon) :.: (NP I)) xss -> NP (h :.: (NP I)) xss
 
@@ -174,17 +138,12 @@ functorDoPerConstructor' doAndS ga =
   let conNames = hcollapse . hliftA (K . constructorName) . constructorInfo $ datatypeInfo (Proxy :: Proxy a)  -- [ConstructorName]
   in zip conNames (functorDoPerConstructor doAndS ga)
 
-
 -- now Reflex specific
-
-
--- NB: we now have Dynamic t a -> NP (K (Event t a)) xss, a constructor indexed product of per-constructor events
 dynamicToEventList::(Reflex t, Generic a)=>Dynamic t a -> [Event t a]
 dynamicToEventList = functorToPerConstructorList (hmap dynIsConToEvent)
 
 dynIsConToEvent::forall a t (f :: k -> *).Reflex t=>((Dynamic t :.: IsCon) :.: f) a -> (Event t :.: f) a
 dynIsConToEvent = Comp . fmapMaybe unIsCon . updated . unComp . unComp
-
 
 dynMaybeToEventList::(Reflex t, Generic a)=>(Dynamic t :.: Maybe) a -> [Event t a]
 dynMaybeToEventList = functorToPerConstructorList (hmap dynMaybeIsConToEvent)
