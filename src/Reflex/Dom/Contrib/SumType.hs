@@ -114,8 +114,11 @@ a list of [Functor h=>h a], one per constructor of a.
 -}
 type TransformEach g h xss = NP ((g :.: IsCon) :.: NP I) xss -> NP (h :.: NP I) xss
 
+functorToPerConstructorNP::(Generic a, Functor g, Functor h)=>TransformEach g h (Code a)->g a->NP (K (h a)) (Code a)
+functorToPerConstructorNP transform = reconstructA . transform . reAssociateNP . functorToIsConNP
+
 functorToPerConstructorList::(Generic a, Functor g, Functor h)=>TransformEach g h (Code a)->g a->[h a]  -- one per constructor
-functorToPerConstructorList transform = hcollapse . reconstructA . transform . reAssociateNP . functorToIsConNP
+functorToPerConstructorList transform = hcollapse . functorToPerConstructorNP transform
 
 functorDoPerConstructor::(Generic a, Functor g, Applicative h)=>DoAndSequence (g :.: IsCon) h (Code a)->g a->[h a]  -- one per constructor
 functorDoPerConstructor doAndS = functorToPerConstructorList (doAndS . isConNPToPOPIsCon)
