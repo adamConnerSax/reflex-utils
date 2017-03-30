@@ -100,23 +100,10 @@ type ReflexConstraints t m = (MonadWidget t m, DomBuilder t m, PostBuild t m, Mo
 type WidgetConstraints t m a = (ReflexConstraints t m, Show a)
 
 type DynMaybe t = (Dynamic t) :.: Maybe
-type DynIsCon t = (Dynamic t) :.: IsCon
-
-dm2di::Reflex t=>DynMaybe t a -> DynIsCon t a
-dm2di = Comp . fmap IsCon . unComp
-
-di2dm::Reflex t=>DynIsCon t a -> DynMaybe t a
-di2dm = Comp . fmap unIsCon . unComp
 
 -- These don't "fire" on Nothing/Nothing updates.  But they do fire on Nothing/Just, Just/Nothing and Just/Just
 uniqDynJust::Reflex t=>DynMaybe t a -> DynMaybe t a
 uniqDynJust = Comp . uniqDynBy (\a b->isNothing a && isNothing b) . unComp
-
-uniqDynIsCon::Reflex t=>DynIsCon t a -> DynIsCon t a
-uniqDynIsCon = dm2di . uniqDynJust . di2dm
-
-isConDyn::Reflex t=>DynIsCon t a -> Dynamic t Bool
-isConDyn = fmap (not . isNothing . unIsCon) . unComp
 
 
 fieldWidget'::(WidgetConstraints t m a)=>(T.Text -> Maybe a) -> (a -> T.Text)->DynMaybe t a -> m (DynMaybe t a)
@@ -129,9 +116,6 @@ fieldWidget' parse print dma = do
 
 fieldWidget::(WidgetConstraints t m a,Read a)=>DynMaybe t a -> m (DynMaybe t a)
 fieldWidget = fieldWidget' (readMaybe . T.unpack) (T.pack . show)
-
-fieldWidgetIC::(WidgetConstraints t m a,Read a)=>DynIsCon t a -> m (DynIsCon t a)
-fieldWidgetIC = fmap dm2di . fieldWidget . di2dm
 
 sumChooserWH::WidgetConstraints t m a=>[ConWidget t m a]->m (DynMaybe t a)
 sumChooserWH cws = mdo
@@ -151,18 +135,14 @@ sumChooserWH cws = mdo
 class WidgetConstraints t m a => TestBuilder t m a where
   build::DynMaybe t a -> m (DynMaybe t a)
 
-
-q::Reflex t=>(DynMaybe t :.: IsCon) a -> DynMaybe t a
-q = Comp . fmap (join . fmap unIsCon) . unComp . unComp
-
-instance TestBuilder t m a=>Map (Dynamic t :.: IsCon) (m :.: Dynamic t :.: Maybe) a where
-  doMap = Comp . build . di2dm . uniqDynIsCon
+instance TestBuilder t m a=>NatAt (Dynamic t :.: Maybe) (m :.: Dynamic t :.: Maybe) a where
+  eta = Comp . build . uniqDynJust
 
 
 buildSum::forall a t m.(Generic a, HasDatatypeInfo a
           , WidgetConstraints t m a
-          , All2 (Map (Dynamic t :.: IsCon) (m :.: (Dynamic t :.: Maybe))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
-buildSum = sumChooserWH . maybeDynToConWidgets doAndSequence'
+          , All2 (NatAt (Dynamic t :.: Maybe) (m :.: (Dynamic t :.: Maybe))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
+buildSum = sumChooserWH . maybeDynToConWidgets mapFieldsAndSequence'
 
 
 instance WidgetConstraints t m Int => TestBuilder t m Int where
