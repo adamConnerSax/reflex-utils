@@ -8,7 +8,6 @@ packages:
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
     commit: "7e97197027d6b09f35013aa630a1f5df7f27ea9e"
-#- '../dataBuilder'
   extra-dep: true
 - location:
     git: https://github.com/ghcjs/jsaddle
@@ -40,6 +39,7 @@ packages:
     git: https://github.com/reflex-frp/reflex-dom-contrib
     commit: "06630c32552ded4cbdc4ff917080ee0f4c33fef3"
   extra-dep: true
+- '../perConstructor-sop'
 - '.'
 
 allow-newer: true

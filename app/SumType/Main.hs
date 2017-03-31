@@ -11,6 +11,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 import           GHCJS.DOM.Types                  (JSM)
 import           Language.Javascript.JSaddle.Warp (run)
 import           Reflex
@@ -21,6 +22,7 @@ import           Reflex.Dom.Old                   (MonadWidget)
 import           Control.Monad.Fix                (MonadFix)
 
 import           Control.Monad                    (join)
+import           Data.Functor.Compose             (Compose (..), getCompose)
 import qualified Data.Map                         as M
 import           Data.Maybe                       (catMaybes, isNothing)
 import           Data.Monoid                      ((<>))
@@ -30,9 +32,9 @@ import           Data.Traversable                 (sequenceA)
 import           System.Process                   (spawnProcess)
 import           Text.Read                        (readMaybe)
 
-import           Generics.SOP                     ((:.:) (..), All2, Code,
-                                                   ConstructorName, Generic,
-                                                   HasDatatypeInfo, unComp)
+--import           Generics.SOP                     ((:.:) (..), All2, Code,
+--                                                   ConstructorName, Generic,
+--                                                   HasDatatypeInfo, unComp)
 import           Reflex.Dom.Contrib.DynamicUtils
 import           Reflex.Dom.Contrib.SumType
 
@@ -64,7 +66,7 @@ instance HasDatatypeInfo TestProd
 testWidget::JSM ()
 testWidget = mainWidget $ do
   el "span" $ text "Int: "
-  dynMInt <- build (Comp . constDyn $ Just (2::Int))
+  dynMInt <- build (Compose . constDyn $ Just (2::Int))
   el "br" $ blank
   el "span" $ text "Either Int Text: "
   dynMTE1 <- buildSum (LeftInt <$> dynMInt)
@@ -72,7 +74,7 @@ testWidget = mainWidget $ do
   dynMaybeText dynMTE1
   el "br" blank
   el "span" $ text "Text: "
-  dynMText <- build (Comp $ constDyn (Just $ ("ABC"::T.Text)))
+  dynMText <- build (Compose $ constDyn (Just $ ("ABC"::T.Text)))
   el "br" blank
   el "span" $ text "Either Int Text: "
   dynMTE2 <- buildSum (RightText <$> dynMText)
@@ -80,7 +82,7 @@ testWidget = mainWidget $ do
   dynMaybeText dynMTE2
   el "br" blank
   el "span" $ text "Double: "
-  dynMDouble <- build (Comp . constDyn $ Nothing)
+  dynMDouble <- build (Compose . constDyn $ Nothing)
   el "br" blank
   el "span" $ text "TestSum: "
   dynMTS <- buildSum (C <$> dynMDouble)
@@ -88,31 +90,30 @@ testWidget = mainWidget $ do
   dynMaybeText dynMTS
   el "br" blank
   el "span" $ text "TestProd: "
-  dynMTP <- buildSum (Comp . constDyn . Just $ TestProd 2 2.0)
+  dynMTP <- buildSum (Compose . constDyn . Just $ TestProd 2 2.0)
   el "br" blank
   dynMaybeText dynMTP
   return ()
 
 dynMaybeText::(ReflexConstraints t m, Show a)=>DynMaybe t a->m ()
-dynMaybeText = dynText . fmap (T.pack . show) . unComp
+dynMaybeText = dynText . fmap (T.pack . show) . getCompose
 
 type ReflexConstraints t m = (MonadWidget t m, DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace)
 type WidgetConstraints t m a = (ReflexConstraints t m, Show a)
 
-type DynMaybe t = (Dynamic t) :.: Maybe
 
 -- These don't "fire" on Nothing/Nothing updates.  But they do fire on Nothing/Just, Just/Nothing and Just/Just
 uniqDynJust::Reflex t=>DynMaybe t a -> DynMaybe t a
-uniqDynJust = Comp . uniqDynBy (\a b->isNothing a && isNothing b) . unComp
+uniqDynJust = Compose . uniqDynBy (\a b->isNothing a && isNothing b) . getCompose
 
 
 fieldWidget'::(WidgetConstraints t m a)=>(T.Text -> Maybe a) -> (a -> T.Text)->DynMaybe t a -> m (DynMaybe t a)
 fieldWidget' parse print dma = do
-  inputEv <- fmapMaybe id <$> traceDynAsEv (const "fieldWidget'-") (unComp dma) -- Event t a
+  inputEv <- fmapMaybe id <$> traceDynAsEv (const "fieldWidget'-") (getCompose dma) -- Event t a
   let inputEvT = print <$> inputEv
       config = TextInputConfig "text" "" inputEvT (constDyn M.empty)
   aDyn <- _textInput_value <$> textInput config
-  return . Comp $ parse <$> aDyn
+  return . Compose $ parse <$> aDyn
 
 fieldWidget::(WidgetConstraints t m a,Read a)=>DynMaybe t a -> m (DynMaybe t a)
 fieldWidget = fieldWidget' (readMaybe . T.unpack) (T.pack . show)
@@ -127,22 +128,27 @@ sumChooserWH cws = mdo
                             ,chosenIndexEv]
   curIndex <- holdDyn 0 newIndexEv
   let switchWidgetEv = updated . uniqDyn $ curIndex
-      newWidgetEv = (\n -> (unComp . widget <$> cws) !! n) <$> switchWidgetEv -- Event t (m (DynMaybe t a))
+      newWidgetEv = (\n -> (widget <$> cws) !! n) <$> switchWidgetEv -- Event t (m (DynMaybe t a))
   dynText $ T.pack .show <$> curIndex
-  Comp . join . fmap unComp <$> widgetHold (head $ unComp . widget <$> cws) newWidgetEv
+  Compose . join . fmap getCompose <$> widgetHold (head $ widget <$> cws) newWidgetEv
 
 
 class WidgetConstraints t m a => TestBuilder t m a where
   build::DynMaybe t a -> m (DynMaybe t a)
 
+instance TestBuilder t m a=>DynMBuildable t m a where
+  dynMBuild = build
+
+{-
 instance TestBuilder t m a=>NatAt (Dynamic t :.: Maybe) (m :.: Dynamic t :.: Maybe) a where
   eta = Comp . build . uniqDynJust
-
+-}
 
 buildSum::forall a t m.(Generic a, HasDatatypeInfo a
           , WidgetConstraints t m a
-          , All2 (NatAt (Dynamic t :.: Maybe) (m :.: (Dynamic t :.: Maybe))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
-buildSum = sumChooserWH . maybeDynToConWidgets mapFieldsAndSequence'
+--          , AllDynMBuildable t m a
+          , All2 (NatAt (DynMaybe t) (Compose m (DynMaybe t))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
+buildSum = sumChooserWH . dynMaybeToConWidgets mapFieldsAndSequence'
 
 
 instance WidgetConstraints t m Int => TestBuilder t m Int where
