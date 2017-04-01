@@ -7,6 +7,9 @@ Small
 6. Switch from HtmlTextWidget in reflex-dom-contrib to TextInput in reflex-dom.  How to handle restrictWidget?
 
 
+--
+7. 
+
 Medium
 1. Make other containers work in this framework.
    a. All need to be made into maps?
@@ -14,7 +17,7 @@ Medium
 
 
 Large/Hard
-1. All instances Maybe (Dynamic t a) -> SimpleFormR t m a [Dynamics in, Dynamics out]
+1. All instances ~ Dynamic t (Maybe a) -> SimpleFormR t m a [Dynamics in, Dynamics out] 
 
 
 Questions:

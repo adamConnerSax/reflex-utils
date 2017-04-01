@@ -37,11 +37,18 @@ module Reflex.Dom.Contrib.SumType
 
 import           Control.Monad               (join)
 import           Data.Functor.Compose
+import           Data.Functor.Identity       (runIdentity)
+
 import           Generics.SOP                (All2, Code, Generic,
-                                              HasDatatypeInfo, hmap)
+                                              HasDatatypeInfo, SListI, hmap)
+import           Generics.SOP.NP             (NP, sequence'_NP)
+
+import           Generics.SOP.DMapUtilities
 import           Generics.SOP.PerConstructor
-import           Reflex                      (Dynamic, Event, Reflex, fmapMaybe,
-                                              leftmost, updated)
+
+import           Reflex                      (Dynamic, Event, Reflex,
+                                              distributeDMapOverDynPure,
+                                              fmapMaybe, leftmost, updated)
 
 
 type DynMaybe t = Compose (Dynamic t) Maybe
@@ -72,6 +79,30 @@ instance (Functor m, DynMBuildable t m a)=>NatAt (DynMaybe t) (Compose m (DynMay
 type AllDynMBuildable t m a = (All2 (DynMBuildable t m) (Code a))
 
 type MapAndSequenceDynMaybeFields t m a = MapFieldsAndSequence (DynMaybe t) (Compose m (DynMaybe t)) (Code a)
+
+{-
+f1::(Applicative m, SListI xs)=>NP (Compose m (DynMaybe t)) xs -> m (NP (Dynamic t) mxs)
+f1 = npUnCompose . hmap (Comp . getCompose)
+
+f2::NP (Dynamic t :.: Maybe) xs -> DM.DMap (TypeListTag xs) (Dynamic t Maybe)
+f2 = fmap unComp . npToDMap
+
+f3::DM.DMap (TypeListTag xs) (Dynamic t Maybe) -> DynMaybe t (NP I xs)
+f3 = Compose . fmap (hsequence . dMapToNP) . distributeDMapOverDynPure
+
+--sequenceWidgets::POP (Compose m (DynMaybe t)) xss -> NP ((Compose m (DynMaybe t)) :.: NP I) xss
+--sequenceWidgets =  hmap f . unPOP
+
+
+{-
+widgetPerFieldAndSequence::(Generic a
+                           , HasDatatypeInfo a
+                           , AllDynMBuildable t m a)=>MapAndSequenceDynMaybeFields t m a
+widgetPerFieldAndSequence =
+  let buildC = Proxy :: Proxy (DynMBuildable t m)
+  in . unPOP . hcliftA buildC dynMBuild
+-}
+-}
 
 --fixMSDMF::MapAndSequenceDynMaybeFields t m a -> MapFieldsAndSequence (Dynamic t :.: Maybe) (Compose m (DynMaybe t)) (Code a)
 fixMSDMF x = x . hmap (Compose . unComp)
