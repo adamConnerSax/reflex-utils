@@ -78,6 +78,7 @@ library
                      , monad-control
                      , generics-sop
                      , perConstructor-sop
+                     , constraints
                      , lens
                      , data-default
                      , ref-tf

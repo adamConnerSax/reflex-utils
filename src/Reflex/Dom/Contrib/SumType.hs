@@ -23,6 +23,7 @@ module Reflex.Dom.Contrib.SumType
   , AllDynMBuildable
   , dynamicToConWidgets
   , dynMaybeToConWidgets
+  , dynBuildableMaybeToConWidgets
   , dynamicToWidgetEvent
   , dynMaybeToWidgetEvent
   , NatAt(..)
@@ -38,10 +39,14 @@ module Reflex.Dom.Contrib.SumType
 import           Control.Monad               (join)
 import           Data.Functor.Compose
 import           Data.Functor.Identity       (runIdentity)
+import           Data.Constraint
 
-import           Generics.SOP                (All2, Code, Generic,
-                                              HasDatatypeInfo, SListI, hmap)
-import           Generics.SOP.NP             (NP, sequence'_NP)
+
+import           Generics.SOP                (All2, Code, Generic, hsequence, unPOP, hcliftA,
+                                              HasDatatypeInfo, SListI, SListI2, hmap, Proxy (Proxy))
+import           Generics.SOP.NP             (NP, sequence'_NP, sequence_NP)
+import qualified Generics.SOP.Dict           as GSD
+
 
 import           Generics.SOP.DMapUtilities
 import           Generics.SOP.PerConstructor
@@ -80,30 +85,6 @@ type AllDynMBuildable t m a = (All2 (DynMBuildable t m) (Code a))
 
 type MapAndSequenceDynMaybeFields t m a = MapFieldsAndSequence (DynMaybe t) (Compose m (DynMaybe t)) (Code a)
 
-{-
-f1::(Applicative m, SListI xs)=>NP (Compose m (DynMaybe t)) xs -> m (NP (Dynamic t) mxs)
-f1 = npUnCompose . hmap (Comp . getCompose)
-
-f2::NP (Dynamic t :.: Maybe) xs -> DM.DMap (TypeListTag xs) (Dynamic t Maybe)
-f2 = fmap unComp . npToDMap
-
-f3::DM.DMap (TypeListTag xs) (Dynamic t Maybe) -> DynMaybe t (NP I xs)
-f3 = Compose . fmap (hsequence . dMapToNP) . distributeDMapOverDynPure
-
---sequenceWidgets::POP (Compose m (DynMaybe t)) xss -> NP ((Compose m (DynMaybe t)) :.: NP I) xss
---sequenceWidgets =  hmap f . unPOP
-
-
-{-
-widgetPerFieldAndSequence::(Generic a
-                           , HasDatatypeInfo a
-                           , AllDynMBuildable t m a)=>MapAndSequenceDynMaybeFields t m a
-widgetPerFieldAndSequence =
-  let buildC = Proxy :: Proxy (DynMBuildable t m)
-  in . unPOP . hcliftA buildC dynMBuild
--}
--}
-
 --fixMSDMF::MapAndSequenceDynMaybeFields t m a -> MapFieldsAndSequence (Dynamic t :.: Maybe) (Compose m (DynMaybe t)) (Code a)
 fixMSDMF x = x . hmap (Compose . unComp)
 
@@ -125,6 +106,15 @@ dynMaybeToConWidgets mapAndS dynMA =
       mapFsAndS = fixMSDMF mapAndS
       namedWidgets = functorDoPerConstructorWithNames (mapFsAndS . hmap joinComposedMaybes) dynMA
   in zipWith (\ev (n,w) -> ConWidget n ev (getCompose w)) switchEvents namedWidgets
+
+-- specialized to the DynMBuildable case
+dynBuildableMaybeToConWidgets::forall t m a.(Reflex t, Generic a,HasDatatypeInfo a, Applicative m
+                               , AllDynMBuildable t m a)=>DynMaybe t a -> [ConWidget t m a]
+dynBuildableMaybeToConWidgets = dynMaybeToConWidgets widgetFieldsAndSequence where
+  widgetFieldsAndSequence =
+    let buildC = Proxy :: Proxy (DynMBuildable t m)
+        sListIC = Proxy :: Proxy (SListI)
+    in hcliftA sListIC (Comp . sequence_NP) . unPOP . hcliftA buildC (Compose . dynMBuild)
 
 
 dynamicToWidgetEvent::(Reflex t, Generic a,HasDatatypeInfo a, Applicative m)

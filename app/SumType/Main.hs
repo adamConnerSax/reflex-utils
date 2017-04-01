@@ -139,16 +139,12 @@ class WidgetConstraints t m a => TestBuilder t m a where
 instance TestBuilder t m a=>DynMBuildable t m a where
   dynMBuild = build
 
-{-
-instance TestBuilder t m a=>NatAt (Dynamic t :.: Maybe) (m :.: Dynamic t :.: Maybe) a where
-  eta = Comp . build . uniqDynJust
--}
-
-buildSum::forall a t m.(Generic a, HasDatatypeInfo a
-          , WidgetConstraints t m a
---          , AllDynMBuildable t m a
-          , All2 (NatAt (DynMaybe t) (Compose m (DynMaybe t))) (Code a))=>DynMaybe t a->m (DynMaybe t a)
-buildSum = sumChooserWH . dynMaybeToConWidgets mapFieldsAndSequence'
+  
+buildSum::forall a t m.(Functor m, Generic a, HasDatatypeInfo a
+                       , WidgetConstraints t m a
+                       , AllDynMBuildable t m a)
+  =>DynMaybe t a->m (DynMaybe t a)
+buildSum = sumChooserWH . dynBuildableMaybeToConWidgets 
 
 
 instance WidgetConstraints t m Int => TestBuilder t m Int where
