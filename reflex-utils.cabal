@@ -36,7 +36,6 @@ library
   hs-source-dirs: src
   exposed-modules:
                   Reflex.Dom.Contrib.DynamicUtils
-                  Reflex.Dom.Contrib.SumType      
                   Reflex.Dom.Contrib.ReflexConstraints
                   Reflex.Dom.Contrib.CssUtils
                   Reflex.Dom.Contrib.Layout.All
@@ -76,9 +75,6 @@ library
                      , mtl
                      , file-embed
                      , monad-control
-                     , generics-sop
-                     , perConstructor-sop
-                     , constraints
                      , lens
                      , data-default
                      , ref-tf
@@ -302,7 +298,9 @@ executable reflex-utils-SumType-warp
                      , reflex-dom
                      , reflex-dom-contrib
                      , reflex-utils
-                     , ghcjs-dom                     
+                     , ghcjs-dom
+--                     , perConstructor-sop
+                     , reflex-sumType-utilities                  
 --                     , generics-sop
                      , containers
                      , text

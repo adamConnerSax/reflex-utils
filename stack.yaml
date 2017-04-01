@@ -39,6 +39,7 @@ packages:
     git: https://github.com/reflex-frp/reflex-dom-contrib
     commit: "06630c32552ded4cbdc4ff917080ee0f4c33fef3"
   extra-dep: true
+- '../reflex-sumType-utilities'
 - '../perConstructor-sop'
 - '.'
 

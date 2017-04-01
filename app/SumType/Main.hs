@@ -36,7 +36,7 @@ import           Text.Read                        (readMaybe)
 --                                                   ConstructorName, Generic,
 --                                                   HasDatatypeInfo, unComp)
 import           Reflex.Dom.Contrib.DynamicUtils
-import           Reflex.Dom.Contrib.SumType
+import           Reflex.Dynamic.PerConstructor
 
 
 import qualified GHC.Generics                     as GHC
@@ -144,7 +144,7 @@ buildSum::forall a t m.(Functor m, Generic a, HasDatatypeInfo a
                        , WidgetConstraints t m a
                        , AllDynMBuildable t m a)
   =>DynMaybe t a->m (DynMaybe t a)
-buildSum = sumChooserWH . dynBuildableMaybeToConWidgets 
+buildSum = sumChooserWH . dynMBuildableToConWidgets 
 
 
 instance WidgetConstraints t m Int => TestBuilder t m Int where
