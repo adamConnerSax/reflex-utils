@@ -5,6 +5,7 @@ module Reflex.Dom.Contrib.DynamicUtils
   , mDynAsEv
   , dynamicMaybeAsEv
   , traceMDynAsEv
+  , traceDynMAsEv
   ) where
 
 import qualified Reflex as R
@@ -35,3 +36,7 @@ dynamicMaybeAsEv dma = R.fmapMaybe id <$> dynAsEv dma
 
 traceMDynAsEv::(R.Reflex t,RD.PostBuild t m)=>(a -> String)->Maybe (R.Dynamic t a)-> m (R.Event t a)
 traceMDynAsEv f mDyn = maybe (return R.never) (traceDynAsEv f) mDyn
+
+
+traceDynMAsEv::RD.PostBuild t m=>(a -> String)->R.Dynamic t (Maybe a)-> m (R.Event t a)
+traceDynMAsEv f dma = R.fmapMaybe id <$> traceDynAsEv (maybe "Nothing" f) dma 

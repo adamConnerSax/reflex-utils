@@ -59,7 +59,7 @@ import           Reflex.Dom.Contrib.Widgets.Common
 -- From this lib
 
 import qualified DataBuilder                           as B
-import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv,traceMDynAsEv)
+import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv,traceMDynAsEv,traceDynMAsEv)
 import           Reflex.Dom.Contrib.Layout.Types       (emptyCss, toCssString)
 import           Reflex.Dom.Contrib.ReflexConstraints
 import           Reflex.Dom.Contrib.FormBuilder.Builder
@@ -189,15 +189,15 @@ instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (R.Dynamic t 
 
 -- | String and Text
 instance FormInstanceC t m=>FormBuilder t m T.Text where
-  buildForm va mFN mInitialDyn = makeForm $ do
-    inputEv <- traceMDynAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")") mInitialDyn -- FIXTrace
+  buildForm va mFN initialMDyn = makeForm $ do
+    inputEv <- traceDynMAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")") (getCompose initialMDyn) -- FIXTrace
 --    inputEv <- maybe (return R.never) (traceDynAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")")) mInitialDyn  -- mDynAsEv mInitialDyn
     formWidget' inputEv "" id va id mFN Nothing $ textWidgetValue mFN
 
 instance {-# OVERLAPPING #-} FormInstanceC t m=>FormBuilder t m String where
-  buildForm va mFN mInitialDyn =
+  buildForm va mFN initialMDyn =
     let va' = (\t -> T.pack <$> va (T.unpack t))
-    in T.unpack <$> buildForm va' mFN (fmap T.pack <$> mInitialDyn)
+    in T.unpack <$> buildForm va' mFN (T.pack <$> initialMDyn)
 
 
 {- Not clear what to do here! Default behavior is bad since Char is a huge enum.
@@ -211,8 +211,8 @@ instance FormC e t m=>B.Builder (RFormWidget e t m) Char where
 
 -- We don't need this.  If we leave it out, the Enum instance will work and we get a dropdown instead of a checkbox.  Which might be better...
 instance FormInstanceC t m=>FormBuilder t m Bool where
-  buildForm va mFN mInitialDyn = makeForm $ do
-    inputEv <- mDynAsEv mInitialDyn
+  buildForm va mFN initialMDyn = makeForm $ do
+    inputEv <- dynMaybeAsEv initialMDyn
     formWidget' inputEv False id va showText mFN Nothing $ (\c -> _hwidget_value <$> htmlCheckbox c)
 
 instance FormInstanceC t m=>FormBuilder t m Double where
@@ -256,22 +256,22 @@ instance FormInstanceC t m=>FormBuilder t m ByteString where
 
 --dateTime and date
 instance FormInstanceC t m=>FormBuilder t m UTCTime where
-  buildForm va mFN mInitialDyn = makeForm $ do
+  buildForm va mFN initialMDyn = makeForm $ do
     let vfwt x = case x of
           Nothing -> AccFailure [FNoParse "Couldn't parse as UTCTime."]
           Just y -> va y
         initialDateTime = Just $ UTCTime (fromGregorian 1971 1 1) (secondsToDiffTime 0)
-    inputEv <- mDynAsEv mInitialDyn
+    inputEv <- dynMaybeAsEv initialMDyn
     formWidget' inputEv initialDateTime Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
 
 
 instance FormInstanceC t m=>FormBuilder t m Day where
-  buildForm va mFN mInitialDyn = makeForm $ do
+  buildForm va mFN initialMDyn = makeForm $ do
     let vfwt x = case x of
           Nothing -> AccFailure [FNoParse "Couldn't parse as Day."]
           Just y -> va y
         initialDay = Just $ fromGregorian 1971 1 1
-    inputEv <- mDynAsEv mInitialDyn
+    inputEv <- dynMaybeAsEv initialMDyn
     formWidget' inputEv initialDay Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
 
 
@@ -282,11 +282,11 @@ instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuil
 
 -- if two things are Isomorphic, we can use one to build the other
 -- NB: Isomorphic sum types will end up using the constructors, etc. of the one used to bootstrap 
-buildFormIso::(FormInstanceC t m, VFormBuilderC t m a)=>Iso' a b->FormValidator b->Maybe FieldName->Maybe (R.Dynamic t b)->Form t m b
-buildFormIso isoAB vb mFN mbDyn = makeForm $ do
+buildFormIso::(FormInstanceC t m, VFormBuilderC t m a)=>Iso' a b->FormValidator b->Maybe FieldName->DynMaybe t b->Form t m b
+buildFormIso isoAB vb mFN dmb = makeForm $ do
   let a2b = view isoAB
       b2a = view $ from isoAB
-  unF $ a2b <$> buildForm (fmap b2a . vb . a2b) mFN (fmap b2a <$> mbDyn)  
+  unF $ a2b <$> buildForm (fmap b2a . vb . a2b) mFN (b2a <$> dmb)  
 
 avToEither::AccValidation a b -> Either a b
 avToEither (AccSuccess x) = Right x
@@ -302,29 +302,29 @@ instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuil
 
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (FormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=>FormBuilder t m a where
-  buildForm va mFN mInitialDyn = makeForm $ do
+  buildForm va mFN initialMDyn = makeForm $ do
     let values = [minBound..] :: [a]
         initial = head values
-    inputEv <- mDynAsEv mInitialDyn
+    inputEv <- dynMaybeAsEv initialMDyn
     formWidget' inputEv initial id va showText mFN Nothing $ (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
 
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
 -- generics for (,) since mkDyn is not an optimization here
 instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b) where
-  buildForm va mFN mTupDyn = validateForm va . makeForm $ do
-      maW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
-      mbW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
+  buildForm va mFN tupMDyn = validateForm va . makeForm $ do
+      maW <- unF $ buildForm' Nothing (sel1 <$> tupMDyn)
+      mbW <- unF $ buildForm' Nothing (sel2 <$> tupMDyn)
       return $ (,) <$> maW <*> mbW 
   
 instance (FormInstanceC t m
          , VFormBuilderC t m a
          , VFormBuilderC t m b
          , VFormBuilderC t m c)=>FormBuilder t m (a,b,c) where
-  buildForm va mFN mTupDyn = validateForm va . makeForm $ do
-      maW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
-      mbW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
-      mcW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel3) mTupDyn
+  buildForm va mFN tupMDyn = validateForm va . makeForm $ do
+      maW <- unF $ buildForm' Nothing (sel1 <$> tupMDyn)
+      mbW <- unF $ buildForm' Nothing (sel2 <$> tupMDyn)
+      mcW <- unF $ buildForm' Nothing (sel3 <$> tupMDyn)
       return $ (,,) <$> maW <*> mbW <*> mcW
 
 
@@ -333,11 +333,11 @@ instance (FormInstanceC t m
          , VFormBuilderC t m b
          , VFormBuilderC t m c
          , VFormBuilderC t m d)=>FormBuilder t m (a,b,c,d) where
-  buildForm va mFN mTupDyn = validateForm va . makeForm $ do
-      maW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
-      mbW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
-      mcW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel3) mTupDyn
-      mdW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel4) mTupDyn
+  buildForm va mFN tupMDyn = validateForm va . makeForm $ do
+      maW <- unF $ buildForm' Nothing (sel1 <$> tupMDyn)
+      mbW <- unF $ buildForm' Nothing (sel2 <$> tupMDyn)
+      mcW <- unF $ buildForm' Nothing (sel3 <$> tupMDyn)
+      mdW <- unF $ buildForm' Nothing (sel4 <$> tupMDyn)
       return $ (,,,) <$> maW <*> mbW <*> mcW <*> mdW
 
 instance (FormInstanceC t m
@@ -346,11 +346,11 @@ instance (FormInstanceC t m
          , VFormBuilderC t m c
          , VFormBuilderC t m d
          , VFormBuilderC t m e)=>FormBuilder t m (a,b,c,d,e) where
-  buildForm va mFN mTupDyn = validateForm va . makeForm $ do
-      maW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel1) mTupDyn
-      mbW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel2) mTupDyn
-      mcW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel3) mTupDyn
-      mdW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel4) mTupDyn
-      meW <- unF $ buildForm' Nothing $ maybe Nothing (Just . fmap sel5) mTupDyn
+  buildForm va mFN tupMDyn = validateForm va . makeForm $ do
+      maW <- unF $ buildForm' Nothing (sel1 <$> tupMDyn)
+      mbW <- unF $ buildForm' Nothing (sel2 <$> tupMDyn)
+      mcW <- unF $ buildForm' Nothing (sel3 <$> tupMDyn)
+      mdW <- unF $ buildForm' Nothing (sel4 <$> tupMDyn)
+      meW <- unF $ buildForm' Nothing (sel5 <$> tupMDyn)
       return $ (,,,,) <$> maW <*> mbW <*> mcW <*> mdW <*> meW
 
