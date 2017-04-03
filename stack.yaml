@@ -6,8 +6,15 @@ resolver: lts-8.2
 # Local packages, usually specified by relative directory name
 packages:
 - location:
+    git: https://github.com/adamConnerSax/perConstructor-sop
+    commit: "ad12df688a61284ded6e73761176d222f6edab12"
+- location:
     git: https://github.com/adamConnerSax/dataBuilder
-    commit: "7e97197027d6b09f35013aa630a1f5df7f27ea9e"
+    commit: "75bce8505c63379d204c0603f6fb10a61e785288"
+  extra-dep: true
+- location:
+    git: https://github.com/adamConnerSax/reflex-sumType-utilities
+    commit: "c78e921ec5095be33f37c7ae7720042d6846aa7f"
   extra-dep: true
 - location:
     git: https://github.com/ghcjs/jsaddle
@@ -39,8 +46,6 @@ packages:
     git: https://github.com/reflex-frp/reflex-dom-contrib
     commit: "06630c32552ded4cbdc4ff917080ee0f4c33fef3"
   extra-dep: true
-- '../reflex-sumType-utilities'
-- '../perConstructor-sop'
 - '.'
 
 allow-newer: true
@@ -50,10 +55,6 @@ extra-deps:
  - cabal-macosx-0.2.3.5
  - ghcjs-dom-0.7.0.4
  - ghcjs-dom-jsaddle-0.7.0.3
-# - jsaddle-0.8.0.1
-# - jsaddle-dom-0.7.1.0
-# - jsaddle-wkwebview-0.8.2.0
-# - jsaddle-warp-0.8.2.0
  - prim-uniq-0.1.0.1
  - ref-tf-0.4.0.1
  - zenc-0.1.1

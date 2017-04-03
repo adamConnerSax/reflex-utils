@@ -50,8 +50,6 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , titleAttr
        , cssClassAttr
        , fAttrs
---       , deriveSFRowBuilder
---       , deriveSFColBuilder
        ) where
 
 
@@ -265,52 +263,11 @@ instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m)=> B.Buildable (F
     failF $ T.pack msg
 
   bSum mwWidgets = B.FGV . fmap unDynValidation $ do
-    let constrList = map ((fst . B.metadata) &&& (fmap DynValidation . B.unFGV . B.value)) mwWidgets
-        defCon = case filter B.hasDefault mwWidgets of
-          [] -> Nothing
-          (x:_) -> Just . fst $ B.metadata x
+    let f (MDWrapped isConDyn (conName,mFN) fgvWidget) = (conName, fmapMaybe (==True) (updated isConDyn), fmap DynValidation $ B.unFGV fgvWidget)
+        constrList = f <$> mwWidgets
     sF <- sumF . _builderFunctions <$> ask
-    sF constrList defCon
+    sF constrList 
 
-  bDistributeList = R.distributeListOverDynPure
-
-  bCollapse dynFGV = B.FGV $ do
-    postbuild <- RD.getPostBuild
-    let uncomposed = B.unFGV <$> dynFGV
-        newWidgetEv = R.updated uncomposed
-        startingWidgetEv = R.tag (R.current uncomposed) postbuild
-    join <$> RD.widgetHold (return $ R.constDyn $ AccFailure [FNothing]) (R.leftmost [newWidgetEv, startingWidgetEv])
-
-{-
-  bCollapseAndSum mdwListDyn = B.FGV $ do    -- FIXME, empty list case
-    postbuild <- getPostBuild
-    cF <- chooserF . _builderFunctions <$> ask
-    let toKeyValue mdw = (fst . metadata $ mdw, mdw)
-        mdwMapDyn = M.fromList . toKeyValue <$> mdwListDyn
-        conNamesDyn = R.uniqDyn $ M.keys <$> mdwMapDyn -- should never change.  An invariant I wish I could express in the types
-        mInputSelDyn = R.uniqDyn $ headMaybe . fst . filter (hasDefault . snd) . toList <$> mdwMapDyn  -- Dynamic t (Maybe ConName)
-        inputSelDyn = R.zipDynWith (\mi cns -> fromMaybe (head cns) mi) mInputSelDyn conNamesDyn
-        chooserEv = cF conNamesDyn <$> R.updated inputSelDyn -- Event t (FRW t m B.ConName)
-    vselDyn <- RD.widgetHold (return $ unDynValidation dynValidationNothing) (chooserEv) -- Dynamic t (FValidation B.ConName)
-    let hiddenCSS  = "style" RD.=: "display: none"
-        visibleCSS = "style" RD.=: "display: inline"
-        dAttrs cn = accValidation (const hiddenCss) (==cn) <$> visDyn -- Dynamic t (Map Text Text)
-        diffOnlyKeyChanges olds news = flip M.mapMaybe (align olds news) $ \case
-          This _ -> Just Nothing
-          These _ _ -> Nothing
-          That new -> Just $ Just new
-    rec sentVals :: Dynamic t (Map B.ConName (FMDWrapped t m a)) <- foldDyn applyMap Map.empty changeVals
-        let changeVals :: Event t (Map B.ConName (Maybe (FMDWrapped t m a)))
-            changeVals = RD.attachWith diffOnlyKeyChanges (R.current sentVals) $ R.leftmost
-                         [ R.updated mdwMapDyn
-                         , R.tag (current mdwMapDyn) postBuild 
-                         ]
-        
-
--}
-
-
-    
 
 type FMDWrapped t m a = B.MDWrapped (FR t m) (R.Dynamic t) (FValidation) a
 
