@@ -43,6 +43,7 @@ import           Clay                                          hiding (head, id)
 import qualified Clay                                          as C
 import qualified Clay.Flexbox                                  as Flexbox
 import           Control.Monad.Fix                             (MonadFix)
+import           Control.Monad                                 (join)
 import           Control.Monad.IO.Class                        (MonadIO)
 import           Control.Monad.Reader                          (ask, asks, lift,
                                                                 local)
@@ -52,6 +53,7 @@ import qualified Data.Map                                      as M
 import           Data.Maybe                                    (fromJust)
 import           Data.Monoid                                   ((<>))
 import qualified Data.Text                                     as T
+import           Data.Functor.Compose                          (Compose(Compose,getCompose))
 
 import           Prelude                                       hiding (div, rem,
                                                                 span)
@@ -136,13 +138,36 @@ defFailureF msg = do
   RD.text msg
   return dynValidationNothing
 
+whichFired::R.Reflex t=>[R.Event t a]->R.Event t Int
+whichFired = R.leftmost . zipWith (<$) [0..]
+
+-- FIXME:  unsafe functions, head and (!!)
+-- FIXME: write a version that uses all the widgets at once, hiding the unused ones.  THat will be more efficient in the case when switching is expected
+defSumF::DefaultConfigurationC t m=>[(B.ConName,R.Event t (),FRW t m a)]->FRW t m a
+defSumF conWidgets = fRow $ do
+  let (names,events,widgets) = unzip3 conWidgets
+      indexedNames = zip [0..] (T.pack <$> names)
+      inputIndexEv = whichFired events
+  validClasses <- validDataClasses
+  formType <- getFormType
+  let observeOnlyAttr = if formType == ObserveOnly then ("disabled" RD.=: "") else M.empty
+      ddAttrs = (titleAttr "Constructor" <> observeOnlyAttr)
+      ddConfig = RD.DropdownConfig inputIndexEv (R.constDyn ddAttrs)
+  chosenIndexEv <- fItem $ RD._dropdown_change <$> RD.dropdown 0 (RD.constDyn $ M.fromList indexedNames) ddConfig
+  let newIndexEv = R.leftmost [inputIndexEv,chosenIndexEv]
+  curIndex <- R.holdDyn 0 newIndexEv
+  let switchWidgetEv = R.updated . R.uniqDyn $ curIndex
+      newWidgetEv = (\n -> widgets !! n) <$> switchWidgetEv
+  fItem $ DynValidation . join . fmap unDynValidation <$> RD.widgetHold (head widgets) newWidgetEv
+
+
+{-
 data FRPair t m a = FRPair { frpCN::B.ConName, frpV::FRW t m a }
 
 instance Eq (FRPair t m a) where
   (FRPair a _) == (FRPair b _) = a == b
 
-defSumF::DefaultConfigurationC t m=>[(B.ConName,FRW t m a)]->Maybe B.ConName->FRW t m a
-defSumF conWidgets mDefCon = do
+do
   let conNames = fst . unzip $ conWidgets
       getFRP::B.ConName->[(B.ConName,FRW t m a)]->FRPair t m a
       getFRP cn = FRPair cn . fromJust . M.lookup cn . M.fromList
@@ -156,7 +181,7 @@ defSumF conWidgets mDefCon = do
     frpCW <- fItemL $ formWidget id (T.pack . frpCN) Nothing wc constructorDD
     let rebuildEv = R.traceEventWith (const "defSumF!!") $ R.updated frpCW
     unF $ switchingForm (makeForm . frpV) defPair rebuildEv
-
+-}
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 
 boxMargin m = sym margin (rem m)

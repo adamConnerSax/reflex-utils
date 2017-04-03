@@ -23,6 +23,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , FormValidator
        , validateForm
        , FormBuilder(..)
+       , dynMaybeToGBuildInput
        , FMDWrapped
        , buildForm'
        , makeForm
@@ -118,11 +119,14 @@ validateForm::(Functor m, R.Reflex t)=>FormValidator a->Form t m a->Form t m a
 validateForm va = makeForm . fmap DynValidation . B.unFGV . B.validateFGV va . B.FGV . fmap unDynValidation . unF
 
 
+dynMaybeToGBuildInput::R.Reflex t=>DynMaybe t a -> B.GV (R.Dynamic t) FValidation a
+dynMaybeToGBuildInput = B.GV . fmap maybeToAV . getCompose
+
 class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
   buildForm::FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
   default buildForm::(GBuilder (FR t m) (R.Dynamic t) FValidation a)
                    =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
-  buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . gBuildValidated va mFN . B.GV . fmap maybeToAV . getCompose
+  buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . gBuildValidated va mFN . dynMaybeToGBuildInput
 
 type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable FValidation a)
 

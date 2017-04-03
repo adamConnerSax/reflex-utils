@@ -91,11 +91,11 @@ instance B.Validatable FValidation Age where
   validator = liftValidation ((>0) . unAge) (const "Age must be > 0")
 
 instance FormInstanceC t m => FormBuilder t m Age where
-  buildForm va mFn maDyn =
+  buildForm va mFn dma =
     let labelCfg = LabelConfig "Age" M.empty
         inputCfg = InputElementConfig (Just "35") (Just "Age") (Just labelCfg)
         vInt = liftValidation (>0) (const "Age must be > 0")
-    in validateForm va . (fmap Age) $ liftF (setInputConfig inputCfg) $ buildForm vInt mFn (fmap unAge <$> maDyn)
+    in validateForm va . (fmap Age) $ liftF (setInputConfig inputCfg) $ buildForm vInt mFn (unAge <$> dma)
 
 newtype EmailAddress = EmailAddress { unEmailAddress::T.Text } deriving (Show)
 
@@ -109,20 +109,20 @@ instance Validatable FValidation EmailAddress where
   validator = liftValidation (validEmail . unEmailAddress) (const "Email address must be of the form a@b")
 
 instance FormInstanceC t m => FormBuilder t m EmailAddress where
-  buildForm va mFn maDyn =
+  buildForm va mFn dma =
     let labelCfg = LabelConfig "Email" M.empty
         inputCfg = InputElementConfig (Just "yourname@emailprovider.com") (Just "Email") (Just labelCfg)
         vText = liftValidation validEmail (const "Email address must be of the form a@b")
-    in validateForm va . (fmap EmailAddress) $ liftF (setInputConfig inputCfg) $ buildForm vText mFn (fmap unEmailAddress <$> maDyn)
+    in validateForm va . (fmap EmailAddress) $ liftF (setInputConfig inputCfg) $ buildForm vText mFn (unEmailAddress <$> dma)
 
 newtype Name = Name { unName::T.Text } deriving (Show)
 instance B.Validatable FValidation Name -- uses default which is that everything is valid
 
 instance FormInstanceC t m => FormBuilder t m Name where
-  buildForm va mFn maDyn =
+  buildForm va mFn dma =
     let labelCfg = LabelConfig "Name" M.empty
         inputCfg = InputElementConfig (Just "John Doe") (Just "Name") (Just labelCfg)
-    in validateForm va $ liftF (setInputConfig inputCfg) $ Name <$> buildForm' mFn (fmap unName <$> maDyn)
+    in validateForm va $ liftF (setInputConfig inputCfg) $ Name <$> buildForm' mFn (unName <$> dma)
 
 -- a simple structure
 data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Generic,Show)
@@ -130,7 +130,7 @@ data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Gen
 instance Generic User
 instance HasDatatypeInfo User
 instance FormInstanceC t m=>FormBuilder t m User where
-  buildForm va mFN = liftF fCol . fgvToForm . gBuildValidated va mFN
+  buildForm va mFN = liftF fCol . fgvToForm . gBuildValidated va mFN . dynMaybeToGBuildInput
 
 testUserForm::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m->m ()
 testUserForm cfg = do
