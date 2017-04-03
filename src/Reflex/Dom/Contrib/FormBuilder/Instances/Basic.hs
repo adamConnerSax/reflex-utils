@@ -9,7 +9,7 @@
 {-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE UndecidableInstances  #-}
-{-# LANGUAGE DeriveGeneric         #-}
+--{-# LANGUAGE DeriveGeneric         #-}
 
 module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        (
@@ -28,6 +28,7 @@ import           Control.Lens                          (over, view, (^.))
 import           Control.Monad                         (join)
 import           Control.Monad.Fix                     (MonadFix)
 import           Control.Monad.Reader                  (lift)
+import           Data.Functor.Compose                  (Compose(Compose,getCompose))
 import qualified Data.Map                              as M
 import           Data.Maybe                            (fromMaybe,fromJust) --FIX FromJust
 import           Data.Monoid                           ((<>))
@@ -62,6 +63,7 @@ import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv,
 import           Reflex.Dom.Contrib.Layout.Types       (emptyCss, toCssString)
 import           Reflex.Dom.Contrib.ReflexConstraints
 import           Reflex.Dom.Contrib.FormBuilder.Builder
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynMaybe,constDynMaybe,dynMaybeAsEv)
 -- instances
 
 --some helpers
@@ -164,26 +166,26 @@ parseAndValidate mFN parse va t =
 buildDynReadable::(FormInstanceC t m, Readable a, Show a)
   =>FormValidator a
   ->Maybe FieldName
-  ->Maybe (R.Dynamic t a)
+  ->DynMaybe t a
   ->Form t m a
-buildDynReadable va mFN maDyn = makeForm $ do
+buildDynReadable va mFN dma = makeForm $ do
   let vfwt = parseAndValidate mFN fromText va
-  inputEv <- mDynAsEv maDyn
+  inputEv <- dynMaybeAsEv dma
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
 buildDynReadMaybe::(FormInstanceC t m, Read a, Show a)
   =>FormValidator a
   ->Maybe FieldName
-  ->Maybe (R.Dynamic t a)
+  ->DynMaybe t a
   ->Form t m a
-buildDynReadMaybe va mFN maDyn = makeForm $ do
+buildDynReadMaybe va mFN dma = makeForm $ do
   let vfwt = parseAndValidate mFN (readMaybe . T.unpack) va
-  inputEv <- mDynAsEv maDyn
+  inputEv <- dynMaybeAsEv dma
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
 -- NB this will handle Dynamic t (Dynamic t a)) inputs
 instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (R.Dynamic t a) where
-  buildForm va mFN = validateForm va . fmap R.constDyn . buildForm' mFN . fmap join
+  buildForm va mFN = validateForm va . fmap R.constDyn . buildForm' mFN . Compose . join . fmap sequenceA . getCompose
 
 -- | String and Text
 instance FormInstanceC t m=>FormBuilder t m T.Text where

@@ -3,6 +3,7 @@ module Reflex.Dom.Contrib.DynamicUtils
     dynAsEv
   , traceDynAsEv
   , mDynAsEv
+  , dynamicMaybeAsEv
   , traceMDynAsEv
   ) where
 
@@ -28,6 +29,9 @@ traceDynAsEv f dyn = do
 mDynAsEv::(R.Reflex t,RD.PostBuild t m)=>Maybe (R.Dynamic t a)-> m (R.Event t a)
 mDynAsEv mDyn = maybe (return R.never) dynAsEv mDyn
 
+-- turn a Dynamic t (Maybe a) into an Event with an initial firing to represent the value at postbuild. Only fires on values.
+dynamicMaybeAsEv::(R.Reflex t,RD.PostBuild t m)=>R.Dynamic t (Maybe a)-> m (R.Event t a)
+dynamicMaybeAsEv dma = R.fmapMaybe id <$> dynAsEv dma
 
 traceMDynAsEv::(R.Reflex t,RD.PostBuild t m)=>(a -> String)->Maybe (R.Dynamic t a)-> m (R.Event t a)
 traceMDynAsEv f mDyn = maybe (return R.never) (traceDynAsEv f) mDyn

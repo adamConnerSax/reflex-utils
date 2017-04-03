@@ -6,9 +6,22 @@ module Reflex.Dom.Contrib.FormBuilder.DynValidation where
 import           Control.Monad     (join)
 import           Data.Text         (Text)
 import           Data.Validation   (AccValidation (..))
-import           DataBuilder.Types (MonadLike (..))
-import           Reflex            (Dynamic, Reflex, constDyn, zipDynWith, never)
+import           DataBuilder.Types (MonadLike (..), MaybeLike(..))
+import           Reflex            (Dynamic, Event,Reflex, constDyn, zipDynWith)
+import           Reflex.Dom        (PostBuild)
 import           GHC.Generics      (Generic)
+import           Data.Functor.Compose (Compose(Compose,getCompose))
+
+import           Reflex.Dom.Contrib.DynamicUtils (dynamicMaybeAsEv)
+
+
+type DynMaybe t = Compose (Dynamic t) Maybe
+
+constDynMaybe::Reflex t=>Maybe a->DynMaybe t a
+constDynMaybe = Compose . constDyn 
+
+dynMaybeAsEv::PostBuild t m=>DynMaybe t a -> m (Event t a)
+dynMaybeAsEv = dynamicMaybeAsEv . getCompose
 
 data FormError  = FNothing | FNoParse Text | FInvalid Text deriving (Show,Eq,Generic)
 
@@ -34,6 +47,7 @@ mergeAccValidation x = case x of
   AccFailure errs -> AccFailure errs
 
 newtype DynValidation t a = DynValidation { unDynValidation::Dynamic t (FValidation a) }
+
 -- NB: this is isomorphic to Compose (Dynamic t) (AccValidation SimpleFormErrors a)
 {-
 type  DynValidation t a = Compose (Dynamic t) (AccValidation a)
@@ -67,3 +81,6 @@ instance MonadLike FValidation where
   pureLike = pure
   joinLike = mergeAccValidation
 
+instance MaybeLike FValidation where
+  absorbMaybe = mergeAccValidation . fmap maybeToAV
+  toMaybe = avToMaybe
