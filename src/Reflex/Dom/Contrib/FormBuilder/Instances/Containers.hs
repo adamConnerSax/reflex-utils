@@ -63,50 +63,6 @@ import           Text.Read                        (readMaybe)
 -- I'd prefer these as classes but I can't make all the types work.  I end up with open type families and injectivity issues.
 -- So, instead, I carry the dictionaries around as arguments.  That works too.
 
-data CRepI (fa :: *) (gb :: *) = CRepI { toRep::fa -> gb, fromRep::gb -> fa }
-
-idRep::CRepI fa fa
-idRep = CRepI id id
-
-data FAppendableI (fa :: * ) (g :: * -> *) (b :: *) = FAppendableI
-  {
-    cRep::CRepI fa (g b)
-  , emptyT::g b
-  , insertB::b->fa->fa
-  , sizeFa::fa->Int
-  }
-
-toT::FAppendableI fa g b->(fa -> g b)
-toT = toRep . cRep
-
-fromT::FAppendableI fa g b->(g b -> fa)
-fromT = fromRep . cRep
-
-data FDeletableI (g :: * -> *) (b :: *) (k :: *) (s :: *) = FDeletableI
-  {
-    getKey::b -> s -> k
-  , initialS::s
-  , updateS::s->s
-  , delete::k -> g b -> g b
-  }
-
--- This helps insure the types in Appendable and Deletable line up for any particular instance
-data FAdjustableI fa g b k s= FAdjustableI { sfAI::FAppendableI fa g b, sfDI::FDeletableI g b k s }
-
-{-
-
-buildAdjustableContainer::(FormInstanceC t m, VFormBuilderC t m b,Traversable g)
-  =>FAdjustableI fa g b k s
-  ->FormValidator fa
-  ->Maybe FieldName
-  ->Maybe (R.Dynamic t fa)
-  ->Form t m fa
-buildAdjustableContainer sfAdj va mFN mfaDyn = validateForm va . makeForm  $ do
-  fType <- getFormType
-  case fType of
-    ObserveOnly ->  buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfaDyn
-    Interactive ->  buildTraversableFA (cRep . sfAI $ sfAdj) mFN mfaDyn --buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfaDyn
--}
 
 {-
 -- default behavior of button in a form is to submit the form
@@ -136,34 +92,6 @@ buttonNoSubmit' t = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "button" ("type"
 containerActionButton::(RD.PostBuild t m, RD.DomBuilder t m)=>T.Text -> m (RD.Event t ())
 containerActionButton = buttonNoSubmit'
 
-
---buildReadOnlyContainer::(FormInstanceC t m, VFormBuilderC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m fa
---buildReadOnlyContainer = buildTraversableFA  
-
-
-listAppend::a->[a]->[a]
-listAppend a as = as ++ [a]
-
-listDeleteAt::Int->[a]->[a]
-listDeleteAt n as = take n as ++ drop (n+1) as
-
-listFA::FAppendableI [a] [] a
-listFA = FAppendableI idRep [] listAppend L.length
-
-listFD::FDeletableI [] a Int Int
-listFD = FDeletableI (\_ n->n) 0 (+1) listDeleteAt
-
---instance (FormInstanceC t m,VFormBuilderC t m a)=>FormBuilder t m [a] where
---  buildForm = buildAdjustableContainer (FAdjustableI listFA listFD)
-
-
-mapFA::Ord k=>FAppendableI (M.Map k v) (M.Map k) (k,v)
-mapFA = FAppendableI (CRepI (M.mapWithKey (\k v->(k,v))) (\m->M.fromList $ snd <$> M.toList m)) mempty (\(k,x) m->M.insert k x m) M.size
-
-mapFD::Ord k=>FDeletableI (M.Map k) (k,v) k ()
-mapFD = FDeletableI (\(k,_) _ ->k) () id M.delete
-
-
 instance (B.Validatable FValidation a, B.Validatable FValidation b)=>B.Validatable FValidation (a,b) where
   validator (a,b) = (,) <$> B.validator a <*> B.validator b
 
@@ -173,56 +101,6 @@ instance (FormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a,Sho
     case fType of
       Interactive ->  unF $ buildLBAddDelete mapLV mapLikeME mFN dmfa 
       ObserveOnly ->  unF $ buildLBEditOnly  mapLV mapLikeME mFN dmfa
-        
-intMapFA::FAppendableI (IM.IntMap v) IM.IntMap (IM.Key,v)
-intMapFA = FAppendableI (CRepI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList $ snd <$> IM.toList m)) mempty (\(k,x) m->IM.insert k x m) IM.size
-
-intMapFD::FDeletableI IM.IntMap (IM.Key,v) IM.Key ()
-intMapFD = FDeletableI (\(k,_) _ ->k) () id IM.delete
-
---instance (FormInstanceC t m, VFormBuilderC t m IM.Key, VFormBuilderC t m a)=>FormBuilder t m (IM.IntMap a) where
---  buildForm = buildAdjustableContainer (FAdjustableI intMapFA intMapFD)
-
-seqFA::FAppendableI (Seq.Seq a) Seq.Seq a
-seqFA = FAppendableI idRep Seq.empty (flip (Seq.|>)) Seq.length
-
-seqFD::FDeletableI Seq.Seq a Int Int
-seqFD = FDeletableI (\_ index->index) 0 (+1) (\n bs -> Seq.take n bs Seq.>< Seq.drop (n+1) bs)
-
---instance (FormInstanceC t m,VFormBuilderC t m a)=>FormBuilder t m (Seq.Seq a) where
---  buildForm = buildAdjustableContainer (FAdjustableI seqFA seqFD)
-
--- we transform to a map since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
-setFA::Ord a=>FAppendableI (S.Set a) (M.Map a) a
-setFA = FAppendableI (CRepI (\s ->M.fromList $ (\x->(x,x)) <$> S.toList s) (\m->S.fromList $ snd <$> M.toList m)) M.empty S.insert S.size
-
-setFD::Ord a=>FDeletableI (M.Map a) a a ()
-setFD = FDeletableI const () id M.delete
-
---instance (FormInstanceC t m, Ord a, VFormBuilderC t m a)=>FormBuilder t m (S.Set a) where
---  buildForm = buildAdjustableContainer (FAdjustableI setFA setFD)
-
-hashMapFA::(Eq k,Hashable k)=>FAppendableI (HML.HashMap k v) (HML.HashMap k) (k,v)
-hashMapFA = FAppendableI (CRepI (HML.mapWithKey (\k v->(k,v))) (\m->HML.fromList $ snd <$> HML.toList m)) mempty (\(k,x) m->HML.insert k x m) HML.size
-
-hashMapFD::(Eq k, Hashable k)=>FDeletableI (HML.HashMap k) (k,v) k ()
-hashMapFD = FDeletableI (\(k,_) _ ->k) () id HML.delete
-
-
---instance (FormInstanceC t m, Eq k, Hashable k, VFormBuilderC t m k, VFormBuilderC t m v)=>FormBuilder t m (HML.HashMap k v) where
---  buildForm = buildAdjustableContainer (FAdjustableI hashMapFA hashMapFD)
-
-
--- we transform to a HashMap since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
-hashSetFA::(Eq a,Hashable a)=>FAppendableI (HS.HashSet a) (HML.HashMap a) a
-hashSetFA = FAppendableI (CRepI (\hs ->HML.fromList $ (\x->(x,x)) <$> HS.toList hs) (\hm->HS.fromList $ snd <$> HML.toList hm)) HML.empty HS.insert HS.size
-
-hashSetFD::(Eq a, Hashable a)=>FDeletableI (HML.HashMap a) a a ()
-hashSetFD = FDeletableI const () id HML.delete
-
---instance (FormInstanceC t m, Eq a, Hashable a, VFormBuilderC t m a)=>FormBuilder t m (HS.HashSet a) where
---  buildForm = buildAdjustableContainer (FAdjustableI hashSetFA hashSetFD)
-
 
 -- the various container builder components
 type BuildF t m a = Maybe FieldName->Maybe (R.Dynamic t a)->FRW t m a
@@ -531,8 +409,134 @@ ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
 ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
 
 
-{- 
-  
+{-
+data CRepI (fa :: *) (gb :: *) = CRepI { toRep::fa -> gb, fromRep::gb -> fa }
+
+idRep::CRepI fa fa
+idRep = CRepI id id
+
+data FAppendableI (fa :: * ) (g :: * -> *) (b :: *) = FAppendableI
+  {
+    cRep::CRepI fa (g b)
+  , emptyT::g b
+  , insertB::b->fa->fa
+  , sizeFa::fa->Int
+  }
+
+toT::FAppendableI fa g b->(fa -> g b)
+toT = toRep . cRep
+
+fromT::FAppendableI fa g b->(g b -> fa)
+fromT = fromRep . cRep
+
+data FDeletableI (g :: * -> *) (b :: *) (k :: *) (s :: *) = FDeletableI
+  {
+    getKey::b -> s -> k
+  , initialS::s
+  , updateS::s->s
+  , delete::k -> g b -> g b
+  }
+
+-- This helps insure the types in Appendable and Deletable line up for any particular instance
+data FAdjustableI fa g b k s= FAdjustableI { sfAI::FAppendableI fa g b, sfDI::FDeletableI g b k s }
+
+{-
+
+buildAdjustableContainer::(FormInstanceC t m, VFormBuilderC t m b,Traversable g)
+  =>FAdjustableI fa g b k s
+  ->FormValidator fa
+  ->Maybe FieldName
+  ->Maybe (R.Dynamic t fa)
+  ->Form t m fa
+buildAdjustableContainer sfAdj va mFN mfaDyn = validateForm va . makeForm  $ do
+  fType <- getFormType
+  case fType of
+    ObserveOnly ->  buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfaDyn
+    Interactive ->  buildTraversableFA (cRep . sfAI $ sfAdj) mFN mfaDyn --buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfaDyn
+-}
+
+
+
+listAppend::a->[a]->[a]
+listAppend a as = as ++ [a]
+
+listDeleteAt::Int->[a]->[a]
+listDeleteAt n as = take n as ++ drop (n+1) as
+
+listFA::FAppendableI [a] [] a
+listFA = FAppendableI idRep [] listAppend L.length
+
+listFD::FDeletableI [] a Int Int
+listFD = FDeletableI (\_ n->n) 0 (+1) listDeleteAt
+
+instance (FormInstanceC t m,VFormBuilderC t m a)=>FormBuilder t m [a] where
+  buildForm = buildAdjustableContainer (FAdjustableI listFA listFD)
+
+
+mapFA::Ord k=>FAppendableI (M.Map k v) (M.Map k) (k,v)
+mapFA = FAppendableI (CRepI (M.mapWithKey (\k v->(k,v))) (\m->M.fromList $ snd <$> M.toList m)) mempty (\(k,x) m->M.insert k x m) M.size
+
+mapFD::Ord k=>FDeletableI (M.Map k) (k,v) k ()
+mapFD = FDeletableI (\(k,_) _ ->k) () id M.delete
+
+buildReadOnlyContainer::(FormInstanceC t m, VFormBuilderC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m fa
+buildReadOnlyContainer = buildTraversableFA  
+
+
+
+        
+intMapFA::FAppendableI (IM.IntMap v) IM.IntMap (IM.Key,v)
+intMapFA = FAppendableI (CRepI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList $ snd <$> IM.toList m)) mempty (\(k,x) m->IM.insert k x m) IM.size
+
+intMapFD::FDeletableI IM.IntMap (IM.Key,v) IM.Key ()
+intMapFD = FDeletableI (\(k,_) _ ->k) () id IM.delete
+
+--instance (FormInstanceC t m, VFormBuilderC t m IM.Key, VFormBuilderC t m a)=>FormBuilder t m (IM.IntMap a) where
+--  buildForm = buildAdjustableContainer (FAdjustableI intMapFA intMapFD)
+
+seqFA::FAppendableI (Seq.Seq a) Seq.Seq a
+seqFA = FAppendableI idRep Seq.empty (flip (Seq.|>)) Seq.length
+
+seqFD::FDeletableI Seq.Seq a Int Int
+seqFD = FDeletableI (\_ index->index) 0 (+1) (\n bs -> Seq.take n bs Seq.>< Seq.drop (n+1) bs)
+
+instance (FormInstanceC t m,VFormBuilderC t m a)=>FormBuilder t m (Seq.Seq a) where
+  buildForm = buildAdjustableContainer (FAdjustableI seqFA seqFD)
+
+-- we transform to a map since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
+setFA::Ord a=>FAppendableI (S.Set a) (M.Map a) a
+setFA = FAppendableI (CRepI (\s ->M.fromList $ (\x->(x,x)) <$> S.toList s) (\m->S.fromList $ snd <$> M.toList m)) M.empty S.insert S.size
+
+setFD::Ord a=>FDeletableI (M.Map a) a a ()
+setFD = FDeletableI const () id M.delete
+
+instance (FormInstanceC t m, Ord a, VFormBuilderC t m a)=>FormBuilder t m (S.Set a) where
+  buildForm = buildAdjustableContainer (FAdjustableI setFA setFD)
+
+hashMapFA::(Eq k,Hashable k)=>FAppendableI (HML.HashMap k v) (HML.HashMap k) (k,v)
+hashMapFA = FAppendableI (CRepI (HML.mapWithKey (\k v->(k,v))) (\m->HML.fromList $ snd <$> HML.toList m)) mempty (\(k,x) m->HML.insert k x m) HML.size
+
+hashMapFD::(Eq k, Hashable k)=>FDeletableI (HML.HashMap k) (k,v) k ()
+hashMapFD = FDeletableI (\(k,_) _ ->k) () id HML.delete
+
+
+instance (FormInstanceC t m, Eq k, Hashable k, VFormBuilderC t m k, VFormBuilderC t m v)=>FormBuilder t m (HML.HashMap k v) where
+  buildForm = buildAdjustableContainer (FAdjustableI hashMapFA hashMapFD)
+
+
+-- we transform to a HashMap since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
+hashSetFA::(Eq a,Hashable a)=>FAppendableI (HS.HashSet a) (HML.HashMap a) a
+hashSetFA = FAppendableI (CRepI (\hs ->HML.fromList $ (\x->(x,x)) <$> HS.toList hs) (\hm->HS.fromList $ snd <$> HML.toList hm)) HML.empty HS.insert HS.size
+
+hashSetFD::(Eq a, Hashable a)=>FDeletableI (HML.HashMap a) a a ()
+hashSetFD = FDeletableI const () id HML.delete
+
+instance (FormInstanceC t m, Eq a, Hashable a, VFormBuilderC t m a)=>FormBuilder t m (HS.HashSet a) where
+  buildForm = buildAdjustableContainer (FAdjustableI hashSetFA hashSetFD)
+
+
+
+
 -- This feels like a lot of machinery just to get removables...but it does work...
 newtype SFR s t m a = SFR { unSFR::StateT s (FR t m) (DynValidation t a) }
 
