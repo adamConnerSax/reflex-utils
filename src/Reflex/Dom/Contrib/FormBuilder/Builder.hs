@@ -24,19 +24,18 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , validateForm
        , FormBuilder(..)
        , gBuildFormValidated
-       , dynMaybeToGBuildInput
+       , buildFMDWrappedList
+       , actOnDBWidget
        , FMDWrapped
        , buildForm'
        , makeForm
        , unF
        , toReadOnly
        , VFormBuilderC
---     , FormC
        , CollapsibleInitialState(..)
        , runForm
        , module ReflexExport
        , module BExport
-       , module GSOP
        , liftF
        , liftTransform
        , liftRAction
@@ -65,12 +64,8 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation
 import           DataBuilder                                 as BExport (Builder (..),
                                                                          FieldName,
                                                                          GBuilder (..),
-                                                                         MDWrapped (..),
-                                                                         buildAFromConList)
+                                                                         MDWrapped (..))                                                            
 import qualified DataBuilder                                 as B
-import           DataBuilder.GenericSOP                      as GSOP (Generic, HasDatatypeInfo,
-                                                                      deriveGeneric)
-
 import           Reflex                                      as ReflexExport (PushM)
 import qualified Reflex                                      as R
 import qualified Reflex.Dom                                  as RD
@@ -90,15 +85,12 @@ import           Data.Maybe                                  (fromMaybe, isJust,
 import           Data.Monoid                                 ((<>))
 import qualified Data.Text                                   as T
 import           Data.Validation                             (AccValidation (..))
-import           Language.Haskell.TH
-
-
+--import           Language.Haskell.TH
 
 
 -- This is necessary because this functor and applicative are different from that of SFRW
+-- NB: Form is *not* a Monad. So we do all the monadic widget building in (FRW t m a) and then wrap with makeForm
 type Form t m a = Compose (FR t m) (DynValidation t) a
-
---type FormC t m = (RD.DomBuilder t m, R.MonadHold t m -})
 
 makeForm::FRW t m a -> Form t m a
 makeForm = Compose
@@ -111,8 +103,6 @@ fgvToForm = makeForm . fmap DynValidation . B.unFGV
 
 formToFGV::Functor m=>Form t m a -> B.FGV (FR t m) (R.Dynamic t) FValidation a
 formToFGV = B.FGV . fmap unDynValidation . unF
-
---type FormBuilderC t m a = (B.Builder (SFR t m) (R.Dynamic t) (FValidation) a, B.Validatable (FValidation) a)
 
 type FormValidator a = B.Validator (FValidation) a
 
@@ -129,6 +119,7 @@ class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m 
                    =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
   buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . gBuildValidated va mFN . dynMaybeToGBuildInput
 
+-- helper function for using the genericBuilder in an instance rather than as the instance.  Useful for additional layout, etc.
 gBuildFormValidated::(RD.DomBuilder t m
                      , RD.MonadHold t m
                      , RD.PostBuild t m
@@ -140,6 +131,22 @@ type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable FValidation a)
 
 buildForm'::VFormBuilderC t m a=>Maybe FieldName->DynMaybe t a->Form t m a
 buildForm' = buildForm B.validator
+
+
+-- utilities to use the sum-split facilities from dataBuilder
+buildFMDWrappedList::(RD.DomBuilder t m
+                     , RD.MonadHold t m
+                     , RD.PostBuild t m
+                     , B.Generic a
+                     , B.HasDatatypeInfo a
+                     , B.All2 (B.And (Builder (FR t m) (R.Dynamic t) FValidation) (B.Validatable (FValidation))) (B.Code a))
+  =>Maybe FieldName->DynMaybe t a->[FMDWrapped t m a]
+buildFMDWrappedList mFN = B.buildMDWrappedList mFN . B.GV . fmap maybeToAV . getCompose 
+
+actOnDBWidget::Functor m=>(FRW t m a -> FRW t m a) -> B.FGV (FR t m) (R.Dynamic t) FValidation a -> B.FGV (FR t m) (R.Dynamic t) FValidation a
+actOnDBWidget f = B.FGV . fmap unDynValidation . f . fmap DynValidation . B.unFGV
+
+
 
 toReadOnly::Monad m=>Form t m a -> Form t m a
 toReadOnly form = makeForm . local setToObserve $ unF form 

@@ -197,71 +197,42 @@ instance Generic MyMap
 instance HasDatatypeInfo MyMap
 instance FormInstanceC t m=>FormBuilder t m MyMap
 
-{-
+
 instance Generic C
 instance HasDatatypeInfo C
 instance FormInstanceC t m=>FormBuilder t m C where
   buildForm va mFN = liftF (fieldSet "C" . fCol) . gBuildFormValidated va mFN
--}
-{-
+
+
 -- More layout options are available if you write custom instances.
 -- handwritten single constructor instance
 instance FormInstanceC t m=>FormBuilder t m BRec where
   buildForm va mFN mBRecDyn = validateForm va . makeForm $ do
-    let b1 = buildForm' Nothing (fmap oneB <$> mBRecDyn)
-        b2 = liftF (fCenter LayoutHorizontal) $ buildForm' Nothing (fmap seqOfA <$> mBRecDyn)
-        b3 = liftF (fCenter LayoutHorizontal) $ buildForm' Nothing (fmap hashSetOfString <$> mBRecDyn)
+    let b1 = buildForm' Nothing (oneB <$> mBRecDyn)
+        b2 = liftF (fCenter LayoutHorizontal) $ buildForm' Nothing (seqOfA <$> mBRecDyn)
+        b3 = liftF (fCenter LayoutHorizontal) $ buildForm' Nothing (hashSetOfString <$> mBRecDyn)
     fRow . unF $ (BRec <$> b1 <*> b2 <*> b3)
 
--}
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
-{-
-buildDateTime::FormInstanceC t m
+
+buildDateOrDateTime::FormInstanceC t m
   =>FormValidator DateOrDateTime
   ->Maybe FieldName
   ->DynMaybe t DateOrDateTime
   ->Form t m DateOrDateTime
-buildDate va mFN dma =
-  let mdWrapped = B.buildMDWrappedList mFN dma
+buildDateOrDateTime va mFN dma =
+  let mdWrapped = buildFMDWrappedList mFN dma
       customizeWidget (MDWrapped hd (cn,mfn) w) = case cn of
         "Date" -> MDWrapped hd (cn,mfn) w
         "DateTime" -> MDWrapped hd (cn,mfn) w
         _          -> MDWrapped hd (cn,mfn) w
-  in B.buildAFromConList
+  in fgvToForm . B.bSum $ customizeWidget <$> mdWrapped
 
-  
-  let blankBuilder = formToFGV $ validateForm va $ D <$> buildForm' Nothing Nothing
-  in case msDyn of
-    Nothing -> constDyn (MDWrapped False ("Date",mFN) blankBuilder)
-    Just ddtDyn ->
-      let f ms = MDWrapped matched ("Date",mFN) bldr where
-            (matched,mDay) = case ms of
-                               (D day) -> (True,Just day)
-                               _       -> (False, Nothing)
-            bldr = formToFGV $ validateForm va $ D <$> buildForm' Nothing (constDyn <$> mDay)
-      in f <$> ddtDyn
-
-buildDateTime::FormInstanceC t m=>FormValidator DateOrDateTime ->
-  Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (FMDWrapped t m DateOrDateTime)
-buildDateTime va mFN msDyn =
-  let blankBuilder = formToFGV $ validateForm va $ DT <$> buildForm' Nothing Nothing
-  in case msDyn of
-    Nothing -> constDyn (MDWrapped False ("DateTime",mFN) blankBuilder)
-    Just ddtDyn ->
-      let f ms = MDWrapped matched ("DateTime",mFN) bldr where
-            (matched,mDateTime) = case ms of
-                                    (DT dt) -> (True,Just dt)
-                                    _       -> (False, Nothing)
-            bldr = formToFGV $ validateForm va $ DT <$> buildForm' Nothing (constDyn <$> mDateTime)
-      in f <$> ddtDyn
-
-instance FormInstanceC t m=>FormBuilder t m DateOrDateTime where
-  buildForm va mFN = fgvToForm . B.buildAFromConList [buildDate,buildDateTime] va mFN
--}
 instance Generic DateOrDateTime
 instance HasDatatypeInfo DateOrDateTime 
-instance FormInstanceC t m=>FormBuilder t m DateOrDateTime
+instance FormInstanceC t m=>FormBuilder t m DateOrDateTime where
+  buildForm = buildDateOrDateTime 
 
 -- put some data in for demo purposes
 
@@ -282,7 +253,7 @@ testComplexForm cfg = do
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
 --  cDynM <- avMapToMap . fmap AccSuccess <$> runReaderT (buildLBEMapLVWK Nothing (constDyn testMap)) cfg
 --  cDynM <- runSimpleFormR cfg (makeSimpleFormR $ (DynValidation . fmap AccSuccess <$> buildLBEMapLVWK Nothing (constDyn testMap))) 
-  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just $ b1)
+  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just $ c)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed b1:"

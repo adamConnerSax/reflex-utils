@@ -110,7 +110,7 @@ mapML::Ord k=>MapLike (M.Map k) v k v
 mapML = MapLike id id RD.diffMapNoEq
 
 mapEQML::(Ord k, Eq v)=>MapLike (M.Map k) v k v
-mapEQML = MapLike id id RD.diffMap
+mapEQML = mapML { diffMap = RD.diffMap }
 
 mapWidgets::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>MapElemWidgets t m k v
 mapWidgets = MapElemWidgets showKeyEditVal (const . unF $ buildForm' Nothing (constDynMaybe Nothing))
@@ -125,7 +125,7 @@ instance (FormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a)=>F
   buildForm =  buildMap
 
 listML::MapLike [] a Int a
-listML = MapLike (M.fromList . zip [0..]) (fmap snd . M.toList) RD.diffMapNoEq
+listML = MapLike (M.fromAscList . zip [0..]) (fmap snd . M.toList) RD.diffMapNoEq
 
 listEQML::Eq a=>MapLike [] a Int a
 listEQML = listML { diffMap = RD.diffMap }
@@ -142,17 +142,76 @@ listWidgets = MapElemWidgets hideKeyEditVal listEditWidget
 buildList::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
 buildList = buildAdjustableContainer listML listWidgets
 
-buildEqList::(FormInstanceC t m, Eq a, VFormBuilderC t m a)=>BuildForm t m [a]
+buildEqList::(FormInstanceC t m, Eq a, VFormBuilderC t m a, Eq a)=>BuildForm t m [a]
 buildEqList = buildAdjustableContainer listEQML listWidgets
 
 instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m [a] where
   buildForm =  buildList
 
+intMapML::MapLike IM.IntMap v Int v
+intMapML = MapLike (M.fromAscList . IM.toAscList) (IM.fromAscList . M.toAscList) RD.diffMapNoEq
 
---buildList::(FormInstanceC t m,Ord k, VFormBuilderC t m a)=>BuildF t m (M.Map k v)
+intMapEqML::Eq v=>MapLike IM.IntMap v Int v
+intMapEqML = intMapML { diffMap = RD.diffMap } 
+
+intMapWidgets::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a)=>MapElemWidgets t m Int a
+intMapWidgets = MapElemWidgets showKeyEditVal (const . unF $ buildForm' Nothing (constDynMaybe Nothing))
+
+buildIntMap::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a)=>BuildForm t m (IM.IntMap a)
+buildIntMap = buildAdjustableContainer intMapML intMapWidgets
+
+buildEqIntMap::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a, Eq a)=>BuildForm t m (IM.IntMap a)
+buildEqIntMap = buildAdjustableContainer intMapEqML intMapWidgets
+
+instance (FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a)=>FormBuilder t m (IM.IntMap a) where
+  buildForm = buildIntMap
+    
+sequenceML::MapLike Seq.Seq a Int a
+sequenceML = MapLike (M.fromAscList . zip [0..] . F.toList) (Seq.fromList . fmap snd . M.toList) RD.diffMapNoEq
+
+sequenceEqML::Eq a=>MapLike Seq.Seq a Int a
+sequenceEqML = sequenceML { diffMap = RD.diffMap }
+
+--sequenceWidgets::(FormInstanceC t m, VFormBuilderC t m a)=>MapElemWidgets t m Int a
+--sequenceWidgets = listWidgets
+
+buildSequence::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m (Seq.Seq a)
+buildSequence  = buildAdjustableContainer sequenceML listWidgets
+
+buildEqSequence::(FormInstanceC t m, VFormBuilderC t m a, Eq a)=>BuildForm t m (Seq.Seq a)
+buildEqSequence  = buildAdjustableContainer sequenceEqML listWidgets
+
+instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (Seq.Seq a) where
+  buildForm = buildSequence
 
 
+hashMapML::(Ord k, Hashable k, Eq k)=>MapLike (HML.HashMap k) v k v
+hashMapML = MapLike (M.fromList . HML.toList) (HML.fromList . M.toList) RD.diffMapNoEq
 
+hashMapEqML::(Hashable k, Ord k, Eq v)=>MapLike (HML.HashMap k) v k v
+hashMapEqML = hashMapML { diffMap = RD.diffMap }
+
+buildHashMap::(FormInstanceC t m,Ord k, Hashable k, Eq k, VFormBuilderC t m k, VFormBuilderC t m v)=>BuildForm t m (HML.HashMap k v)
+buildHashMap = buildAdjustableContainer hashMapML mapWidgets
+
+buildEqHashMap::(FormInstanceC t m,Ord k, Eq k, Hashable k, VFormBuilderC t m k, VFormBuilderC t m v, Eq v)=>BuildForm t m (HML.HashMap k v)
+buildEqHashMap = buildAdjustableContainer hashMapEqML mapWidgets
+
+instance (FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v, Ord k, Hashable k, Eq k)=>FormBuilder t m (HML.HashMap k v) where
+  buildForm = buildHashMap
+
+-- Can't do plain HashSet since we need (Eq a) for fromList. So we may as well take advantage in the diffing
+
+hashSetEqML::(Eq a, Hashable a)=>MapLike HS.HashSet a Int a
+hashSetEqML = MapLike (M.fromList . zip [0..] . HS.toList) (HS.fromList . fmap snd . M.toList) RD.diffMap
+
+buildEqHashSet::(FormInstanceC t m,Hashable a, Eq a, VFormBuilderC t m a)=>BuildForm t m (HS.HashSet a)
+buildEqHashSet = buildAdjustableContainer hashSetEqML listWidgets
+
+instance (FormInstanceC t m, VFormBuilderC t m a, Hashable a, Eq a)=>FormBuilder t m (HS.HashSet a) where
+  buildForm = buildEqHashSet
+
+  
 -- the various container builder components
 type BuildF t m a    = FormValidator a->Maybe FieldName->DynMaybe t a->FRW t m a
 type BuildForm t m a = FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
@@ -215,6 +274,9 @@ buildLBDelete (MapLike to from _) (MapElemWidgets eW _) mFN dmfa = makeForm $ do
   fmap from <$> buildLBEMapLWK' eW' mFN mapDyn0      
 
 
+
+--NB: I see why tagPromtlyDyn is required for pairWidgetEv (so when the new one is drawn, it sees the updated map) but not quite why
+-- that doesn't lead to a cycle.
 buildLBAddDelete::(FormInstanceC t m
                   , Ord k
                   , VFormBuilderC t m k
@@ -233,7 +295,7 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   newInputMapEv <- dynAsEv mapDyn0 
   updateMapDyn <- fItem $ RD.listWithKeyShallowDiff M.empty diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
   addEv <- fRow $ mdo
-    let pairWidgetEv = R.fmapMaybe (fmap nWF) $ R.tag (R.current $ avToMaybe . sequenceA <$> mapDyn) $ R.leftmost [() <$ newPairEv, () <$ newInputMapEv]
+    let pairWidgetEv = R.fmapMaybe (fmap nWF) $ R.tagPromptlyDyn (avToMaybe . sequenceA <$> mapDyn) $ R.leftmost [() <$ newPairEv, () <$ newInputMapEv]
     addPairDV <- fRow $ joinDynOfDynValidation <$> RD.widgetHold (return $ dynValidationNothing) pairWidgetEv -- DynValidation (k,v)
     let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
     addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
@@ -537,9 +599,6 @@ mapFD = FDeletableI (\(k,_) _ ->k) () id M.delete
 
 buildReadOnlyContainer::(FormInstanceC t m, VFormBuilderC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m fa
 buildReadOnlyContainer = buildTraversableFA  
-
-
-
         
 intMapFA::FAppendableI (IM.IntMap v) IM.IntMap (IM.Key,v)
 intMapFA = FAppendableI (CRepI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList $ snd <$> IM.toList m)) mempty (\(k,x) m->IM.insert k x m) IM.size
