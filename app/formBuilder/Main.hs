@@ -130,7 +130,7 @@ data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Gen
 instance Generic User
 instance HasDatatypeInfo User
 instance FormInstanceC t m=>FormBuilder t m User where
-  buildForm va mFN = liftF fCol . fgvToForm . gBuildValidated va mFN . dynMaybeToGBuildInput
+  buildForm va mFN = liftF fCol . gBuildFormValidated va mFN 
 
 testUserForm::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m->m ()
 testUserForm cfg = do
@@ -155,7 +155,8 @@ data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic
 
 data Shape = Square | Circle | Triangle deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
 
-data DateOrDateTime = D Day | DT UTCTime deriving (Show)
+data DateOrDateTime = D Day | DT UTCTime deriving (Show, GHC.Generic)
+
 
 -- Anything with a Read instance can be built using buildReadMaybe
 data ReadableType = RTI Int | RTS String deriving (Show,Read)
@@ -179,26 +180,30 @@ data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Gen
 -- generic instances
 -- NB: "Generic" below is the Generics.SOP sort.
 -- NB: You don't need the "buildA .. = .. gBuildA .. " lines if the default formatting is okay.  But this allows you to insert layout on a per type basis.
-{-
+
 instance Generic A
 instance HasDatatypeInfo A
 instance FormInstanceC t m=>FormBuilder t m A where
-  buildForm va mFN = liftF sfRow . fgvToForm . gBuildValidated va mFN
+  buildForm va mFN = liftF fRow . gBuildFormValidated va mFN
+
 
 instance Generic B
 instance HasDatatypeInfo B
 instance FormInstanceC t m=>FormBuilder t m B where
-  buildForm va mFN = liftF (fieldSet "B" . sfRow) . fgvToForm . gBuildValidated va mFN
+  buildForm va mFN = liftF (fieldSet "B" . fRow) . gBuildFormValidated va mFN
+
 
 instance Generic MyMap
 instance HasDatatypeInfo MyMap
 instance FormInstanceC t m=>FormBuilder t m MyMap
 
+{-
 instance Generic C
 instance HasDatatypeInfo C
 instance FormInstanceC t m=>FormBuilder t m C where
-  buildForm va mFN = liftF (fieldSet "C" . sfCol) . fgvToForm . gBuildValidated va mFN
-
+  buildForm va mFN = liftF (fieldSet "C" . fCol) . gBuildFormValidated va mFN
+-}
+{-
 -- More layout options are available if you write custom instances.
 -- handwritten single constructor instance
 instance FormInstanceC t m=>FormBuilder t m BRec where
@@ -208,11 +213,24 @@ instance FormInstanceC t m=>FormBuilder t m BRec where
         b3 = liftF (fCenter LayoutHorizontal) $ buildForm' Nothing (fmap hashSetOfString <$> mBRecDyn)
     fRow . unF $ (BRec <$> b1 <*> b2 <*> b3)
 
+-}
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
-buildDate::FormInstanceC t m=>FormValidator DateOrDateTime->
-  Maybe FieldName->Maybe (Dynamic t DateOrDateTime)->Dynamic t (FMDWrapped t m DateOrDateTime)
-buildDate va mFN msDyn =
+{-
+buildDateTime::FormInstanceC t m
+  =>FormValidator DateOrDateTime
+  ->Maybe FieldName
+  ->DynMaybe t DateOrDateTime
+  ->Form t m DateOrDateTime
+buildDate va mFN dma =
+  let mdWrapped = B.buildMDWrappedList mFN dma
+      customizeWidget (MDWrapped hd (cn,mfn) w) = case cn of
+        "Date" -> MDWrapped hd (cn,mfn) w
+        "DateTime" -> MDWrapped hd (cn,mfn) w
+        _          -> MDWrapped hd (cn,mfn) w
+  in B.buildAFromConList
+
+  
   let blankBuilder = formToFGV $ validateForm va $ D <$> buildForm' Nothing Nothing
   in case msDyn of
     Nothing -> constDyn (MDWrapped False ("Date",mFN) blankBuilder)
@@ -240,13 +258,18 @@ buildDateTime va mFN msDyn =
 
 instance FormInstanceC t m=>FormBuilder t m DateOrDateTime where
   buildForm va mFN = fgvToForm . B.buildAFromConList [buildDate,buildDateTime] va mFN
+-}
+instance Generic DateOrDateTime
+instance HasDatatypeInfo DateOrDateTime 
+instance FormInstanceC t m=>FormBuilder t m DateOrDateTime
 
 -- put some data in for demo purposes
 
 b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
 b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
+
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
--}
+
 testMap::M.Map T.Text Int
 testMap = M.fromList [("A",1),("B",2)]
 
@@ -259,10 +282,10 @@ testComplexForm cfg = do
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
 --  cDynM <- avMapToMap . fmap AccSuccess <$> runReaderT (buildLBEMapLVWK Nothing (constDyn testMap)) cfg
 --  cDynM <- runSimpleFormR cfg (makeSimpleFormR $ (DynValidation . fmap AccSuccess <$> buildLBEMapLVWK Nothing (constDyn testMap))) 
-  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just $ testMap)
+  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just $ b1)
   el "p" $ text "C from form:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
-  el "p" $ text "Observed C:"
+  el "p" $ text "Observed b1:"
   el "p" blank
   _ <- flexFill LayoutRight $ observeDynamic cfg (avToMaybe <$> unDynValidation cDynM)
   return ()

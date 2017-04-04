@@ -23,6 +23,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , FormValidator
        , validateForm
        , FormBuilder(..)
+       , gBuildFormValidated
        , dynMaybeToGBuildInput
        , FMDWrapped
        , buildForm'
@@ -127,6 +128,13 @@ class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m 
   default buildForm::(GBuilder (FR t m) (R.Dynamic t) FValidation a)
                    =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
   buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . gBuildValidated va mFN . dynMaybeToGBuildInput
+
+gBuildFormValidated::(RD.DomBuilder t m
+                     , RD.MonadHold t m
+                     , RD.PostBuild t m
+                     , GBuilder (FR t m) (R.Dynamic t) FValidation a)
+  =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
+gBuildFormValidated va mFN = fgvToForm  . gBuildValidated va mFN . dynMaybeToGBuildInput
 
 type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable FValidation a)
 

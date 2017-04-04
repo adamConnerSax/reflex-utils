@@ -92,44 +92,91 @@ buttonNoSubmit' t = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "button" ("type"
 containerActionButton::(RD.PostBuild t m, RD.DomBuilder t m)=>T.Text -> m (RD.Event t ())
 containerActionButton = buttonNoSubmit'
 
-instance (B.Validatable FValidation a, B.Validatable FValidation b)=>B.Validatable FValidation (a,b) where
-  validator (a,b) = (,) <$> B.validator a <*> B.validator b
-
-instance (FormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a,Show k, Read a, Show a)=>FormBuilder t m (M.Map k a) where
-  buildForm va mFN dmfa =  validateForm va . makeForm  $ do
+buildAdjustableContainer::(FormInstanceC t m
+                          , Ord k
+                          , VFormBuilderC t m k
+                          , VFormBuilderC t m v)
+  =>MapLike f a k v
+  ->MapElemWidgets t m k v
+  ->BuildForm t m (f a)
+buildAdjustableContainer ml mews va mFN dmfa  = validateForm va . makeForm $ do
     fType <- getFormType
     case fType of
-      Interactive ->  unF $ buildLBAddDelete mapLV mapLikeME mFN dmfa 
-      ObserveOnly ->  unF $ buildLBEditOnly  mapLV mapLikeME mFN dmfa
+      Interactive ->  unF $ buildLBAddDelete ml mews mFN dmfa 
+      ObserveOnly ->  unF $ buildLBEditOnly  ml mews mFN dmfa
+  
+
+mapML::Ord k=>MapLike (M.Map k) v k v
+mapML = MapLike id id RD.diffMapNoEq
+
+mapEQML::(Ord k, Eq v)=>MapLike (M.Map k) v k v
+mapEQML = MapLike id id RD.diffMap
+
+mapWidgets::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>MapElemWidgets t m k v
+mapWidgets = MapElemWidgets showKeyEditVal (const . unF $ buildForm' Nothing (constDynMaybe Nothing))
+
+buildMap::(FormInstanceC t m,Ord k, VFormBuilderC t m k, VFormBuilderC t m v)=>BuildForm t m (M.Map k v)
+buildMap = buildAdjustableContainer mapML mapWidgets
+
+buildEqMap::(FormInstanceC t m,Ord k, Eq v, VFormBuilderC t m k, VFormBuilderC t m v)=>BuildForm t m (M.Map k v)
+buildEqMap = buildAdjustableContainer mapEQML mapWidgets
+
+instance (FormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a)=>FormBuilder t m (M.Map k a) where
+  buildForm =  buildMap
+
+listML::MapLike [] a Int a
+listML = MapLike (M.fromList . zip [0..]) (fmap snd . M.toList) RD.diffMapNoEq
+
+listEQML::Eq a=>MapLike [] a Int a
+listEQML = listML { diffMap = RD.diffMap }
+
+listEditWidget::(FormInstanceC t m, VFormBuilderC t m a)=>M.Map Int a -> FRW t m (Int,a)
+listEditWidget curMap = do
+  let newKey = (+1) . maximum . M.keys $ curMap
+  newElem <- unF $ buildForm' Nothing (constDynMaybe Nothing)
+  return $ (,) <$> constDynValidation newKey <*> newElem
+
+listWidgets::(FormInstanceC t m, VFormBuilderC t m a)=>MapElemWidgets t m Int a
+listWidgets = MapElemWidgets hideKeyEditVal listEditWidget
+
+buildList::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
+buildList = buildAdjustableContainer listML listWidgets
+
+buildEqList::(FormInstanceC t m, Eq a, VFormBuilderC t m a)=>BuildForm t m [a]
+buildEqList = buildAdjustableContainer listEQML listWidgets
+
+instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m [a] where
+  buildForm =  buildList
+
+
+--buildList::(FormInstanceC t m,Ord k, VFormBuilderC t m a)=>BuildF t m (M.Map k v)
+
+
 
 -- the various container builder components
-type BuildF t m a = Maybe FieldName->Maybe (R.Dynamic t a)->FRW t m a
+type BuildF t m a    = FormValidator a->Maybe FieldName->DynMaybe t a->FRW t m a
+type BuildForm t m a = FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
 
 type LBBuildF' t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FRW t m (M.Map k v)
 
 
-data ListViewable f a k v = ListViewable
-                            {
-                              toMap::f a->M.Map k v
-                            , fromMap::M.Map k v->f a
-                            , itemName::k->a->T.Text
-                            , diffMap::M.Map k v -> M.Map k v -> M.Map k (Maybe v)
-                            }
+data MapLike f a k v = MapLike
+                       {
+                         toMap::f a->M.Map k v
+                       , fromMap::M.Map k v->f a
+                       , diffMap::M.Map k v -> M.Map k v -> M.Map k (Maybe v)
+                       }
 
-data MapEditable t m k v = MapEditable 
-                           {                     
-                             elemW::ElemWidget t m k v
-                           , newOneWF::M.Map k v->FRW t m (k,v) -- might need existing map to choose a new key
-                           }
+data MapElemWidgets t m k v = MapElemWidgets 
+                              {                     
+                                elemW::ElemWidget t m k v
+                              , newOneWF::M.Map k v->FRW t m (k,v) -- might need existing map to choose a new key
+                              }
 
-mapLV::(Ord k, Show k)=>ListViewable (M.Map k) v k v
-mapLV = ListViewable id id (\k _ ->T.pack $ show k) RD.diffMapNoEq
 
-mapEQLV::(Ord k, Show k, Eq v)=>ListViewable (M.Map k) v k v
-mapEQLV = ListViewable id id (\k _ ->T.pack $ show k) RD.diffMap
+instance (B.Validatable FValidation a, B.Validatable FValidation b)=>B.Validatable FValidation (a,b) where
+  validator (a,b) = (,) <$> B.validator a <*> B.validator b
 
-mapLikeME::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>MapEditable t m k v
-mapLikeME = MapEditable simpleEditWidget (const . unF $ buildForm' Nothing (constDynMaybe Nothing))
 
 type ElemWidget t m k v = k->R.Dynamic t v->FRW t m v 
 type LBWidget t m k v = k->R.Dynamic t v->FR t m (R.Dynamic t (Maybe (FValidation v)))
@@ -144,12 +191,12 @@ buildLBEditOnly::(FormInstanceC t m
                    , Ord k
                    , VFormBuilderC t m k
                    , VFormBuilderC t m v)
-  =>ListViewable f a k v
-  ->MapEditable t m k v
+  =>MapLike f a k v
+  ->MapElemWidgets t m k v
   ->Maybe FieldName
   ->DynMaybe t (f a)
   ->Form t m (f a)
-buildLBEditOnly (ListViewable to from _ _) (MapEditable eW _) mFN dmfa =  makeForm $ do
+buildLBEditOnly (MapLike to from _) (MapElemWidgets eW _) mFN dmfa =  makeForm $ do
   let mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa
   fmap from <$> buildLBEMapLWK' (elemWidgetToLBWidget eW) mFN mapDyn0
 
@@ -157,12 +204,12 @@ buildLBDelete::(FormInstanceC t m
                    , Ord k
                    , VFormBuilderC t m k
                    , VFormBuilderC t m v)
-  =>ListViewable f a k v
-  ->MapEditable t m k v
+  =>MapLike f a k v
+  ->MapElemWidgets t m k v
   ->Maybe FieldName
   ->DynMaybe t (f a)
   ->Form t m (f a)
-buildLBDelete (ListViewable to from _ _) (MapEditable eW _) mFN dmfa = makeForm $ do
+buildLBDelete (MapLike to from _) (MapElemWidgets eW _) mFN dmfa = makeForm $ do
   let eW' = editAndDeleteElemWidget eW (R.constDyn True)
       mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa
   fmap from <$> buildLBEMapLWK' eW' mFN mapDyn0      
@@ -172,12 +219,12 @@ buildLBAddDelete::(FormInstanceC t m
                   , Ord k
                   , VFormBuilderC t m k
                   , VFormBuilderC t m v)
-  =>ListViewable f a k v
-  ->MapEditable t m k v
+  =>MapLike f a k v
+  ->MapElemWidgets t m k v
   ->Maybe FieldName
   ->DynMaybe t (f a)
   ->Form t m (f a)
-buildLBAddDelete (ListViewable to from _ diffMapF) (MapEditable eW nWF) mFN dmfa = makeForm $ fCol $ mdo
+buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = makeForm $ fCol $ mdo
   let eW' k v0 vEv = R.holdDyn v0 vEv >>= \vDyn -> editAndDeleteElemWidget eW (R.constDyn True) k vDyn
       mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa 
       diffMap' avOld new = case avOld of
@@ -223,16 +270,23 @@ buildLBEMapLWK' editW _ mapDyn0 = do
   let mapFValDyn = M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
   return . DynValidation $ sequenceA <$> mapFValDyn
 
-simpleEditWidget::(FormInstanceC t m
-                  , VFormBuilderC t m k
-                  , VFormBuilderC t m v)=>ElemWidget t m k v
-simpleEditWidget k vDyn = do
-  vEv <- traceDynAsEv (const "simpleEditWidget") vDyn
+showKeyEditVal::(FormInstanceC t m
+                , VFormBuilderC t m k
+                , VFormBuilderC t m v)=>ElemWidget t m k v
+showKeyEditVal k vDyn = do
+  vEv <- traceDynAsEv (const "showKeyEditVal") vDyn
   mvDyn <- R.holdDyn Nothing (Just <$> vEv)
   let showKey k = toReadOnly $ buildForm' Nothing (constDynMaybe (Just k))
   fRow $ do
     fItem . unF $ showKey k
     fItem . unF $ buildForm' Nothing (Compose mvDyn)
+
+
+hideKeyEditVal::(FormInstanceC t m, VFormBuilderC t m v)=>ElemWidget t m k v
+hideKeyEditVal _ vDyn = do
+  vEv <- traceDynAsEv (const "hideKeyEditVal") vDyn
+  mvDyn <- R.holdDyn Nothing (Just <$> vEv)
+  fRow . fItem . unF $ buildForm' Nothing (Compose mvDyn)
 
 
 editAndDeleteElemWidget::(FormInstanceC t m
@@ -265,11 +319,13 @@ editAndDeleteElemWidget eW visibleDyn k vDyn = mdo
 
 type LBBuildF t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FR t m (R.Dynamic t (M.Map k v))
 
+{-
 toBuildF::(R.Reflex t,Functor m)=>LBBuildF t m k v->BuildF t m (M.Map k v)
 toBuildF lbbf mFN mMapDyn =
   let mapDyn = fromMaybe (R.constDyn M.empty) mMapDyn
   in DynValidation . fmap AccSuccess <$> lbbf mFN mapDyn 
 
+-}
 
 
 buildLBEMapWithAdd::(FormInstanceC t m

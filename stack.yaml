@@ -10,7 +10,7 @@ packages:
     commit: "ad12df688a61284ded6e73761176d222f6edab12"
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
-    commit: "55df6a96f01249e415bbf9214286b56e7092275b"
+    commit: "6fa582583f1ffe93acf8a24fb6688ba69bfa8b9a"
   extra-dep: true
 - location:
     git: https://github.com/adamConnerSax/reflex-sumType-utilities
