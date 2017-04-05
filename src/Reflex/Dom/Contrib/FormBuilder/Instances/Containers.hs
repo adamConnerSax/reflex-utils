@@ -112,8 +112,8 @@ mapML = MapLike id id RD.diffMapNoEq
 mapEQML::(Ord k, Eq v)=>MapLike (M.Map k) v k v
 mapEQML = mapML { diffMap = RD.diffMap }
 
-mapEditWidget::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>R.Event t (k,v) -> R.Event t (M.Map k v) -> FRW t m (k,v)
-mapEditWidget newPair newMap = do
+mapEditWidget::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>R.Dynamic t (M.Map k (FValidation v)) -> R.Event t (k,v) -> R.Event t (M.Map k v) -> FRW t m (k,v)
+mapEditWidget _ newPair newMap = do
   let pairWidget = unF $ buildForm' Nothing (constDynMaybe Nothing)
       pairWidgetEv = pairWidget <$ R.leftmost [() <$ newPair, () <$ newMap]
   joinDynOfDynValidation <$> RD.widgetHold pairWidget pairWidgetEv -- DynValidation (k,v)
@@ -139,13 +139,24 @@ listEQML = listML { diffMap = RD.diffMap }
 safeMaximum::Ord a=>[a]->Maybe a
 safeMaximum l = if null l then Nothing else Just $ maximum l
 
-listEditWidget::(FormInstanceC t m, VFormBuilderC t m a)=>R.Event t (Int, a) -> R.Event t (M.Map Int a) -> FRW t m (Int,a)
-listEditWidget newPairEv newMapEv = do
+listEditWidget::(FormInstanceC t m, VFormBuilderC t m a)=>R.Dynamic t (M.Map Int (FValidation a)) -> R.Event t (Int, a) -> R.Event t (M.Map Int a) -> FRW t m (Int,a)
+listEditWidget _ newPairEv newMapEv = do
   let newKeyEv = R.leftmost [(+1) . fst <$>  newPairEv, maybe 0 (+1) . safeMaximum . M.keys <$> newMapEv]
       widget newKey = fRow $ do
         newElem <- fItem . unF $ buildForm' Nothing (constDynMaybe Nothing)
         return $ (,) <$> constDynValidation newKey <*> newElem
   joinDynOfDynValidation <$> RD.widgetHold (widget 0) (widget <$> newKeyEv) -- DynValidation (k,v)
+
+listEditWidgetNoDup::(FormInstanceC t m, VFormBuilderC t m a,Eq a)=>R.Dynamic t (M.Map Int (FValidation a)) -> R.Event t (Int, a) -> R.Event t (M.Map Int a) -> FRW t m (Int,a)
+listEditWidgetNoDup mapVDyn newPairEv newMapEv = do
+  let newKeyEv = R.leftmost [(+1) . fst <$>  newPairEv, maybe 0 (+1) . safeMaximum . M.keys <$> newMapEv]
+      widget newKey = fRow $ do
+        newElem <- fItem . unF $ buildForm' Nothing (constDynMaybe Nothing)
+        return $ (,) <$> constDynValidation newKey <*> newElem
+      dupF (intKey,val) curMap = let isDup = elem val (M.elems curMap) in if isDup then AccFailure [FNothing] else AccSuccess (intKey,val)
+  newPair <- joinDynOfDynValidation <$> RD.widgetHold (widget 0) (widget <$> newKeyEv) -- DynValidation (k,v)
+  return . DynValidation . fmap mergeAccValidation . unDynValidation $ dupF <$> newPair <*> (DynValidation $ sequenceA <$> mapVDyn)
+
   
 listWidgets::(FormInstanceC t m, VFormBuilderC t m a)=>MapElemWidgets t m Int a
 listWidgets = MapElemWidgets hideKeyEditVal listEditWidget
@@ -159,6 +170,27 @@ buildEqList = buildAdjustableContainer listEQML listWidgets
 instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m [a] where
   buildForm =  buildList
 
+
+setML::Ord a=>MapLike S.Set a Int a
+setML = MapLike (M.fromAscList . zip [0..] . S.toList) (S.fromList . fmap snd . M.toList) RD.diffMapNoEq
+
+setEqML::(Ord a,Eq a)=>MapLike S.Set a Int a
+setEqML = setML { diffMap = RD.diffMap }
+
+setEqWidgets::(FormInstanceC t m, VFormBuilderC t m a,Eq a)=>MapElemWidgets t m Int a
+setEqWidgets = MapElemWidgets hideKeyEditVal listEditWidgetNoDup
+
+buildSet::(FormInstanceC t m, VFormBuilderC t m a, Ord a)=>BuildForm t m (S.Set a)
+buildSet = buildAdjustableContainer setML listWidgets
+
+buildEqSet::(FormInstanceC t m, VFormBuilderC t m a, Ord a,Eq a)=>BuildForm t m (S.Set a)
+buildEqSet = buildAdjustableContainer setEqML listWidgets
+
+instance (FormInstanceC t m, VFormBuilderC t m a, Ord a)=>FormBuilder t m (S.Set a) where
+  buildForm = buildSet
+
+
+  
 intMapML::MapLike IM.IntMap v Int v
 intMapML = MapLike (M.fromAscList . IM.toAscList) (IM.fromAscList . M.toAscList) RD.diffMapNoEq
 
@@ -217,7 +249,7 @@ hashSetEqML::(Eq a, Hashable a)=>MapLike HS.HashSet a Int a
 hashSetEqML = MapLike (M.fromList . zip [0..] . HS.toList) (HS.fromList . fmap snd . M.toList) RD.diffMap
 
 buildEqHashSet::(FormInstanceC t m,Hashable a, Eq a, VFormBuilderC t m a)=>BuildForm t m (HS.HashSet a)
-buildEqHashSet = buildAdjustableContainer hashSetEqML listWidgets
+buildEqHashSet = buildAdjustableContainer hashSetEqML setEqWidgets
 
 instance (FormInstanceC t m, VFormBuilderC t m a, Hashable a, Eq a)=>FormBuilder t m (HS.HashSet a) where
   buildForm = buildEqHashSet
@@ -230,18 +262,14 @@ type BuildForm t m a = FormValidator a->Maybe FieldName->DynMaybe t a->Form t m 
 type LBBuildF' t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FRW t m (M.Map k v)
 
 
-data MapLike f a k v = MapLike
-                       {
-                         toMap::f a->M.Map k v
-                       , fromMap::M.Map k v->f a
-                       , diffMap::M.Map k v -> M.Map k v -> M.Map k (Maybe v)
-                       }
+data MapLike f a k v = MapLike { toMap::f a->M.Map k v
+                               , fromMap::M.Map k v->f a
+                               , diffMap::M.Map k v -> M.Map k v -> M.Map k (Maybe v)
+                               }
 
-data MapElemWidgets t m k v = MapElemWidgets 
-                              {                     
-                                elemW::ElemWidget t m k v                                
-                              , newOneWF::R.Event t (k,v)->R.Event t (M.Map k v)->FRW t m (k,v) 
-                              }
+data MapElemWidgets t m k v = MapElemWidgets { elemW::ElemWidget t m k v                                
+                                             , newOneWF::R.Dynamic t (M.Map k (FValidation v)) -> R.Event t (k,v)->R.Event t (M.Map k v)->FRW t m (k,v) 
+                                             }
 
 
 instance (B.Validatable FValidation a, B.Validatable FValidation b)=>B.Validatable FValidation (a,b) where
@@ -306,7 +334,7 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   newInputMapEv <- dynAsEv mapDyn0 
   updateMapDyn <- fItem $ RD.listWithKeyShallowDiff M.empty diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
   addEv <- fRow $ mdo
-    addPairDV <- fRow $ nWF newPairEv newInputMapEv
+    addPairDV <- fRow $ nWF mapDyn newPairEv newInputMapEv
     let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
     addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
     let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
