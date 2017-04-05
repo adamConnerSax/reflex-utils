@@ -133,8 +133,8 @@ instance (FormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a)=>F
 listML::MapLike [] a Int a
 listML = MapLike (M.fromAscList . zip [0..]) (fmap snd . M.toList) RD.diffMapNoEq
 
-listEQML::Eq a=>MapLike [] a Int a
-listEQML = listML { diffMap = RD.diffMap }
+listEqML::Eq a=>MapLike [] a Int a
+listEqML = listML { diffMap = RD.diffMap }
 
 safeMaximum::Ord a=>[a]->Maybe a
 safeMaximum l = if null l then Nothing else Just $ maximum l
@@ -147,7 +147,7 @@ listEditWidget _ newPairEv newMapEv = do
         return $ (,) <$> constDynValidation newKey <*> newElem
   joinDynOfDynValidation <$> RD.widgetHold (widget 0) (widget <$> newKeyEv) -- DynValidation (k,v)
 
-listEditWidgetNoDup::(FormInstanceC t m, VFormBuilderC t m a,Eq a)=>R.Dynamic t (M.Map Int (FValidation a)) -> R.Event t (Int, a) -> R.Event t (M.Map Int a) -> FRW t m (Int,a)
+listEditWidgetNoDup::(FormInstanceC t m, VFormBuilderC t m a, Eq a)=>R.Dynamic t (M.Map Int (FValidation a)) -> R.Event t (Int, a) -> R.Event t (M.Map Int a) -> FRW t m (Int,a)
 listEditWidgetNoDup mapVDyn newPairEv newMapEv = do
   let newKeyEv = R.leftmost [(+1) . fst <$>  newPairEv, maybe 0 (+1) . safeMaximum . M.keys <$> newMapEv]
       widget newKey = fRow $ do
@@ -165,31 +165,22 @@ buildList::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
 buildList = buildAdjustableContainer listML listWidgets
 
 buildEqList::(FormInstanceC t m, Eq a, VFormBuilderC t m a, Eq a)=>BuildForm t m [a]
-buildEqList = buildAdjustableContainer listEQML listWidgets
+buildEqList = buildAdjustableContainer listEqML listWidgets
 
 instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m [a] where
   buildForm =  buildList
 
-
-setML::Ord a=>MapLike S.Set a Int a
-setML = MapLike (M.fromAscList . zip [0..] . S.toList) (S.fromList . fmap snd . M.toList) RD.diffMapNoEq
-
-setEqML::(Ord a,Eq a)=>MapLike S.Set a Int a
-setEqML = setML { diffMap = RD.diffMap }
+setEqML::Ord a=>MapLike S.Set a Int a
+setEqML = MapLike (M.fromAscList . zip [0..] . S.toList) (S.fromList . fmap snd . M.toList) RD.diffMap
 
 setEqWidgets::(FormInstanceC t m, VFormBuilderC t m a,Eq a)=>MapElemWidgets t m Int a
 setEqWidgets = MapElemWidgets hideKeyEditVal listEditWidgetNoDup
 
 buildSet::(FormInstanceC t m, VFormBuilderC t m a, Ord a)=>BuildForm t m (S.Set a)
-buildSet = buildAdjustableContainer setML listWidgets
-
-buildEqSet::(FormInstanceC t m, VFormBuilderC t m a, Ord a,Eq a)=>BuildForm t m (S.Set a)
-buildEqSet = buildAdjustableContainer setEqML listWidgets
+buildSet = buildAdjustableContainer setEqML setEqWidgets
 
 instance (FormInstanceC t m, VFormBuilderC t m a, Ord a)=>FormBuilder t m (S.Set a) where
   buildForm = buildSet
-
-
   
 intMapML::MapLike IM.IntMap v Int v
 intMapML = MapLike (M.fromAscList . IM.toAscList) (IM.fromAscList . M.toAscList) RD.diffMapNoEq
@@ -215,9 +206,6 @@ sequenceML = MapLike (M.fromAscList . zip [0..] . F.toList) (Seq.fromList . fmap
 sequenceEqML::Eq a=>MapLike Seq.Seq a Int a
 sequenceEqML = sequenceML { diffMap = RD.diffMap }
 
---sequenceWidgets::(FormInstanceC t m, VFormBuilderC t m a)=>MapElemWidgets t m Int a
---sequenceWidgets = listWidgets
-
 buildSequence::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m (Seq.Seq a)
 buildSequence  = buildAdjustableContainer sequenceML listWidgets
 
@@ -228,16 +216,16 @@ instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (Seq.Seq a) w
   buildForm = buildSequence
 
 
-hashMapML::(Ord k, Hashable k, Eq k)=>MapLike (HML.HashMap k) v k v
+hashMapML::(Ord k, Hashable k)=>MapLike (HML.HashMap k) v k v
 hashMapML = MapLike (M.fromList . HML.toList) (HML.fromList . M.toList) RD.diffMapNoEq
 
 hashMapEqML::(Hashable k, Ord k, Eq v)=>MapLike (HML.HashMap k) v k v
 hashMapEqML = hashMapML { diffMap = RD.diffMap }
 
-buildHashMap::(FormInstanceC t m,Ord k, Hashable k, Eq k, VFormBuilderC t m k, VFormBuilderC t m v)=>BuildForm t m (HML.HashMap k v)
+buildHashMap::(FormInstanceC t m,Ord k, Hashable k, VFormBuilderC t m k, VFormBuilderC t m v)=>BuildForm t m (HML.HashMap k v)
 buildHashMap = buildAdjustableContainer hashMapML mapWidgets
 
-buildEqHashMap::(FormInstanceC t m,Ord k, Eq k, Hashable k, VFormBuilderC t m k, VFormBuilderC t m v, Eq v)=>BuildForm t m (HML.HashMap k v)
+buildEqHashMap::(FormInstanceC t m,Ord k, Hashable k, VFormBuilderC t m k, VFormBuilderC t m v, Eq v)=>BuildForm t m (HML.HashMap k v)
 buildEqHashMap = buildAdjustableContainer hashMapEqML mapWidgets
 
 instance (FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v, Ord k, Hashable k, Eq k)=>FormBuilder t m (HML.HashMap k v) where
