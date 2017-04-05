@@ -36,6 +36,7 @@ import qualified DataBuilder                                   as B
 
 import qualified Reflex                                        as R
 import qualified Reflex.Dom                                    as RD
+import qualified Reflex.Dom.Widget.Basic                       as RD
 import           Reflex.Dom.Contrib.Widgets.Common             (Widget0 (..), WidgetConfig (..),
                                                                 htmlDropdownStatic)
 
@@ -50,7 +51,7 @@ import           Control.Monad.Reader                          (ask, asks, lift,
 import           Data.ByteString                               (ByteString)
 import           Data.Default                                  (Default (..))
 import qualified Data.Map                                      as M
-import           Data.Maybe                                    (fromJust)
+import           Data.Maybe                                    (fromMaybe)
 import           Data.Monoid                                   ((<>))
 import qualified Data.Text                                     as T
 import           Data.Functor.Compose                          (Compose(Compose,getCompose))
@@ -64,15 +65,7 @@ instance Default (FormIncludedCss) where
 defaultCss::ByteString
 defaultCss = cssToBS formDefaultCss <> cssToBS observerDefaultCss
 
-
 type DefaultConfigurationC t m = FormInstanceC t m
-{-
-  (FormCC t m,
-   RD.PostBuild t m,
-   MonadFix m,
-   MonadWidgetExtraC t m,
-   FormInstanceC t m)
--}
 
 byFormType::FormType->a->a->a
 byFormType ft ifInteractive ifReadOnly = case ft of
@@ -86,7 +79,6 @@ instance Default (CssConfiguration) where
     (const emptyCss)
     (const $ oneClass "sf-valid")
     (const $ oneClass "sf-invalid")
-
 
 
 instance Default (InputElementConfig t) where
@@ -141,6 +133,12 @@ defFailureF msg = do
 whichFired::R.Reflex t=>[R.Event t a]->R.Event t Int
 whichFired = R.leftmost . zipWith (<$) [0..]
 
+safeIndex::Int->[a]->Maybe a
+safeIndex n l = let ln = take (n+1) l in if length ln == (n+1) then Just (last ln) else Nothing
+
+safeHead::[a]->Maybe a
+safeHead = safeIndex 0
+
 -- FIXME:  unsafe functions, head and (!!)
 -- FIXME: write a version that uses all the widgets at once, hiding the unused ones.  THat will be more efficient in the case when switching is expected
 defSumF::DefaultConfigurationC t m=>[(B.ConName,R.Event t (),FRW t m a)]->FRW t m a
@@ -157,8 +155,11 @@ defSumF conWidgets = fRow $ do
   let newIndexEv = R.leftmost [inputIndexEv,chosenIndexEv]
   curIndex <- R.holdDyn 0 newIndexEv
   let switchWidgetEv = R.updated . R.uniqDyn $ curIndex
-      newWidgetEv = (\n -> widgets !! n) <$> switchWidgetEv
-  fItem $ DynValidation . join . fmap unDynValidation <$> RD.widgetHold (head widgets) newWidgetEv
+      errorW msg = do
+        RD.el "span" $ RD.text msg
+        return $ dynValidationErr [FInvalid msg]
+      newWidgetEv = fromMaybe (errorW "index error in defSumF!") . (\n -> safeIndex n widgets) <$> switchWidgetEv
+  fItem $ DynValidation . join . fmap unDynValidation <$> RD.widgetHold (fromMaybe (errorW "empty widget list in defSumF!") $ safeHead widgets) newWidgetEv
 
 
 {-

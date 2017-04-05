@@ -112,8 +112,14 @@ mapML = MapLike id id RD.diffMapNoEq
 mapEQML::(Ord k, Eq v)=>MapLike (M.Map k) v k v
 mapEQML = mapML { diffMap = RD.diffMap }
 
+mapEditWidget::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>R.Event t (k,v) -> R.Event t (M.Map k v) -> FRW t m (k,v)
+mapEditWidget newPair newMap = do
+  let pairWidget = unF $ buildForm' Nothing (constDynMaybe Nothing)
+      pairWidgetEv = pairWidget <$ R.leftmost [() <$ newPair, () <$ newMap]
+  joinDynOfDynValidation <$> RD.widgetHold pairWidget pairWidgetEv -- DynValidation (k,v)
+
 mapWidgets::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>MapElemWidgets t m k v
-mapWidgets = MapElemWidgets showKeyEditVal (const . unF $ buildForm' Nothing (constDynMaybe Nothing))
+mapWidgets = MapElemWidgets showKeyEditVal mapEditWidget
 
 buildMap::(FormInstanceC t m,Ord k, VFormBuilderC t m k, VFormBuilderC t m v)=>BuildForm t m (M.Map k v)
 buildMap = buildAdjustableContainer mapML mapWidgets
@@ -130,12 +136,17 @@ listML = MapLike (M.fromAscList . zip [0..]) (fmap snd . M.toList) RD.diffMapNoE
 listEQML::Eq a=>MapLike [] a Int a
 listEQML = listML { diffMap = RD.diffMap }
 
-listEditWidget::(FormInstanceC t m, VFormBuilderC t m a)=>M.Map Int a -> FRW t m (Int,a)
-listEditWidget curMap = do
-  let newKey = (+1) . maximum . M.keys $ curMap
-  newElem <- unF $ buildForm' Nothing (constDynMaybe Nothing)
-  return $ (,) <$> constDynValidation newKey <*> newElem
+safeMaximum::Ord a=>[a]->Maybe a
+safeMaximum l = if null l then Nothing else Just $ maximum l
 
+listEditWidget::(FormInstanceC t m, VFormBuilderC t m a)=>R.Event t (Int, a) -> R.Event t (M.Map Int a) -> FRW t m (Int,a)
+listEditWidget newPairEv newMapEv = do
+  let newKeyEv = R.leftmost [(+1) . fst <$>  newPairEv, maybe 0 (+1) . safeMaximum . M.keys <$> newMapEv]
+      widget newKey = fRow $ do
+        newElem <- fItem . unF $ buildForm' Nothing (constDynMaybe Nothing)
+        return $ (,) <$> constDynValidation newKey <*> newElem
+  joinDynOfDynValidation <$> RD.widgetHold (widget 0) (widget <$> newKeyEv) -- DynValidation (k,v)
+  
 listWidgets::(FormInstanceC t m, VFormBuilderC t m a)=>MapElemWidgets t m Int a
 listWidgets = MapElemWidgets hideKeyEditVal listEditWidget
 
@@ -155,7 +166,7 @@ intMapEqML::Eq v=>MapLike IM.IntMap v Int v
 intMapEqML = intMapML { diffMap = RD.diffMap } 
 
 intMapWidgets::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a)=>MapElemWidgets t m Int a
-intMapWidgets = MapElemWidgets showKeyEditVal (const . unF $ buildForm' Nothing (constDynMaybe Nothing))
+intMapWidgets = MapElemWidgets showKeyEditVal mapEditWidget
 
 buildIntMap::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a)=>BuildForm t m (IM.IntMap a)
 buildIntMap = buildAdjustableContainer intMapML intMapWidgets
@@ -228,8 +239,8 @@ data MapLike f a k v = MapLike
 
 data MapElemWidgets t m k v = MapElemWidgets 
                               {                     
-                                elemW::ElemWidget t m k v
-                              , newOneWF::M.Map k v->FRW t m (k,v) -- might need existing map to choose a new key
+                                elemW::ElemWidget t m k v                                
+                              , newOneWF::R.Event t (k,v)->R.Event t (M.Map k v)->FRW t m (k,v) 
                               }
 
 
@@ -295,8 +306,7 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   newInputMapEv <- dynAsEv mapDyn0 
   updateMapDyn <- fItem $ RD.listWithKeyShallowDiff M.empty diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
   addEv <- fRow $ mdo
-    let pairWidgetEv = R.fmapMaybe (fmap nWF) $ R.tagPromptlyDyn (avToMaybe . sequenceA <$> mapDyn) $ R.leftmost [() <$ newPairEv, () <$ newInputMapEv]
-    addPairDV <- fRow $ joinDynOfDynValidation <$> RD.widgetHold (return $ dynValidationNothing) pairWidgetEv -- DynValidation (k,v)
+    addPairDV <- fRow $ nWF newPairEv newInputMapEv
     let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
     addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
     let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
@@ -379,16 +389,16 @@ editAndDeleteElemWidget eW visibleDyn k vDyn = mdo
   return outDyn'
 
 
+hiddenCSS::M.Map T.Text T.Text
+hiddenCSS  = "style" =: "display: none"
+visibleCSS::M.Map T.Text T.Text
+visibleCSS = "style" =: "display: inline"
+
+ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
+ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
+
+-- unused from here down but good for reference
 type LBBuildF t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FR t m (R.Dynamic t (M.Map k v))
-
-{-
-toBuildF::(R.Reflex t,Functor m)=>LBBuildF t m k v->BuildF t m (M.Map k v)
-toBuildF lbbf mFN mMapDyn =
-  let mapDyn = fromMaybe (R.constDyn M.empty) mMapDyn
-  in DynValidation . fmap AccSuccess <$> lbbf mFN mapDyn 
-
--}
-
 
 buildLBEMapWithAdd::(FormInstanceC t m
                     , VFormBuilderC t m k
@@ -442,347 +452,5 @@ buildLBEMapLVWK mFN mapDyn0 = mdo
   return (R.traceDynWith (\m -> "LVWK mapDyn: " ++ show (M.keys m)) mapDyn)
 
 
-type WidgetConstraints t m k v = (RD.DomBuilder t m, RD.PostBuild t m, MonadFix m, R.MonadHold t m, RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, Show v, Read v, Ord k, Show k)
-editWidgetDyn::WidgetConstraints t m k v=>k->R.Dynamic t v-> m (R.Dynamic t (Maybe v))
-editWidgetDyn k vDyn = do
-  inputEv' <- traceDynAsEv (\x->"editWidget: v=" ++ show x) vDyn
-  let inputEv = T.pack . show <$> inputEv'
-      config = RD.def {RD._textInputConfig_setValue = inputEv }
-  RD.el "span" $ RD.text (T.pack $ show k)
-  valDyn <- RD._textInput_value <$> RD.textInput config
-  return $ readMaybe . T.unpack <$> valDyn 
 
-editAndDeleteWidgetEv::WidgetConstraints t m k v=>R.Dynamic t Bool->k->R.Dynamic t v-> m (R.Event t (Maybe v))
-editAndDeleteWidgetEv selDyn k vDyn = mdo
-  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
-  (visibleDyn,outEv) <- RD.elDynAttr "div" widgetAttrs $ do
-    resEv <-  R.updated <$> editWidgetDyn k vDyn
-    delButtonEv <- buttonNoSubmit' "-"
-    selEv <- dynAsEv selDyn
-    visDyn <-  R.holdDyn True $ R.leftmost
-               [
-                 selEv
-               , False <$ delButtonEv -- delete button pressed, so hide
-               , True <$ R.updated vDyn -- value updated so make sure it's visible (in case of re-use of deleted key)
-               ]
-    let outEv' = R.leftmost
-                 [
-                   Just <$> R.fmapMaybe id resEv
-                 , Nothing <$ delButtonEv
-                 ]           
-    return (visDyn,outEv')
-  return outEv
 
-
-editOneEv::(FormInstanceC t m, VFormBuilderC t m v,Ord k, Show k)=>R.Dynamic t Bool->k->R.Dynamic t v->FR t m (R.Event t (Maybe v))
-editOneEv selDyn k valDyn = mdo
-  let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn
-  valEv <- traceDynAsEv (const "editWidgetDyn valEv") valDyn
-  (visibleDyn,outEv) <- RD.elDynAttr "div" widgetAttrs $ fRow $ do
-    resEv <-  R.updated <$> editOne k valDyn
-    delButtonEv <- fItem $ fCenter LayoutVertical . fItemR . lift $ containerActionButton "-" -- Event t ()
-    let outEv' = R.traceEventWith (const "editOneEv outEv") $ R.leftmost
-                 [
-                   Just <$> R.fmapMaybe id resEv
-                 , Just <$> valEv
-                 , Nothing <$ delButtonEv]
-    inputSelEv <- dynAsEv selDyn
-    visibleDyn' <- R.holdDyn True $ R.leftmost
-                   [
-                     inputSelEv -- calling widget
-                   , False <$ delButtonEv -- delete button pressed, so hide
-                   , True <$ R.updated valDyn -- value updated so make sure it's visible (in case of re-use of deleted key)
-                   ]
-    
-    return (visibleDyn',outEv')
-  return outEv
-
-
-
--- now with ListViewWithKeyShallowDiff just so I understand things.
-buildLBEMapLVWKSD::(FormInstanceC t m
-                  , VFormBuilderC t m v
-                  , Ord k, Show k)
-                => LBBuildF t m k v
-buildLBEMapLVWKSD mf mapDyn0 = mdo
-  newInputMapEv <- dynAsEv mapDyn0
-  updateEvsDyn <- RD.listWithKeyShallowDiff M.empty diffMapEv editOneSD -- Dynamic t (Map k (Event t (Maybe v)))
-  let mapEditsEv =  R.switch $ R.mergeMap <$> R.current updateEvsDyn -- Event t (Map k (Maybe v))
-      diffMapEv = R.traceEventWith (\m -> "new Input to buildLBEMapLVWKSD: " ++ show (M.keys m)) $ fmap Just <$> newInputMapEv 
-      editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv
-      newMapEv = R.leftmost [newInputMapEv, editedMapEv]
-  mapDyn <- R.holdDyn M.empty newMapEv
-  return (R.traceDynWith (\m -> "LVWKSD mapDyn: " ++ show (M.keys m)) mapDyn)
-  
-editOneSD::(FormInstanceC t m, VFormBuilderC t m v, Ord k, Show k)=>k->v->R.Event t v->FR t m (R.Event t (Maybe v))
-editOneSD k v0 vEv = R.holdDyn v0 vEv >>= editOneEv (R.constDyn True) k
-  
-hiddenCSS::M.Map T.Text T.Text
-hiddenCSS  = "style" =: "display: none"
-visibleCSS::M.Map T.Text T.Text
-visibleCSS = "style" =: "display: inline"
-
-
-ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
-ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
-
-
-{-
-data CRepI (fa :: *) (gb :: *) = CRepI { toRep::fa -> gb, fromRep::gb -> fa }
-
-idRep::CRepI fa fa
-idRep = CRepI id id
-
-data FAppendableI (fa :: * ) (g :: * -> *) (b :: *) = FAppendableI
-  {
-    cRep::CRepI fa (g b)
-  , emptyT::g b
-  , insertB::b->fa->fa
-  , sizeFa::fa->Int
-  }
-
-toT::FAppendableI fa g b->(fa -> g b)
-toT = toRep . cRep
-
-fromT::FAppendableI fa g b->(g b -> fa)
-fromT = fromRep . cRep
-
-data FDeletableI (g :: * -> *) (b :: *) (k :: *) (s :: *) = FDeletableI
-  {
-    getKey::b -> s -> k
-  , initialS::s
-  , updateS::s->s
-  , delete::k -> g b -> g b
-  }
-
--- This helps insure the types in Appendable and Deletable line up for any particular instance
-data FAdjustableI fa g b k s= FAdjustableI { sfAI::FAppendableI fa g b, sfDI::FDeletableI g b k s }
-
-{-
-
-buildAdjustableContainer::(FormInstanceC t m, VFormBuilderC t m b,Traversable g)
-  =>FAdjustableI fa g b k s
-  ->FormValidator fa
-  ->Maybe FieldName
-  ->Maybe (R.Dynamic t fa)
-  ->Form t m fa
-buildAdjustableContainer sfAdj va mFN mfaDyn = validateForm va . makeForm  $ do
-  fType <- getFormType
-  case fType of
-    ObserveOnly ->  buildReadOnlyContainer (cRep . sfAI $ sfAdj) mFN mfaDyn
-    Interactive ->  buildTraversableFA (cRep . sfAI $ sfAdj) mFN mfaDyn --buildSFContainer (sfAI sfAdj) (buildDeletable (sfDI sfAdj)) mFN mfaDyn
--}
-
-
-
-listAppend::a->[a]->[a]
-listAppend a as = as ++ [a]
-
-listDeleteAt::Int->[a]->[a]
-listDeleteAt n as = take n as ++ drop (n+1) as
-
-listFA::FAppendableI [a] [] a
-listFA = FAppendableI idRep [] listAppend L.length
-
-listFD::FDeletableI [] a Int Int
-listFD = FDeletableI (\_ n->n) 0 (+1) listDeleteAt
-
-instance (FormInstanceC t m,VFormBuilderC t m a)=>FormBuilder t m [a] where
-  buildForm = buildAdjustableContainer (FAdjustableI listFA listFD)
-
-
-mapFA::Ord k=>FAppendableI (M.Map k v) (M.Map k) (k,v)
-mapFA = FAppendableI (CRepI (M.mapWithKey (\k v->(k,v))) (\m->M.fromList $ snd <$> M.toList m)) mempty (\(k,x) m->M.insert k x m) M.size
-
-mapFD::Ord k=>FDeletableI (M.Map k) (k,v) k ()
-mapFD = FDeletableI (\(k,_) _ ->k) () id M.delete
-
-buildReadOnlyContainer::(FormInstanceC t m, VFormBuilderC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m fa
-buildReadOnlyContainer = buildTraversableFA  
-        
-intMapFA::FAppendableI (IM.IntMap v) IM.IntMap (IM.Key,v)
-intMapFA = FAppendableI (CRepI (IM.mapWithKey (\k v->(k,v))) (\m->IM.fromList $ snd <$> IM.toList m)) mempty (\(k,x) m->IM.insert k x m) IM.size
-
-intMapFD::FDeletableI IM.IntMap (IM.Key,v) IM.Key ()
-intMapFD = FDeletableI (\(k,_) _ ->k) () id IM.delete
-
---instance (FormInstanceC t m, VFormBuilderC t m IM.Key, VFormBuilderC t m a)=>FormBuilder t m (IM.IntMap a) where
---  buildForm = buildAdjustableContainer (FAdjustableI intMapFA intMapFD)
-
-seqFA::FAppendableI (Seq.Seq a) Seq.Seq a
-seqFA = FAppendableI idRep Seq.empty (flip (Seq.|>)) Seq.length
-
-seqFD::FDeletableI Seq.Seq a Int Int
-seqFD = FDeletableI (\_ index->index) 0 (+1) (\n bs -> Seq.take n bs Seq.>< Seq.drop (n+1) bs)
-
-instance (FormInstanceC t m,VFormBuilderC t m a)=>FormBuilder t m (Seq.Seq a) where
-  buildForm = buildAdjustableContainer (FAdjustableI seqFA seqFD)
-
--- we transform to a map since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
-setFA::Ord a=>FAppendableI (S.Set a) (M.Map a) a
-setFA = FAppendableI (CRepI (\s ->M.fromList $ (\x->(x,x)) <$> S.toList s) (\m->S.fromList $ snd <$> M.toList m)) M.empty S.insert S.size
-
-setFD::Ord a=>FDeletableI (M.Map a) a a ()
-setFD = FDeletableI const () id M.delete
-
-instance (FormInstanceC t m, Ord a, VFormBuilderC t m a)=>FormBuilder t m (S.Set a) where
-  buildForm = buildAdjustableContainer (FAdjustableI setFA setFD)
-
-hashMapFA::(Eq k,Hashable k)=>FAppendableI (HML.HashMap k v) (HML.HashMap k) (k,v)
-hashMapFA = FAppendableI (CRepI (HML.mapWithKey (\k v->(k,v))) (\m->HML.fromList $ snd <$> HML.toList m)) mempty (\(k,x) m->HML.insert k x m) HML.size
-
-hashMapFD::(Eq k, Hashable k)=>FDeletableI (HML.HashMap k) (k,v) k ()
-hashMapFD = FDeletableI (\(k,_) _ ->k) () id HML.delete
-
-
-instance (FormInstanceC t m, Eq k, Hashable k, VFormBuilderC t m k, VFormBuilderC t m v)=>FormBuilder t m (HML.HashMap k v) where
-  buildForm = buildAdjustableContainer (FAdjustableI hashMapFA hashMapFD)
-
-
--- we transform to a HashMap since Set is not Traversable and we want map-like semantics on the as. We could fix this with lens Traversables maybe?
-hashSetFA::(Eq a,Hashable a)=>FAppendableI (HS.HashSet a) (HML.HashMap a) a
-hashSetFA = FAppendableI (CRepI (\hs ->HML.fromList $ (\x->(x,x)) <$> HS.toList hs) (\hm->HS.fromList $ snd <$> HML.toList hm)) HML.empty HS.insert HS.size
-
-hashSetFD::(Eq a, Hashable a)=>FDeletableI (HML.HashMap a) a a ()
-hashSetFD = FDeletableI const () id HML.delete
-
-instance (FormInstanceC t m, Eq a, Hashable a, VFormBuilderC t m a)=>FormBuilder t m (HS.HashSet a) where
-  buildForm = buildAdjustableContainer (FAdjustableI hashSetFA hashSetFD)
-
-
-
-
--- This feels like a lot of machinery just to get removables...but it does work...
-newtype SFR s t m a = SFR { unSFR::StateT s (FR t m) (DynValidation t a) }
-
-instance (R.Reflex t, R.MonadHold t m)=>Functor (SFR s t m) where
-  fmap f sfra = SFR $ fmap f <$> unSFR sfra 
-
-instance (R.Reflex t, R.MonadHold t m)=>Applicative (SFR s t m) where
-  pure x = SFR $ return $ pure x
-  sfrF <*> sfrA = SFR $ do
-    dmF <- unSFR sfrF
-    dmA <- unSFR sfrA
-    return $ dmF <*> dmA
-
-liftLF'::Monad m=>(forall b.m b->m b)->StateT s m a -> StateT s m a
-liftLF' = hoist 
-
--- utilities for collapsing
--- should be using display hidden for this?
-widgetToggle::(RD.DomBuilder t m, R.MonadHold t m)=>Bool->R.Event t Bool -> m a -> m a -> m (R.Dynamic t a)
-widgetToggle startCond condEv trueW falseW = do
-  let condW b = if b then trueW else falseW
-  RD.widgetHold (condW startCond) (condW <$> condEv)
-
-widgetToggleDyn::(RD.DomBuilder t m, R.MonadHold t m)=>Bool->R.Event t Bool -> m (R.Dynamic t a) -> m (R.Dynamic t a) -> m (R.Dynamic t a)
-widgetToggleDyn startCond condEv trueW falseW = join <$> widgetToggle startCond condEv trueW falseW
-
--- unstyled, for use within other instances which will deal with the styling.
--- this needs redoing using a distribute function to avoid the widgetHold
-buildTraversableFA'::(FormInstanceC t m, VFormBuilderC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m b->BuildF t m fa
-buildTraversableFA' crI buildOne _ mfaDyn =
-  case mfaDyn of
-    Nothing -> return dynValidationNothing
-    Just faDyn -> do
-      postbuild <- RD.getPostBuild
-      let buildStatic fa = unF $ fromRep crI <$> traverse (liftF fRow . makeForm . buildOne Nothing . Just . R.constDyn) (toRep crI fa)
-          startWidgetEv = buildStatic <$> R.tag (R.current faDyn) postbuild
-          newWidgetEv   = R.updated $ buildStatic <$> faDyn -- Dynamic t (SFRW t m fa)
-      joinDynOfDynValidation <$> RD.widgetHold (return dynValidationNothing) (R.leftmost [startWidgetEv, newWidgetEv])
-
--- styled, in case we ever want an editable container without add/remove
-buildTraversableFA::forall t m b g fa.(FormInstanceC t m, VFormBuilderC t m b,Traversable g)=>CRepI fa (g b)->BuildF t m fa 
-buildTraversableFA crI md mfa = do
-  validClasses <- validDataClasses
-  let attrsDyn = R.constDyn $ cssClassAttr validClasses :: R.Dynamic t (M.Map T.Text T.Text)
-  fColDynAttr attrsDyn $ fCollapsible "" CollapsibleStartsOpen $ buildTraversableFA' crI (\x -> fItemL . unF . buildForm' x) md mfa
-
-
--- TODO: need a new version to do widgetHold over whole thing if collapsible depends on size
-buildFContainer::(FormInstanceC t m, VFormBuilderC t m b, Traversable g)=>FAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
-buildFContainer aI buildTr mFN mfaDyn = mdo
-  attrsDyn <- fAttrs dmfa mFN Nothing
-  let initial = Just $ maybe (R.constDyn $ emptyT aI) (fmap (toT aI)) mfaDyn
-      newInputEv = maybe R.never R.updated mfaDyn -- Event t fa
-  dmfa <- fColDynAttr attrsDyn $ fCollapsible "" CollapsibleStartsOpen $ mdo
-    dmfa' <- unF $ fromT aI <$> (makeForm $ joinDynOfDynValidation <$> RD.widgetHold (buildTr mFN initial) newFREv)
-    let udmfa' = unDynValidation dmfa' -- Dynamic t (SFValidation fa)
-        sizeDM = fmap (sizeFa aI) dmfa' -- Dynamic t (SFValidation Int)
-        newSizeEv = R.updated . R.uniqDyn $ unDynValidation sizeDM -- Event t (SFValidation Int)
-        resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> accValidation (const Nothing) (const $ avToMaybe mFa) ms) udmfa' newSizeEv -- Event t (SFValidation fa)
-          
-    addEv <- fRow $  do
-      let emptyB = unF $ buildForm' Nothing Nothing
-      -- we have to clear it once it's used. For now we replace it with a new one.
-      dmb <- fItemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-      clickEv <-  fCenter LayoutVertical . fItemR . lift $ containerActionButton "+" 
-      return $ R.attachPromptlyDynWithMaybe (\a b -> avToMaybe a) (unDynValidation dmb) clickEv -- only fires if button is clicked when mb is a Just.
-        
-    let insert vfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> vfa'  
-        newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
-        newFREv = fmap (buildTr mFN . Just . R.constDyn . toT aI) (R.leftmost [newFaEv,resizedFaEv,newInputEv]) -- Event t (SFRW t m (g b))
-    return dmfa'
-  return dmfa
-
-
-buildFContainer'::(FormInstanceC t m,VFormBuilderC t m b,Traversable g)=>FAppendableI fa g b->BuildF t m (g b)->BuildF t m fa
-buildFContainer' aI buildTr mFN mfaDyn = mdo
-  attrsDyn <- fAttrs dmfa mFN Nothing
-  let initial = Just $ maybe (R.constDyn $ emptyT aI) (fmap (toT aI)) mfaDyn
-      newInputEv = maybe R.never R.updated mfaDyn -- Event t fa
-  dmfa <- fColDynAttr attrsDyn $ mdo
-    dmfa' <- unF $ fromT aI <$> (makeForm $ joinDynOfDynValidation <$> RD.widgetHold (buildTr mFN initial) newFREv)
-    let udmfa' = unDynValidation dmfa'
-        sizeDM = fmap (sizeFa aI) dmfa'
-        newSizeEv = R.updated . R.uniqDyn $ unDynValidation sizeDM
-        resizedFaEv = R.attachPromptlyDynWithMaybe (\mFa ms -> accValidation (const Nothing) (const $ avToMaybe mFa) ms) udmfa' newSizeEv
-          
-    addEv <- fRow $  do
-      let emptyB = unF $ buildForm' Nothing Nothing
-      -- we have to clear it once it's used. For now we replace it with a new one.
-      dmb <- fItemL $ joinDynOfDynValidation <$> RD.widgetHold emptyB (emptyB <$ newFaEv) 
-      clickEv <-  fCenter LayoutVertical . fItemR . lift $ containerActionButton "+" 
-      return $ R.attachPromptlyDynWithMaybe (\a b -> avToMaybe a) (unDynValidation dmb)  clickEv -- only fires if button is clicked when mb is a Just.
-        
-    let insert vfa' b = avToMaybe $ insertB aI <$> AccSuccess b <*> vfa'  
-        newFaEv = R.attachPromptlyDynWithMaybe insert udmfa' addEv -- Event t (tr a), only fires if (Maybe fa) is not Nothing
-        newFREv = fmap (buildTr mFN . Just . R.constDyn . toT aI) (R.leftmost [newFaEv,resizedFaEv,newInputEv]) -- Event t (SFRW t m (g b))
-    return dmfa'
-  return dmfa
-
-buildOneDeletable::(FormInstanceC t m, VFormBuilderC t m b)
-                   =>FDeletableI g b k s->Maybe FieldName->Maybe (R.Dynamic t b)->StateT ([R.Event t k],s) (FR t m) (DynValidation t b)
-buildOneDeletable dI mFN mbDyn = liftLF' fRow $ do     
-    (evs,curS) <- get
-    dmb <- lift . fItemL . unF $ buildForm' mFN mbDyn
-    ev  <- lift . fCenter LayoutVertical . fItemR . lift $ containerActionButton "-" 
-    let ev' = R.attachPromptlyDynWithMaybe (\va' _ -> getKey dI <$> (avToMaybe va') <*> Just curS) (unDynValidation dmb) ev
-    put (ev':evs,updateS dI curS)
-    return dmb
-
-
-
-buildDeletable::forall t m b g k s.(FormInstanceC t m, VFormBuilderC t m b, Traversable g)=>FDeletableI g b k s->BuildF t m (g b)
-buildDeletable dI _ mgbDyn = 
-  case mgbDyn of
-    Nothing -> return dynValidationNothing
-    Just gbDyn -> mdo
-      postbuild <- RD.getPostBuild
-      let buildStatic x = runStateT (unSFR $ traverse (SFR . liftLF' fRow  . buildOneDeletable dI Nothing . Just . R.constDyn) x) ([],initialS dI)
-      let f::(FormInstanceC t m, VFormBuilderC t m b, Traversable g)=>R.Dynamic t (g b)->FR t m (DynValidation t (g b),(R.Dynamic t (RD.Event t k)))
-          f gbDyn' = do
-            let startWidgetEv = buildStatic <$> R.tag (R.current gbDyn') postbuild
-                newWidgetEv = R.updated $ buildStatic <$> gbDyn'
-            (ddmgb',stateDyn) <- R.splitDynPure <$> RD.widgetHold (return $ (dynValidationNothing, ([],initialS dI))) (R.leftmost [startWidgetEv, newWidgetEv])
-            let dmgb' = joinDynOfDynValidation ddmgb'
---            (dmgb',(evs,_)) <- runStateT (unSSFR $ traverse (SSFR . liftLF' sfRow  . buildOneDeletable dI Nothing . Just) gb') ([],initialS dI)
-            return  (dmgb',R.leftmost . fst <$> stateDyn) -- DynValidation t gb,Dynamic t (Event t k)
-      (ddmgb,ddEv) <- R.splitDynPure <$> RD.widgetHold (f gbDyn) (f . R.constDyn <$> newgbEv)
-      let dmgb = join (unDynValidation <$> ddmgb)
-          dEv = join ddEv
---      dEv <- RD.switch <$> R.hold R.never (R.updated $ join ddEv) -- ??
-      let newgbEv = R.attachPromptlyDynWithMaybe (\mgb' key-> delete dI key <$> (avToMaybe mgb')) dmgb (R.switchPromptlyDyn dEv)
-      return $ DynValidation dmgb
-
--}
