@@ -51,6 +51,7 @@ library
 --                  Reflex.Dom.Contrib.Layout.GridLayout                    
 --                  Reflex.Dom.Contrib.StackedMonadWidget             
                   Reflex.Dom.Contrib.FormBuilder
+                  Reflex.Dom.Contrib.FormBuilder.ListHoldFunctions
                   Reflex.Dom.Contrib.FormBuilder.DynValidation
                   Reflex.Dom.Contrib.FormBuilder.Configuration
                   Reflex.Dom.Contrib.FormBuilder.Builder
@@ -70,6 +71,7 @@ library
                      , reflex
                      , reflex-dom
                      , reflex-dom-contrib
+                     , dependent-map
                      , transformers
                      , exception-transformers
                      , mtl
