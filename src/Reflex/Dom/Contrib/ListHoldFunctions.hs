@@ -39,38 +39,19 @@ import qualified Data.HashMap.Strict as HM
 import Control.Monad.Identity (Identity(..),void)
 import Control.Monad.Fix (MonadFix)
 import Data.Functor.Misc (mapWithFunctorToDMap, dmapToMap, Const2(..))
+import Data.Functor.Compose (Compose(Compose,getCompose))
 
 import Data.Proxy (Proxy(..))
 
-
-listHoldWithKey :: forall t m k v a. (Ord k, RD.DomBuilder t m, R.MonadHold t m)
-  => Map k v -> R.Event t (Map k (Maybe v)) -> (k -> v -> m a) -> m (R.Dynamic t (Map k a))
-listHoldWithKey m0 m' f = do
-  let dm0 = mapWithFunctorToDMap $ Map.mapWithKey f m0
-      dm' = fmap (PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k v -> ComposeMaybe $ fmap (f k) v)) m'
-  (a0, a') <- R.sequenceDMapWithAdjust dm0 dm'
-  fmap dmapToMap . R.incrementalToDynamic <$> R.holdIncremental a0 a' --TODO: Move the dmapToMap to the righthand side so it doesn't get fully redone every time
 
 -- Can we get rid of the need for proxies here? AllowAmbiguousTypes and then use TypeApplication?
 -- Can we put the GCompare constraint here?
 class DM.GCompare (DMapKey f k a)=>ListHoldable (f :: * -> *) k v a where
   type DMapKey f k a :: * -> *
-  type LHPatch f k v :: *  
+  type LHPatch f k v :: * 
   toDMapWithFunctor::Functor g=>(k->v->g a)->f v->DM.DMap (DMapKey f k a) g
   makePatch::Proxy f -> (k->v->g a)->LHPatch f k v -> PatchDMap (DMapKey f k a) g
   fromDMap::Proxy k->Proxy v->DM.DMap (DMapKey f k a) Identity -> f a
-
-
-class ShallowDiffable (f :: * -> *) k v where
-  type SDPatch f k v :: *
-  type SDPatchEventDKey f k v :: * -> *  
-  fanPatch::R.Reflex t=>Proxy f->Proxy k->Proxy v->R.Event t (SDPatch f k v) -> R.EventSelector t (SDPatchEventDKey f k v)
-  emptyVoidPatch::Proxy f->Proxy k->Proxy v->SDPatch f k ()
-  voidPatch::Proxy f->Proxy k->Proxy v->SDPatch f k v->SDPatch f k ()
-  makePatchEventDKey::Proxy f -> Proxy v->k -> SDPatchEventDKey f k v v
-  diffPatch::Proxy f->Proxy k->Proxy v->SDPatch f k v -> SDPatch f k () -> SDPatch f k v 
-  applyPatch::Proxy f->Proxy k->Proxy v->SDPatch f k () -> SDPatch f k () -> SDPatch f k () -- NB: this is a diff type from applyMap
-
 
 
 listHoldWithKeyGeneral::forall t m f k v a. (RD.DomBuilder t m, R.MonadHold t m, ListHoldable f k v a)
@@ -87,30 +68,52 @@ listHoldWithKeyGeneral c0 c' h = do
   fmap fromDM . R.incrementalToDynamic <$> R.holdIncremental a0 a' --TODO: Move the dmapToMap to the righthand side so it doesn't get fully redone every time
 
 
+class ShallowDiffable (f :: * -> *) v where
+  type SDPatch f v :: * 
+  type SDPatchKey f v :: *
+  type SDPatchEventDKey f v :: * -> *  
+  fanPatch::R.Reflex t=>Proxy f->Proxy v->R.Event t (SDPatch f v) -> R.EventSelector t (SDPatchEventDKey f v)
+  emptyVoidPatch::Proxy f->Proxy v->SDPatch f ()
+  voidPatch::Proxy f->Proxy v->SDPatch f v->SDPatch f ()
+  makePatchEventDKey::Proxy f->Proxy v->SDPatchKey f v->SDPatchEventDKey f v v
+  diffPatch::Proxy f->Proxy v->SDPatch f v -> SDPatch f () -> SDPatch f v
+  applyPatch::Proxy f->Proxy v->SDPatch f () -> SDPatch f () -> SDPatch f () -- NB: this is a diff type from applyMap
+
+
 listWithKeyShallowDiffGeneral :: forall t m f k v a.(RD.DomBuilder t m
                                                     , MonadFix m
                                                     , R.MonadHold t m
                                                     , ListHoldable f k v a
-                                                    , ShallowDiffable f k v
-                                                    , SDPatch f k v ~ LHPatch f k v) -- We could make ShallowDiff a superclass of ListHoldable ?
-  => f v -> R.Event t (SDPatch f k v) -> (k -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
+                                                    , ShallowDiffable f v
+                                                    , SDPatch f v ~ LHPatch f k v
+                                                    , SDPatchKey f v ~ k) 
+  => f v -> R.Event t (SDPatch f v) -> (SDPatchKey f v -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
 listWithKeyShallowDiffGeneral initialVals valsChanged mkChild = do
   let pf = Proxy :: Proxy f
-      pk = Proxy :: Proxy k
       pv = Proxy :: Proxy v
-      fanP = fanPatch pf pk pv
-      emptyVoidP = emptyVoidPatch pf pk pv
-      voidP = voidPatch pf pk pv
-      applyP = applyPatch pf pk pv
-      diffP = diffPatch pf pk pv
-      makePK = makePatchEventDKey pf pv
+      fanP = fanPatch pf pv
+      emptyVoidP = emptyVoidPatch pf pv
+      voidP = voidPatch pf pv
+      makePEDK = makePatchEventDKey pf pv
+      diffP = diffPatch pf pv
+      applyP = applyPatch pf pv
       childValChangedSelector = fanP valsChanged
   sentVals <- R.foldDyn applyP emptyVoidP $ fmap voidP valsChanged
---  let relevantPatch patch _ = case patch of
---        Nothing -> Just Nothing -- Even if we let a Nothing through when the element doesn't already exist, this doesn't cause a problem because it is ignored
---        Just _ -> Nothing -- We don't want to let spurious re-creations of items through
   listHoldWithKeyGeneral initialVals (R.attachWith (flip diffP) (R.current sentVals) valsChanged) $ \k v ->
-    mkChild k v $ R.select childValChangedSelector $ makePK k
+    mkChild k v $ R.select childValChangedSelector $ makePEDK k
+
+{-
+class MapDiffable (f :: * -> *) v where
+  type MDPatch f :: * -> *
+--  compactMaybe::MDPatch v -> f v
+  union::f v -> f v -> f v
+  difference::
+  
+
+  diffNoEq:: f v -> f v -> f (Maybe v)
+  diff::Eq v=> f v -> f v -> f (Maybe v)
+  apply::f (Maybe v) -> f v -> f v
+-} 
 
 instance Ord k=>ListHoldable (Map k) k v a where
   type DMapKey (Map k) k a = Const2 k a
@@ -119,30 +122,20 @@ instance Ord k=>ListHoldable (Map k) k v a where
   makePatch _ h = PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv) 
   fromDMap _ _ = dmapToMap
 
-
-instance Ord k=>ShallowDiffable (Map k) k v where
-  type SDPatch (Map k) k v = Map k (Maybe v)
-  type SDPatchEventDKey (Map k) k v = Const2 k v
-  fanPatch _ _ _ = R.fanMap . fmap (Map.mapMaybe id)
-  emptyVoidPatch _ _ _ = Map.empty
-  voidPatch _ _ _ = fmap void
+instance Ord k=>ShallowDiffable (Map k) v where
+  type SDPatch (Map k) v = Map k (Maybe v)
+  type SDPatchKey (Map k) v = k
+  type SDPatchEventDKey (Map k) v = Const2 k v
+  fanPatch _ _ = R.fanMap . fmap (Map.mapMaybe id)
+  emptyVoidPatch _ _ = Map.empty
+  voidPatch _ _ = fmap void
   makePatchEventDKey _ _ = Const2
-  diffPatch _ _ _ =
+  diffPatch _ _ =
     let relevantPatch patch _ = case patch of
           Nothing -> Just Nothing
-          Just _ -> Nothing
-          
+          Just _ -> Nothing          
     in Map.differenceWith relevantPatch
-  applyPatch _ _ _ patch = RD.applyMap (fmap Just patch)  
-
-{-
-applyPatchMap::Ord k=>Map k (Maybe v) -> Map k (Maybe v) -> Map k (Maybe v)
-applyPatchMap patch old = insertions `Map.union` (old `Map.difference` deletions)
-  where (deletions,insertions) = RD.mapPartitionEithers $ maybeToEither <$> patch
-        maybeToEither = \case
-          Nothing -> Left $ Just ()
-          Just r -> Right $ Just r
--}
+  applyPatch _ _ patch = RD.applyMap (fmap Just patch)
 
 listHoldWithKeyMap::forall t m k v a. (RD.DomBuilder t m, R.MonadHold t m,Ord k)=>Map k v->R.Event t (Map k (Maybe v))->(k->v->m a)->m (R.Dynamic t (Map k a))
 listHoldWithKeyMap = listHoldWithKeyGeneral
@@ -150,7 +143,7 @@ listHoldWithKeyMap = listHoldWithKeyGeneral
 listWithKeyShallowDiffMap::forall t m k v a. (RD.DomBuilder t m, MonadFix m, R.MonadHold t m, Ord k)
   => Map k v -> R.Event t (Map k (Maybe v)) -> (k -> v -> R.Event t v -> m a) -> m (R.Dynamic t (Map k a))
 listWithKeyShallowDiffMap = listWithKeyShallowDiffGeneral
-  
+
 intMapWithFunctorToDMap :: IntMap (f v) -> DMap (Const2 Int v) f
 intMapWithFunctorToDMap = DM.fromDistinctAscList . fmap (\(k, v) -> Const2 k :=> v) . IM.toAscList
 
