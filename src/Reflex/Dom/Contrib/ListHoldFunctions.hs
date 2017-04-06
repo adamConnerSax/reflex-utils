@@ -9,7 +9,13 @@
 module Reflex.Dom.Contrib.ListHoldFunctions
   (
     listHoldWithKeyMap
+  , listHoldWithKeyIntMap
+  , listHoldWithKeyHashMap
   , listWithKeyShallowDiffMap
+  , ListHoldable(..)
+  , listHoldWithKeyGeneral
+  , ShallowDiffable(..)  
+  , listWithKeyShallowDiffGeneral
   ) where
 
 import qualified Reflex as R
@@ -127,15 +133,16 @@ instance Ord k=>ShallowDiffable (Map k) k v where
           Just _ -> Nothing
           
     in Map.differenceWith relevantPatch
-  applyPatch _ _ _ = applyPatchMap
+  applyPatch _ _ _ patch = RD.applyMap (fmap Just patch)  
 
+{-
 applyPatchMap::Ord k=>Map k (Maybe v) -> Map k (Maybe v) -> Map k (Maybe v)
 applyPatchMap patch old = insertions `Map.union` (old `Map.difference` deletions)
   where (deletions,insertions) = RD.mapPartitionEithers $ maybeToEither <$> patch
         maybeToEither = \case
           Nothing -> Left $ Just ()
           Just r -> Right $ Just r
-
+-}
 
 listHoldWithKeyMap::forall t m k v a. (RD.DomBuilder t m, R.MonadHold t m,Ord k)=>Map k v->R.Event t (Map k (Maybe v))->(k->v->m a)->m (R.Dynamic t (Map k a))
 listHoldWithKeyMap = listHoldWithKeyGeneral

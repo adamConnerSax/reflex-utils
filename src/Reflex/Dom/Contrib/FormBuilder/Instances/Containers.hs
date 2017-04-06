@@ -20,6 +20,7 @@ import Reflex.Dom.Contrib.FormBuilder.Builder
 import Reflex.Dom.Contrib.FormBuilder.DynValidation (accValidation)
 import Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
 import Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv)
+import Reflex.Dom.Contrib.ListHoldFunctions (listWithKeyShallowDiffMap)
 
 -- reflex imports
 import qualified Reflex as R 
@@ -320,7 +321,7 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
         AccSuccess old -> diffMapF old new
         AccFailure _ -> Just <$> new
   newInputMapEv <- dynAsEv mapDyn0 
-  updateMapDyn <- fItem $ RD.listWithKeyShallowDiff M.empty diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
+  updateMapDyn <- fItem $ listWithKeyShallowDiffMap M.empty diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
   addEv <- fRow $ mdo
     addPairDV <- fRow $ nWF mapDyn newPairEv newInputMapEv
     let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV

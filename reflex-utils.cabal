@@ -38,6 +38,7 @@ library
                   Reflex.Dom.Contrib.DynamicUtils
                   Reflex.Dom.Contrib.ReflexConstraints
                   Reflex.Dom.Contrib.CssUtils
+                  Reflex.Dom.Contrib.ListHoldFunctions
                   Reflex.Dom.Contrib.Layout.All
                   Reflex.Dom.Contrib.Layout.Types
                   Reflex.Dom.Contrib.Layout.ClayUtils
@@ -51,7 +52,6 @@ library
 --                  Reflex.Dom.Contrib.Layout.GridLayout                    
 --                  Reflex.Dom.Contrib.StackedMonadWidget             
                   Reflex.Dom.Contrib.FormBuilder
-                  Reflex.Dom.Contrib.FormBuilder.ListHoldFunctions
                   Reflex.Dom.Contrib.FormBuilder.DynValidation
                   Reflex.Dom.Contrib.FormBuilder.Configuration
                   Reflex.Dom.Contrib.FormBuilder.Builder
