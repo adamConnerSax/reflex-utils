@@ -107,48 +107,76 @@ listHoldWithKeyGeneral c0 c' h = do
   fmap fromDM . R.incrementalToDynamic <$> R.holdIncremental a0 a' --TODO: Move the dmapToMap to the righthand side so it doesn't get fully redone every time
 
 
-class HasFan a where
-  type FanVal a :: *
+class HasFan (a :: * -> *) v where
   type FanInKey a :: * 
-  type FanSelKey a :: * -> *
-  makeSelKey::Proxy a->FanInKey a->FanSelKey a (FanVal a)
-  doFan::R.Reflex t=>R.Event t a -> R.EventSelector t (FanSelKey a)
+  type FanSelKey a v :: * -> *
+  makeSelKey::Proxy a->Proxy v->FanInKey a->FanSelKey a v v
+  doFan::R.Reflex t=>Proxy v->R.Event t (a v) -> R.EventSelector t (FanSelKey a v)
   
 class ShallowDiffable (f :: * -> *) v where
-  type SDPatch f v :: *
-  emptyVoidPatch::Proxy f->Proxy v->SDPatch f ()
-  voidPatch::Proxy f->Proxy v->SDPatch f v->SDPatch f ()
-  diffPatch::Proxy f->Proxy v->SDPatch f v -> SDPatch f () -> SDPatch f v
-  applyPatch::Proxy f->Proxy v->SDPatch f () -> SDPatch f () -> SDPatch f () -- NB: this is a diff type from applyMap
+  type Diff f :: * -> *
+  emptyVoidDiff::Proxy f->Proxy v->Diff f ()
+  voidDiff::Proxy f->Proxy v->Diff f v->Diff f ()
+  diff::Proxy f->Proxy v->Diff f v -> Diff f () -> Diff f v
+  applyDiff::Proxy f->Proxy v->Diff f () -> Diff f () -> Diff f () -- NB: this is a diff type from applyMap
 
 
+listWithKeyShallowDiffGeneral :: forall t m f k v a.(RD.DomBuilder t m
+                                                    , MonadFix m
+                                                    , R.MonadHold t m
+                                                    , ToPatchType f k v a
+                                                    , Sequenceable (SeqType f k) (SeqPatchType f k) (SeqTypeKey f k a)
+                                                    , ShallowDiffable f v
+                                                    , HasFan (Diff f) v
+                                                    , FanInKey (Diff f) ~ k                                                      
+                                                    , Diff f ~ DiffType f k)
+--                                                    , RD.Patch (DMapPatchType f k a (DMapKey f k a) Identity)
+--                                                    , RD.PatchTarget (DMapPatchType f k a (DMapKey f k a) Identity) ~ DM.DMap (DMapKey f k a) Identity)
+  => f v -> R.Event t (Diff f v) -> (FanInKey (Diff f) -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
+listWithKeyShallowDiffGeneral initialVals valsChanged mkChild = do
+  let pf = Proxy :: Proxy f
+      pv = Proxy :: Proxy v
+      emptyVoidDiff' = emptyVoidDiff pf pv
+      voidDiff' = voidDiff pf pv
+      pDiff = Proxy :: Proxy (Diff f)
+      makeSelKey' = makeSelKey pDiff pv
+      diff' = diff pf pv
+      applyDiff' = applyDiff pf pv
+      doFan' = doFan pv
+      childValChangedSelector = doFan' valsChanged
+  sentVals <- R.foldDyn applyDiff' emptyVoidDiff' $ fmap voidDiff' valsChanged
+  listHoldWithKeyGeneral' initialVals (R.attachWith (flip diff') (R.current sentVals) valsChanged) $ \k v ->
+    mkChild k v $ R.select childValChangedSelector $ makeSelKey' k
+
+
+{-
 listWithKeyShallowDiffGeneral :: forall t m f k v a.(RD.DomBuilder t m
                                                     , MonadFix m
                                                     , R.MonadHold t m
                                                     , ListHoldable f k v a
                                                     , Sequenceable DM.DMap (DMapPatchType f k a) (DMapKey f k a)
                                                     , ShallowDiffable f v
-                                                    , HasFan (SDPatch f v)
-                                                    , FanVal (SDPatch f v) ~ v
-                                                    , FanInKey (SDPatch f v) ~ k                                                      
-                                                    , SDPatch f v ~ LHPatch f k v
+                                                    , HasFan (Diff f v)
+                                                    , FanVal (Diff f v) ~ v
+                                                    , FanInKey (Diff f v) ~ k                                                      
+                                                    , Diff f v ~ LHPatch f k v
                                                     , RD.Patch (DMapPatchType f k a (DMapKey f k a) Identity)
                                                     , RD.PatchTarget (DMapPatchType f k a (DMapKey f k a) Identity) ~ DM.DMap (DMapKey f k a) Identity)
-  => f v -> R.Event t (SDPatch f v) -> (FanInKey (SDPatch f v) -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
+  => f v -> R.Event t (Diff f v) -> (FanInKey (Diff f v) -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
 listWithKeyShallowDiffGeneral initialVals valsChanged mkChild = do
   let pf = Proxy :: Proxy f
       pv = Proxy :: Proxy v
-      emptyVoidPatch' = emptyVoidPatch pf pv
-      voidPatch' = voidPatch pf pv
-      pSDPatch = Proxy :: Proxy (SDPatch f v)
-      makeSelKey' = makeSelKey pSDPatch
-      diffPatch' = diffPatch pf pv
-      applyPatch' = applyPatch pf pv
+      emptyVoidDiff' = emptyVoidDiff pf pv
+      voidDiff' = voidDiff pf pv
+      pDiff = Proxy :: Proxy (Diff f v)
+      makeSelKey' = makeSelKey pDiff
+      diff' = diff pf pv
+      applyDiff' = applyDiff pf pv
       childValChangedSelector = doFan valsChanged
-  sentVals <- R.foldDyn applyPatch' emptyVoidPatch' $ fmap voidPatch' valsChanged
-  listHoldWithKeyGeneral initialVals (R.attachWith (flip diffPatch') (R.current sentVals) valsChanged) $ \k v ->
+  sentVals <- R.foldDyn applyDiff' emptyVoidDiff' $ fmap voidDiff' valsChanged
+  listHoldWithKeyGeneral initialVals (R.attachWith (flip diff') (R.current sentVals) valsChanged) $ \k v ->
     mkChild k v $ R.select childValChangedSelector $ makeSelKey' k
-
+-}
 {-
 class MapDiffable (f :: * -> *) v where
   type MDPatch f :: * -> *
@@ -182,23 +210,22 @@ instance Ord k=>ToPatchType (Map k) k v a where
   makePatchSeq _ h = PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv) . getCompose
   fromSeqType _ _ = dmapToMap
 
-instance Ord k=>HasFan (Map k (Maybe v)) where
-  type FanVal (Map k (Maybe v)) = v 
-  type FanInKey (Map k (Maybe v)) = k
-  type FanSelKey (Map k (Maybe v)) = Const2 k v
-  doFan = R.fanMap . fmap (Map.mapMaybe id)
-  makeSelKey _ = Const2
+instance Ord k=>HasFan (Compose (Map k) Maybe) v where
+  type FanInKey (Compose (Map k) Maybe) = k
+  type FanSelKey (Compose (Map k) Maybe) v = Const2 k v
+  doFan _ = R.fanMap . fmap (Map.mapMaybe id) . fmap getCompose
+  makeSelKey _ _ = Const2
 
 instance Ord k=>ShallowDiffable (Map k) v where
-  type SDPatch (Map k) v = Map k (Maybe v)
-  emptyVoidPatch _ _ = Map.empty
-  voidPatch _ _ = fmap void
-  diffPatch _ _ =
+  type Diff (Map k) = Compose  (Map k) Maybe
+  emptyVoidDiff _ _ = Compose Map.empty
+  voidDiff _ _ = void
+  diff _ _ old new =
     let relevantPatch patch _ = case patch of
           Nothing -> Just Nothing
           Just _ -> Nothing
-    in Map.differenceWith relevantPatch
-  applyPatch _ _ patch = RD.applyMap (fmap Just patch)
+    in Compose $ Map.differenceWith relevantPatch (getCompose old) (getCompose new)
+  applyDiff _ _ patch old = Compose $ RD.applyMap (getCompose $ fmap Just patch) (getCompose old)
 
 listHoldWithKeyMap::forall t m k v a. (RD.DomBuilder t m, R.MonadHold t m,Ord k)=>Map k v->R.Event t (Map k (Maybe v))->(k->v->m a)->m (R.Dynamic t (Map k a))
 listHoldWithKeyMap = listHoldWithKeyGeneral
@@ -208,7 +235,7 @@ listHoldWithKeyMap' c diffCEv f = listHoldWithKeyGeneral' c (Compose <$> diffCEv
 
 listWithKeyShallowDiffMap::forall t m k v a. (RD.DomBuilder t m, MonadFix m, R.MonadHold t m, Ord k)
   => Map k v -> R.Event t (Map k (Maybe v)) -> (k -> v -> R.Event t v -> m a) -> m (R.Dynamic t (Map k a))
-listWithKeyShallowDiffMap = listWithKeyShallowDiffGeneral
+listWithKeyShallowDiffMap c diffCEv f = listWithKeyShallowDiffGeneral c (Compose <$> diffCEv) f
 
 intMapWithFunctorToDMap :: IntMap (f v) -> DMap (Const2 Int v) f
 intMapWithFunctorToDMap = DM.fromDistinctAscList . fmap (\(k, v) -> Const2 k :=> v) . IM.toAscList
