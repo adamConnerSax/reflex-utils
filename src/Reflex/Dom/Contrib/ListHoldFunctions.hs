@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances  #-}
 module Reflex.Dom.Contrib.ListHoldFunctions
@@ -38,7 +39,6 @@ import qualified Data.HashMap.Strict    as HM
 
 import           Control.Monad.Fix      (MonadFix)
 import           Control.Monad.Identity (Identity (..), void)
-import           Data.Functor.Compose   (Compose (Compose, getCompose))
 import           Data.Functor.Misc      (Const2 (..), dmapToMap,
                                          mapWithFunctorToDMap)
 
@@ -46,13 +46,12 @@ import           Data.Proxy             (Proxy (..))
 
 
 -- Can we get rid of the need for proxies here? AllowAmbiguousTypes and then use TypeApplication?
--- Can we put the GCompare constraint here?
 class DM.GCompare (DMapKey f k a)=>ListHoldable (f :: * -> *) k v a where
   type DMapKey f k a :: * -> *
   type LHPatch f k v :: *
   type DMapPatchType f k a :: (* -> *) -> *
   toDMapWithFunctor::Functor g=>(k->v->g a)->f v->DM.DMap (DMapKey f k a) g
-  makePatch::Proxy f -> (k->v->g a)->LHPatch f k v -> DMapPatchType f k a g
+  makePatch::Proxy f->(k->v->g a)->LHPatch f k v -> DMapPatchType f k a g
   sequenceWithPatch::(R.Reflex t, R.MonadAdjust t g)
     =>Proxy f->Proxy k->Proxy v->Proxy a
     ->DM.DMap (DMapKey f k a) g -> R.Event t (DMapPatchType f k a g)
@@ -171,6 +170,7 @@ instance ListHoldable IntMap Int v a where
   type DMapPatchType IntMap Int a = PatchDMap (DMapKey IntMap Int a)
   toDMapWithFunctor h  = intMapWithFunctorToDMap . IM.mapWithKey h
   makePatch _ h = PatchDMap . intMapWithFunctorToDMap . IM.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv)
+  sequenceWithPatch _ _ _ _ = R.sequenceDMapWithAdjust
   fromDMap _ _ = dmapToIntMap
 
 listHoldWithKeyIntMap::forall t m v a. (RD.DomBuilder t m, R.MonadHold t m)=>IntMap v->R.Event t (IntMap (Maybe v))->(Int->v->m a)->m (R.Dynamic t (IntMap a))
@@ -188,6 +188,7 @@ instance (Ord k, Hashable k)=>ListHoldable (HashMap k) k v a where
   type DMapPatchType (HashMap k) k a = PatchDMap (DMapKey (HashMap k) k a)
   toDMapWithFunctor h  = hashMapWithFunctorToDMap . HM.mapWithKey h
   makePatch _ h = PatchDMap . hashMapWithFunctorToDMap .HM.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv)
+  sequenceWithPatch _ _ _ _ = R.sequenceDMapWithAdjust
   fromDMap _ _ = dmapToHashMap
 
 listHoldWithKeyHashMap::forall t m k v a. (RD.DomBuilder t m, R.MonadHold t m,Ord k, Hashable k)
