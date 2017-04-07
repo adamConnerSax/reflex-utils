@@ -8,6 +8,7 @@ packages:
 - location:
     git: https://github.com/adamConnerSax/perConstructor-sop
     commit: "ad12df688a61284ded6e73761176d222f6edab12"
+  extra-dep: true 
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
     commit: "d1f7a134e1afc017c1fda0842c7e0c1b663acdc2"

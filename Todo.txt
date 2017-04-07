@@ -1,7 +1,7 @@
 Small
 1. Re-unite state types and do all changes (selection and map) through one state type?
 2. Figure out more graceful way of handling the "Nothing" case so that the dropdown doesn't have the blank representing nothing
-3. Put add/delete buttons on ListBasedEditable
+3. Put add/delete buttons on ListBasedEditable (Done!)
 4. Add a "change key" option?  It would have to remove the old and add it as a new one with a new key?
 5. Initial states??
 6. Switch from HtmlTextWidget in reflex-dom-contrib to TextInput in reflex-dom.  How to handle restrictWidget?
@@ -14,6 +14,11 @@ Medium
 1. Make other containers work in this framework.
    a. All need to be made into maps?
    b. Flexibility in displayed keys?
+
+
+2.  Optimize the doAndS for Dynamic to use DMap?
+3.  Fix All2 constraints
+
 
 
 Large/Hard

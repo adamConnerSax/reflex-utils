@@ -1,11 +1,11 @@
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE UndecidableInstances  #-} -- for the Reflex t needed for instances of ShallowDiffable.  Maybe split fan out?
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UndecidableInstances  #-}
 module Reflex.Dom.Contrib.ListHoldFunctions
   (
     listHoldWithKeyMap
@@ -14,64 +14,75 @@ module Reflex.Dom.Contrib.ListHoldFunctions
   , listWithKeyShallowDiffMap
   , ListHoldable(..)
   , listHoldWithKeyGeneral
-  , ShallowDiffable(..)  
+  , ShallowDiffable(..)
   , listWithKeyShallowDiffGeneral
   ) where
 
-import qualified Reflex as R
-import Reflex.Patch (PatchDMap(..),ComposeMaybe(..))
-import qualified Reflex.Dom as RD
+import qualified Reflex                 as R
+import qualified Reflex.Dom             as RD
+import           Reflex.Patch           (ComposeMaybe (..), PatchDMap (..))
 
-import Data.Dependent.Map (DMap,DSum((:=>)))
-import qualified Data.Dependent.Map as DM
+import           Data.Dependent.Map     (DMap, DSum ((:=>)))
+import qualified Data.Dependent.Map     as DM
 
-import Data.Map (Map)
-import qualified Data.Map as Map
+import           Data.Map               (Map)
+import qualified Data.Map               as Map
 
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IM
+import           Data.IntMap            (IntMap)
+import qualified Data.IntMap            as IM
 
-import Data.Hashable
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HM
+import           Data.Hashable
+import           Data.HashMap.Strict    (HashMap)
+import qualified Data.HashMap.Strict    as HM
 
 
-import Control.Monad.Identity (Identity(..),void)
-import Control.Monad.Fix (MonadFix)
-import Data.Functor.Misc (mapWithFunctorToDMap, dmapToMap, Const2(..))
-import Data.Functor.Compose (Compose(Compose,getCompose))
+import           Control.Monad.Fix      (MonadFix)
+import           Control.Monad.Identity (Identity (..), void)
+import           Data.Functor.Compose   (Compose (Compose, getCompose))
+import           Data.Functor.Misc      (Const2 (..), dmapToMap,
+                                         mapWithFunctorToDMap)
 
-import Data.Proxy (Proxy(..))
+import           Data.Proxy             (Proxy (..))
 
 
 -- Can we get rid of the need for proxies here? AllowAmbiguousTypes and then use TypeApplication?
 -- Can we put the GCompare constraint here?
 class DM.GCompare (DMapKey f k a)=>ListHoldable (f :: * -> *) k v a where
   type DMapKey f k a :: * -> *
-  type LHPatch f k v :: * 
+  type LHPatch f k v :: *
+  type DMapPatchType f k a :: (* -> *) -> *
   toDMapWithFunctor::Functor g=>(k->v->g a)->f v->DM.DMap (DMapKey f k a) g
-  makePatch::Proxy f -> (k->v->g a)->LHPatch f k v -> PatchDMap (DMapKey f k a) g
+  makePatch::Proxy f -> (k->v->g a)->LHPatch f k v -> DMapPatchType f k a g
+  sequenceWithPatch::(R.Reflex t, R.MonadAdjust t g)
+    =>Proxy f->Proxy k->Proxy v->Proxy a
+    ->DM.DMap (DMapKey f k a) g -> R.Event t (DMapPatchType f k a g)
+    ->g (DM.DMap (DMapKey f k a) Identity, R.Event t (DMapPatchType f k a Identity))
   fromDMap::Proxy k->Proxy v->DM.DMap (DMapKey f k a) Identity -> f a
 
 
-listHoldWithKeyGeneral::forall t m f k v a. (RD.DomBuilder t m, R.MonadHold t m, ListHoldable f k v a)
+listHoldWithKeyGeneral::forall t m f k v a. (RD.DomBuilder t m, R.MonadHold t m
+                                            ,ListHoldable f k v a
+                                            , RD.Patch (DMapPatchType f k a Identity)
+                                            , R.PatchTarget (DMapPatchType f k a Identity) ~ DM.DMap (DMapKey f k a) Identity)
   =>f v -> R.Event t (LHPatch f k v) -> (k->v-> m a) -> m (R.Dynamic t (f a))
 listHoldWithKeyGeneral c0 c' h = do
   let pf = Proxy :: Proxy f
       pk = Proxy :: Proxy k
       pv = Proxy :: Proxy v
+      pa = Proxy :: Proxy a
       makeP = makePatch pf
       fromDM = fromDMap pk pv
+      sequenceWP = sequenceWithPatch pf pk pv pa
       dc0 = toDMapWithFunctor h c0
       dc' = fmap (makeP h) c' --fmap (PatchDMap . toDMapWithComposeMaybe f) c'
-  (a0,a') <- R.sequenceDMapWithAdjust dc0 dc'
+  (a0,a') <- sequenceWP dc0 dc'
   fmap fromDM . R.incrementalToDynamic <$> R.holdIncremental a0 a' --TODO: Move the dmapToMap to the righthand side so it doesn't get fully redone every time
 
 
 class ShallowDiffable (f :: * -> *) v where
-  type SDPatch f v :: * 
+  type SDPatch f v :: *
   type SDPatchKey f v :: *
-  type SDPatchEventDKey f v :: * -> *  
+  type SDPatchEventDKey f v :: * -> *
   fanPatch::R.Reflex t=>Proxy f->Proxy v->R.Event t (SDPatch f v) -> R.EventSelector t (SDPatchEventDKey f v)
   emptyVoidPatch::Proxy f->Proxy v->SDPatch f ()
   voidPatch::Proxy f->Proxy v->SDPatch f v->SDPatch f ()
@@ -86,7 +97,9 @@ listWithKeyShallowDiffGeneral :: forall t m f k v a.(RD.DomBuilder t m
                                                     , ListHoldable f k v a
                                                     , ShallowDiffable f v
                                                     , SDPatch f v ~ LHPatch f k v
-                                                    , SDPatchKey f v ~ k) 
+                                                    , SDPatchKey f v ~ k
+                                                    , RD.Patch (DMapPatchType f k a Identity)
+                                                    , RD.PatchTarget (DMapPatchType f k a Identity) ~ DM.DMap (DMapKey f k a) Identity)
   => f v -> R.Event t (SDPatch f v) -> (SDPatchKey f v -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
 listWithKeyShallowDiffGeneral initialVals valsChanged mkChild = do
   let pf = Proxy :: Proxy f
@@ -108,18 +121,20 @@ class MapDiffable (f :: * -> *) v where
 --  compactMaybe::MDPatch v -> f v
   union::f v -> f v -> f v
   difference::
-  
+
 
   diffNoEq:: f v -> f v -> f (Maybe v)
   diff::Eq v=> f v -> f v -> f (Maybe v)
   apply::f (Maybe v) -> f v -> f v
--} 
+-}
 
 instance Ord k=>ListHoldable (Map k) k v a where
   type DMapKey (Map k) k a = Const2 k a
   type LHPatch (Map k) k v = Map k (Maybe v)
+  type DMapPatchType (Map k) k a = PatchDMap (DMapKey (Map k) k a)
   toDMapWithFunctor h  = mapWithFunctorToDMap . Map.mapWithKey h
-  makePatch _ h = PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv) 
+  makePatch _ h = PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv)
+  sequenceWithPatch _ _ _ _ = R.sequenceDMapWithAdjust
   fromDMap _ _ = dmapToMap
 
 instance Ord k=>ShallowDiffable (Map k) v where
@@ -133,7 +148,7 @@ instance Ord k=>ShallowDiffable (Map k) v where
   diffPatch _ _ =
     let relevantPatch patch _ = case patch of
           Nothing -> Just Nothing
-          Just _ -> Nothing          
+          Just _ -> Nothing
     in Map.differenceWith relevantPatch
   applyPatch _ _ patch = RD.applyMap (fmap Just patch)
 
@@ -153,8 +168,9 @@ dmapToIntMap = IM.fromDistinctAscList . fmap (\(Const2 k :=> Identity v) -> (k, 
 instance ListHoldable IntMap Int v a where
   type DMapKey IntMap Int a = Const2 Int a
   type LHPatch IntMap Int v = IntMap (Maybe v)
+  type DMapPatchType IntMap Int a = PatchDMap (DMapKey IntMap Int a)
   toDMapWithFunctor h  = intMapWithFunctorToDMap . IM.mapWithKey h
-  makePatch _ h = PatchDMap . intMapWithFunctorToDMap . IM.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv) 
+  makePatch _ h = PatchDMap . intMapWithFunctorToDMap . IM.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv)
   fromDMap _ _ = dmapToIntMap
 
 listHoldWithKeyIntMap::forall t m v a. (RD.DomBuilder t m, R.MonadHold t m)=>IntMap v->R.Event t (IntMap (Maybe v))->(Int->v->m a)->m (R.Dynamic t (IntMap a))
@@ -169,8 +185,9 @@ dmapToHashMap = HM.fromList . fmap (\(Const2 k :=> Identity v) -> (k, v)) . DM.t
 instance (Ord k, Hashable k)=>ListHoldable (HashMap k) k v a where
   type DMapKey (HashMap k) k a = Const2 k a
   type LHPatch (HashMap k) k v= HashMap k (Maybe v)
+  type DMapPatchType (HashMap k) k a = PatchDMap (DMapKey (HashMap k) k a)
   toDMapWithFunctor h  = hashMapWithFunctorToDMap . HM.mapWithKey h
-  makePatch _ h = PatchDMap . hashMapWithFunctorToDMap .HM.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv) 
+  makePatch _ h = PatchDMap . hashMapWithFunctorToDMap .HM.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv)
   fromDMap _ _ = dmapToHashMap
 
 listHoldWithKeyHashMap::forall t m k v a. (RD.DomBuilder t m, R.MonadHold t m,Ord k, Hashable k)
