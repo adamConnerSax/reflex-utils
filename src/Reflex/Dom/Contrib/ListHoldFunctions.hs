@@ -108,19 +108,16 @@ listHoldWithKeyGeneral c0 c' h = do
 
 
 class HasFan a where
-  type InKey a :: * 
-  type SelKey a :: * -> *
-  makeSelKey::Proxy a->InKey a->SelKey a (InKey a)
-  doFan::R.Reflex t=>R.Event t a -> R.EventSelector t (SelKey a)
+  type FanVal a :: *
+  type FanInKey a :: * 
+  type FanSelKey a :: * -> *
+  makeSelKey::Proxy a->FanInKey a->FanSelKey a (FanVal a)
+  doFan::R.Reflex t=>R.Event t a -> R.EventSelector t (FanSelKey a)
   
 class ShallowDiffable (f :: * -> *) v where
   type SDPatch f v :: *
-  type SDPatchKey f v :: *
-  type SDPatchEventDKey f v :: * -> *
---  fanPatch::R.Reflex t=>Proxy f->Proxy v->R.Event t (SDPatch f v) -> R.EventSelector t (SDPatchEventDKey f v)
   emptyVoidPatch::Proxy f->Proxy v->SDPatch f ()
   voidPatch::Proxy f->Proxy v->SDPatch f v->SDPatch f ()
---  makePatchEventDKey::Proxy f->Proxy v->SDPatchKey f v->SDPatchEventDKey f v v
   diffPatch::Proxy f->Proxy v->SDPatch f v -> SDPatch f () -> SDPatch f v
   applyPatch::Proxy f->Proxy v->SDPatch f () -> SDPatch f () -> SDPatch f () -- NB: this is a diff type from applyMap
 
@@ -132,19 +129,17 @@ listWithKeyShallowDiffGeneral :: forall t m f k v a.(RD.DomBuilder t m
                                                     , Sequenceable DM.DMap (DMapPatchType f k a) (DMapKey f k a)
                                                     , ShallowDiffable f v
                                                     , HasFan (SDPatch f v)
-                                                    , InKey (SDPatch f v) ~ k                                                      
+                                                    , FanVal (SDPatch f v) ~ v
+                                                    , FanInKey (SDPatch f v) ~ k                                                      
                                                     , SDPatch f v ~ LHPatch f k v
-                                                    , SDPatchKey f v ~ k
                                                     , RD.Patch (DMapPatchType f k a (DMapKey f k a) Identity)
                                                     , RD.PatchTarget (DMapPatchType f k a (DMapKey f k a) Identity) ~ DM.DMap (DMapKey f k a) Identity)
-  => f v -> R.Event t (SDPatch f v) -> (SDPatchKey f v -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
+  => f v -> R.Event t (SDPatch f v) -> (FanInKey (SDPatch f v) -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
 listWithKeyShallowDiffGeneral initialVals valsChanged mkChild = do
   let pf = Proxy :: Proxy f
       pv = Proxy :: Proxy v
---      fanP = fanPatch pf pv
       emptyVoidPatch' = emptyVoidPatch pf pv
       voidPatch' = voidPatch pf pv
---      makePEDK = makePatchEventDKey pf pv
       pSDPatch = Proxy :: Proxy (SDPatch f v)
       makeSelKey' = makeSelKey pSDPatch
       diffPatch' = diffPatch pf pv
@@ -166,7 +161,7 @@ class MapDiffable (f :: * -> *) v where
   diff::Eq v=> f v -> f v -> f (Maybe v)
   apply::f (Maybe v) -> f v -> f v
 -}
-{-
+
 instance Ord k=>Sequenceable DM.DMap PatchDMap (Const2 k a) where
   sequenceWithPatch = R.sequenceDMapWithAdjust
 
@@ -176,7 +171,6 @@ instance Ord k=>ListHoldable (Map k) k v a where
   type DMapPatchType (Map k) k a = PatchDMap 
   toDMapWithFunctor h  = mapWithFunctorToDMap . Map.mapWithKey h
   makePatch _ h = PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv)
---  sequenceWithPatch _ _ _ _ = R.sequenceDMapWithAdjust
   fromDMap _ _ = dmapToMap
 
 instance Ord k=>ToPatchType (Map k) k v a where
@@ -188,18 +182,17 @@ instance Ord k=>ToPatchType (Map k) k v a where
   makePatchSeq _ h = PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv) . getCompose
   fromSeqType _ _ = dmapToMap
 
-instance HasFan (Map k (Maybe v)) where
-  type FanKey (Map k (Maybe v) :: Const2 k v
+instance Ord k=>HasFan (Map k (Maybe v)) where
+  type FanVal (Map k (Maybe v)) = v 
+  type FanInKey (Map k (Maybe v)) = k
+  type FanSelKey (Map k (Maybe v)) = Const2 k v
   doFan = R.fanMap . fmap (Map.mapMaybe id)
+  makeSelKey _ = Const2
 
 instance Ord k=>ShallowDiffable (Map k) v where
   type SDPatch (Map k) v = Map k (Maybe v)
-  type SDPatchKey (Map k) v = k
-  type SDPatchEventDKey (Map k) v = Const2 k v
---  fanPatch _ _ = R.fanMap . fmap (Map.mapMaybe id)
   emptyVoidPatch _ _ = Map.empty
   voidPatch _ _ = fmap void
-  makePatchEventDKey _ _ = Const2
   diffPatch _ _ =
     let relevantPatch patch _ = case patch of
           Nothing -> Just Nothing
@@ -229,7 +222,6 @@ instance ListHoldable IntMap Int v a where
   type DMapPatchType IntMap Int a = PatchDMap 
   toDMapWithFunctor h  = intMapWithFunctorToDMap . IM.mapWithKey h
   makePatch _ h = PatchDMap . intMapWithFunctorToDMap . IM.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv)
---  sequenceWithPatch _ _ _ _ = R.sequenceDMapWithAdjust
   fromDMap _ _ = dmapToIntMap
 
 listHoldWithKeyIntMap::forall t m v a. (RD.DomBuilder t m, R.MonadHold t m)=>IntMap v->R.Event t (IntMap (Maybe v))->(Int->v->m a)->m (R.Dynamic t (IntMap a))
@@ -247,10 +239,9 @@ instance (Ord k, Hashable k)=>ListHoldable (HashMap k) k v a where
   type DMapPatchType (HashMap k) k a = PatchDMap 
   toDMapWithFunctor h  = hashMapWithFunctorToDMap . HM.mapWithKey h
   makePatch _ h = PatchDMap . hashMapWithFunctorToDMap .HM.mapWithKey (\k mv -> ComposeMaybe $ fmap (h k) mv)
---  sequenceWithPatch _ _ _ _ = R.sequenceDMapWithAdjust
   fromDMap _ _ = dmapToHashMap
 
 listHoldWithKeyHashMap::forall t m k v a. (RD.DomBuilder t m, R.MonadHold t m,Ord k, Hashable k)
   =>HashMap k v->R.Event t (HashMap k (Maybe v))->(k->v->m a)->m (R.Dynamic t (HashMap k a))
 listHoldWithKeyHashMap = listHoldWithKeyGeneral
--}
+
