@@ -47,6 +47,9 @@ import           Data.Functor.Misc      (Const2 (..), dmapToMap,
 
 import           Data.Proxy             (Proxy (..))
 
+import           Data.Align             (align)
+import           Data.These             (These(..))
+import           Data.Maybe             (isNothing)
 
 -- This just says we can sequence in the way of monadAdjust
 class DM.GCompare k=>Sequenceable (d :: (* -> *) -> (* -> *) -> *) (pd :: (* -> *) -> (* -> *) -> *)  (k :: * -> *) where
@@ -86,13 +89,21 @@ class HasFan (a :: * -> *) v where
   doFan::R.Reflex t=>Proxy v->R.Event t (a v) -> R.EventSelector t (FanSelKey a v)
 
 {-
--- encapsulates the relationship between the container, f, and a difftype, df, representing edits of f
--- NB: flip applyDiff . flip diff = id (applyDiff (diff x emptyBase) emptyBase = x) 
+-- encapsulates the ability to diff two containers and then apply the diff to regain the original
+-- NB: applyDiffD (diffD x y) y = x 
 class Diffable (f :: * -> *) (df :: * -> *) where
-  emptyBase::f v
-  -- NB: emptyDiff exists since we can do diff emptyBase emptyBase
-  diff::f v -> f v -> df v
-  applyDiff::df v -> f v -> f v
+  diffD::f v -> f v -> df v 
+  applyDiffD::df v -> f v -> f v
+
+instance Ord k=>Diffable (Map k) (Compose (Map k) Maybe) where
+  diffD old new = Compose $ flip Map.map (align old new) $ \case
+    This _ -> Nothing -- in old but not new, so delete
+    That v -> Just v -- in new but not old, so put in patch
+    These _ v -> Just v -- in both and without Eq I don't know if the value changed, so put possibly new value in patch
+  -- NB: I'm sure Ryan's way is better here but this is clearer to me so I'll keep it for development
+  applyDiffD patch old = insertions `Map.union` (old `Map.difference` deletions) where
+    deletions = Map.filter isNothing (getCompose patch)
+    insertions = Map.mapMaybe id  $ (getCompose patch) `Map.difference` deletions
 -}
 
 
