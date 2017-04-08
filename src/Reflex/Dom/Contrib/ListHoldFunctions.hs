@@ -85,6 +85,15 @@ class HasFan (a :: * -> *) v where
   makeSelKey::Proxy a->Proxy v->FanInKey a->FanSelKey a v v
   doFan::R.Reflex t=>Proxy v->R.Event t (a v) -> R.EventSelector t (FanSelKey a v)
 
+{-
+-- encapsulates the relationship between the container, f, and a difftype, df, representing edits of f
+-- NB: flip applyDiff . flip diff = id (applyDiff (diff x emptyBase) emptyBase = x) 
+class Diffable (f :: * -> *) (df :: * -> *) where
+  emptyBase::f v
+  -- NB: emptyDiff exists since we can do diff emptyBase emptyBase
+  diff::f v -> f v -> df v
+  applyDiff::df v -> f v -> f v
+-}
 
 
 -- This class encapsulates the relationship between a container and a difftype, which represents changes to the container.
@@ -114,27 +123,6 @@ listWithKeyShallowDiffGeneral initialVals valsChanged mkChild = do
   sentVals <- R.foldDyn applyDiff emptyVoidDiff $ fmap voidDiff valsChanged
   listHoldWithKeyGeneral initialVals (R.attachWith (flip diff) (R.current sentVals) valsChanged) $ \k v ->
     mkChild k v $ R.select childValChangedSelector $ makeSelKey' k
-
-{-
--- encapsulates the relationship between the container, f, and a difftype, df, representing edits of f
-class Diffable (f :: * -> *) (df :: * -> *) where
-  diff::f v -> f v -> df v
-  applyDiff::df v -> f v -> f v
-
-class Align g => AlignDiffable g where
-  mDiff::Compose g Maybe v -> Compose g Maybe v -> Compose g Maybe v
-  mApply::Compose g Maybe v -> Compose g Maybe v -> Compose g Maybe v
-
-
-instance MaybeDiffable f=>Diffable f (Compose f Maybe) where
-  diff = mDiff
-  apply = mApply
-
-
-instance MaybeDiffable (Map k) where
-  mDiff =
--}
-
 
 {-
   --  compactMaybe::MDPatch v -> f v
