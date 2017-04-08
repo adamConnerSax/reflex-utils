@@ -92,7 +92,6 @@ class ShallowDiffable (df :: * -> *) v where
   diff::Proxy v->df v -> df () -> df v
   applyDiff::Proxy v->df ()-> df () -> df () -- NB: this is a diff type from applyMap
 
-
 listWithKeyShallowDiffGeneral :: forall t m f k v a.(RD.DomBuilder t m
                                                     , MonadFix m
                                                     , R.MonadHold t m
@@ -101,10 +100,9 @@ listWithKeyShallowDiffGeneral :: forall t m f k v a.(RD.DomBuilder t m
                                                     , ShallowDiffable (Diff f k) v
                                                     , HasFan (Diff f k) v
                                                     , FanInKey (Diff f k) ~ k)                                                      
-  => f v -> R.Event t (Diff f k v) -> (FanInKey (Diff f k) -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
+  => f v -> R.Event t (Diff f k v) -> (k -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
 listWithKeyShallowDiffGeneral initialVals valsChanged mkChild = do
-  let --pf = Proxy :: Proxy f
-      pv = Proxy :: Proxy v
+  let pv = Proxy :: Proxy v
       emptyVoidDiff' = emptyVoidDiff pv
       voidDiff' = voidDiff pv
       diff' = diff pv
