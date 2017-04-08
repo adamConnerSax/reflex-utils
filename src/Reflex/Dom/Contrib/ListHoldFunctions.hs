@@ -41,14 +41,14 @@ import qualified Data.HashMap.Strict    as HM
 
 import           Control.Monad.Fix      (MonadFix)
 import           Control.Monad.Identity (Identity (..), void)
-import           Data.Functor.Compose   (Compose(Compose,getCompose))
+import           Data.Functor.Compose   (Compose (Compose, getCompose))
 import           Data.Functor.Misc      (Const2 (..), dmapToMap,
                                          mapWithFunctorToDMap)
 
 import           Data.Proxy             (Proxy (..))
 
 
--- This just says we can sequence in the way of monadAdjust 
+-- This just says we can sequence in the way of monadAdjust
 class DM.GCompare k=>Sequenceable (d :: (* -> *) -> (* -> *) -> *) (pd :: (* -> *) -> (* -> *) -> *)  (k :: * -> *) where
   sequenceWithPatch::(R.Reflex t, R.MonadAdjust t m)=>d k m -> R.Event t (pd k m) -> m (d k Identity, R.Event t (pd k Identity))
 
@@ -74,51 +74,70 @@ listHoldWithKeyGeneral c0 c' h = do
       makePatchSeq' = makePatchSeq pf
       fromSeqType' = fromSeqType pk pv
       dc0 = toSeqTypeWithFunctor h c0
-      dc' = fmap (makePatchSeq' h) c' 
+      dc' = fmap (makePatchSeq' h) c'
   (a0,a') <- sequenceWithPatch dc0 dc'
   fmap fromSeqType' . R.incrementalToDynamic <$> R.holdIncremental a0 a' --TODO: Move the fromSeqType to the righthand side so it doesn't get fully redone every time
 
 -- This class encapsuates the types and functionality required to use "fan"
 class HasFan (a :: * -> *) v where
-  type FanInKey a :: * 
+  type FanInKey a :: *
   type FanSelKey a v :: * -> *
   makeSelKey::Proxy a->Proxy v->FanInKey a->FanSelKey a v v
   doFan::R.Reflex t=>Proxy v->R.Event t (a v) -> R.EventSelector t (FanSelKey a v)
 
--- This class encapsulates the relationship between a container and a difftype, which represents changes to the container.  
-class ShallowDiffable (df :: * -> *) v where
-  emptyVoidDiff::Proxy v->df ()
-  voidDiff::Proxy v->df v->df ()
-  diff::Proxy v->df v -> df () -> df v
-  applyDiff::Proxy v->df ()-> df () -> df () -- NB: this is a diff type from applyMap
+
+
+-- This class encapsulates the relationship between a container and a difftype, which represents changes to the container.
+-- This requires the diff type to be keyed, I think. Or maybe just the original container to have an Align instance?
+-- I think this might all be subsumed.  diff and applyDiff should be part of general diffing and voidDiff is easy as long as df is a functor.
+-- that leaves emptyVoidDiff...which could be its own thing?  Or part of a structure I don't see yet.
+class ShallowDiffable (df :: * -> *) where
+  emptyVoidDiff::df ()
+  voidDiff::df v->df ()
+  diff::df v->df ()->df v -- akin to Map.differenceWith (\mv _ -> maybe (Just Nothing) (const Nothing) mv)
+  applyDiff::df ()-> df () -> df () -- NB: this is a different type from applyMap
+
 
 listWithKeyShallowDiffGeneral :: forall t m f k v a.(RD.DomBuilder t m
                                                     , MonadFix m
                                                     , R.MonadHold t m
                                                     , ToPatchType f k v a -- for the listHold
                                                     , Sequenceable (SeqType f k) (SeqPatchType f k) (SeqTypeKey f k a) -- for the listHold
-                                                    , ShallowDiffable (Diff f k) v
+                                                    , ShallowDiffable (Diff f k)
                                                     , HasFan (Diff f k) v
-                                                    , FanInKey (Diff f k) ~ k)                                                      
+                                                    , FanInKey (Diff f k) ~ k)
   => f v -> R.Event t (Diff f k v) -> (k -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
 listWithKeyShallowDiffGeneral initialVals valsChanged mkChild = do
-  let pv = Proxy :: Proxy v
-      emptyVoidDiff' = emptyVoidDiff pv
-      voidDiff' = voidDiff pv
-      diff' = diff pv
-      applyDiff' = applyDiff pv
-      pDiff = Proxy :: Proxy (Diff f k)
-      makeSelKey' = makeSelKey pDiff pv
-      doFan' = doFan pv
+  let makeSelKey' = makeSelKey (Proxy :: Proxy (Diff f k)) (Proxy :: Proxy v)
+      doFan' = doFan (Proxy :: Proxy v)
       childValChangedSelector = doFan' valsChanged
-  sentVals <- R.foldDyn applyDiff' emptyVoidDiff' $ fmap voidDiff' valsChanged
-  listHoldWithKeyGeneral initialVals (R.attachWith (flip diff') (R.current sentVals) valsChanged) $ \k v ->
+  sentVals <- R.foldDyn applyDiff emptyVoidDiff $ fmap voidDiff valsChanged
+  listHoldWithKeyGeneral initialVals (R.attachWith (flip diff) (R.current sentVals) valsChanged) $ \k v ->
     mkChild k v $ R.select childValChangedSelector $ makeSelKey' k
 
 {-
-class MapDiffable (f :: * -> *) v where
-  type MDPatch f :: * -> *
---  compactMaybe::MDPatch v -> f v
+-- encapsulates the relationship between the container, f, and a difftype, df, representing edits of f
+class Diffable (f :: * -> *) (df :: * -> *) where
+  diff::f v -> f v -> df v
+  applyDiff::df v -> f v -> f v
+
+class Align g => AlignDiffable g where
+  mDiff::Compose g Maybe v -> Compose g Maybe v -> Compose g Maybe v
+  mApply::Compose g Maybe v -> Compose g Maybe v -> Compose g Maybe v
+
+
+instance MaybeDiffable f=>Diffable f (Compose f Maybe) where
+  diff = mDiff
+  apply = mApply
+
+
+instance MaybeDiffable (Map k) where
+  mDiff =
+-}
+
+
+{-
+  --  compactMaybe::MDPatch v -> f v
   union::f v -> f v -> f v
   difference::
 
@@ -127,6 +146,8 @@ class MapDiffable (f :: * -> *) v where
   diff::Eq v=> f v -> f v -> f (Maybe v)
   apply::f (Maybe v) -> f v -> f v
 -}
+
+
 
 instance Ord k=>Sequenceable DM.DMap PatchDMap (Const2 k a) where
   sequenceWithPatch = R.sequenceDMapWithAdjust
@@ -146,15 +167,15 @@ instance Ord k=>HasFan (Compose (Map k) Maybe) v where
   doFan _ = R.fanMap . fmap (Map.mapMaybe id) . fmap getCompose
   makeSelKey _ _ = Const2
 
-instance Ord k=>ShallowDiffable (Compose (Map k) Maybe) v where
-  emptyVoidDiff _ = Compose Map.empty
-  voidDiff _ = void
-  diff _ old new =
+instance Ord k=>ShallowDiffable (Compose (Map k) Maybe) where
+  emptyVoidDiff = Compose Map.empty
+  voidDiff = void
+  diff old new =
     let relevantPatch patch _ = case patch of
           Nothing -> Just Nothing
           Just _ -> Nothing
     in Compose $ Map.differenceWith relevantPatch (getCompose old) (getCompose new)
-  applyDiff _ patch old = Compose $ RD.applyMap (getCompose $ fmap Just patch) (getCompose old)
+  applyDiff patch old = Compose $ RD.applyMap (getCompose $ fmap Just patch) (getCompose old)
 
 listHoldWithKeyMap::forall t m k v a. (RD.DomBuilder t m, R.MonadHold t m,Ord k)=>Map k v->R.Event t (Map k (Maybe v))->(k->v->m a)->m (R.Dynamic t (Map k a))
 listHoldWithKeyMap c diffCEv = listHoldWithKeyGeneral c (Compose <$> diffCEv)
