@@ -55,18 +55,18 @@ class DM.GCompare k=>Sequenceable (d :: (* -> *) -> (* -> *) -> *) (pd :: (* -> 
 -- This class has the capabilities to translate f v and its difftype into types that are sequenceable, and then bring the original type back
 class (RD.Patch (SeqPatchType f k (SeqTypeKey f k a) Identity)
       ,R.PatchTarget (SeqPatchType f k (SeqTypeKey f k a) Identity) ~ SeqType f k (SeqTypeKey f k a) Identity)=>ToPatchType (f :: * -> *) k v a where
-  type DiffType f k :: * -> *
+  type Diff f k :: * -> *
   type SeqType  f k :: (* -> *) -> (* -> *) -> *
   type SeqPatchType f k :: (* -> *) -> (* -> *) -> *
   type SeqTypeKey f k a :: * -> *
   toSeqTypeWithFunctor::Functor g=>(k->v->g a) -> f v -> SeqType f k (SeqTypeKey f k a) g
-  makePatchSeq::Proxy f->(k->v->g a) -> DiffType f k v -> SeqPatchType f k (SeqTypeKey f k a) g
+  makePatchSeq::Proxy f->(k->v->g a) -> Diff f k v -> SeqPatchType f k (SeqTypeKey f k a) g
   fromSeqType::Proxy k->Proxy v->SeqType f k (SeqTypeKey f k a) Identity -> f a
 
 listHoldWithKeyGeneral::forall t m f k v a. (RD.DomBuilder t m, R.MonadHold t m
                                             , ToPatchType f k v a
                                             , Sequenceable (SeqType f k) (SeqPatchType f k) (SeqTypeKey f k a))
-  =>f v -> R.Event t (DiffType f k v) -> (k->v-> m a) -> m (R.Dynamic t (f a))
+  =>f v -> R.Event t (Diff f k v) -> (k->v-> m a) -> m (R.Dynamic t (f a))
 listHoldWithKeyGeneral c0 c' h = do
   let pf = Proxy :: Proxy f
       pk = Proxy :: Proxy k
@@ -85,23 +85,12 @@ class HasFan (a :: * -> *) v where
   makeSelKey::Proxy a->Proxy v->FanInKey a->FanSelKey a v v
   doFan::R.Reflex t=>Proxy v->R.Event t (a v) -> R.EventSelector t (FanSelKey a v)
 
-{-
 -- This class encapsulates the relationship between a container and a difftype, which represents changes to the container.  
-class ShallowDiffable (f :: * -> *) v where
-  type Diff f :: * -> *
-  emptyVoidDiff::Proxy f->Proxy v->Diff f ()
-  voidDiff::Proxy f->Proxy v->Diff f v->Diff f ()
-  diff::Proxy f->Proxy v->Diff f v -> Diff f () -> Diff f v
-  applyDiff::Proxy f->Proxy v->Diff f () -> Diff f () -> Diff f () -- NB: this is a diff type from applyMap
--}
-
--- This class encapsulates the relationship between a container and a difftype, which represents changes to the container.  
-class ShallowDiffable (f :: * -> *) v where
-  type Diff f :: * -> *
-  emptyVoidDiff::Proxy f->Proxy v->Diff f ()
-  voidDiff::Proxy f->Proxy v->Diff f v->Diff f ()
-  diff::Proxy f->Proxy v->Diff f v -> Diff f () -> Diff f v
-  applyDiff::Proxy f->Proxy v->Diff f () -> Diff f () -> Diff f () -- NB: this is a diff type from applyMap
+class ShallowDiffable (df :: * -> *) v where
+  emptyVoidDiff::Proxy v->df ()
+  voidDiff::Proxy v->df v->df ()
+  diff::Proxy v->df v -> df () -> df v
+  applyDiff::Proxy v->df ()-> df () -> df () -- NB: this is a diff type from applyMap
 
 
 listWithKeyShallowDiffGeneral :: forall t m f k v a.(RD.DomBuilder t m
@@ -109,20 +98,19 @@ listWithKeyShallowDiffGeneral :: forall t m f k v a.(RD.DomBuilder t m
                                                     , R.MonadHold t m
                                                     , ToPatchType f k v a -- for the listHold
                                                     , Sequenceable (SeqType f k) (SeqPatchType f k) (SeqTypeKey f k a) -- for the listHold
-                                                    , ShallowDiffable f v
-                                                    , HasFan (Diff f) v
-                                                    , FanInKey (Diff f) ~ k                                                      
-                                                    , Diff f ~ DiffType f k)
-  => f v -> R.Event t (Diff f v) -> (FanInKey (Diff f) -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
+                                                    , ShallowDiffable (Diff f k) v
+                                                    , HasFan (Diff f k) v
+                                                    , FanInKey (Diff f k) ~ k)                                                      
+  => f v -> R.Event t (Diff f k v) -> (FanInKey (Diff f k) -> v -> R.Event t v -> m a) -> m (R.Dynamic t (f a))
 listWithKeyShallowDiffGeneral initialVals valsChanged mkChild = do
-  let pf = Proxy :: Proxy f
+  let --pf = Proxy :: Proxy f
       pv = Proxy :: Proxy v
-      emptyVoidDiff' = emptyVoidDiff pf pv
-      voidDiff' = voidDiff pf pv
-      pDiff = Proxy :: Proxy (Diff f)
+      emptyVoidDiff' = emptyVoidDiff pv
+      voidDiff' = voidDiff pv
+      diff' = diff pv
+      applyDiff' = applyDiff pv
+      pDiff = Proxy :: Proxy (Diff f k)
       makeSelKey' = makeSelKey pDiff pv
-      diff' = diff pf pv
-      applyDiff' = applyDiff pf pv
       doFan' = doFan pv
       childValChangedSelector = doFan' valsChanged
   sentVals <- R.foldDyn applyDiff' emptyVoidDiff' $ fmap voidDiff' valsChanged
@@ -146,7 +134,7 @@ instance Ord k=>Sequenceable DM.DMap PatchDMap (Const2 k a) where
   sequenceWithPatch = R.sequenceDMapWithAdjust
 
 instance Ord k=>ToPatchType (Map k) k v a where
-  type DiffType (Map k) k = Compose (Map k) Maybe
+  type Diff (Map k) k = Compose (Map k) Maybe
   type SeqType (Map k) k = DM.DMap
   type SeqPatchType (Map k) k = PatchDMap
   type SeqTypeKey (Map k) k a = Const2 k a
@@ -160,16 +148,15 @@ instance Ord k=>HasFan (Compose (Map k) Maybe) v where
   doFan _ = R.fanMap . fmap (Map.mapMaybe id) . fmap getCompose
   makeSelKey _ _ = Const2
 
-instance Ord k=>ShallowDiffable (Map k) v where
-  type Diff (Map k) = Compose  (Map k) Maybe
-  emptyVoidDiff _ _ = Compose Map.empty
-  voidDiff _ _ = void
-  diff _ _ old new =
+instance Ord k=>ShallowDiffable (Compose (Map k) Maybe) v where
+  emptyVoidDiff _ = Compose Map.empty
+  voidDiff _ = void
+  diff _ old new =
     let relevantPatch patch _ = case patch of
           Nothing -> Just Nothing
           Just _ -> Nothing
     in Compose $ Map.differenceWith relevantPatch (getCompose old) (getCompose new)
-  applyDiff _ _ patch old = Compose $ RD.applyMap (getCompose $ fmap Just patch) (getCompose old)
+  applyDiff _ patch old = Compose $ RD.applyMap (getCompose $ fmap Just patch) (getCompose old)
 
 listHoldWithKeyMap::forall t m k v a. (RD.DomBuilder t m, R.MonadHold t m,Ord k)=>Map k v->R.Event t (Map k (Maybe v))->(k->v->m a)->m (R.Dynamic t (Map k a))
 listHoldWithKeyMap c diffCEv = listHoldWithKeyGeneral c (Compose <$> diffCEv)
@@ -185,7 +172,7 @@ dmapToIntMap :: DMap (Const2 Int v) Identity -> IntMap v
 dmapToIntMap = IM.fromDistinctAscList . fmap (\(Const2 k :=> Identity v) -> (k, v)) . DM.toAscList
 
 instance ToPatchType IntMap Int v a where
-  type DiffType IntMap Int = Compose IntMap Maybe
+  type Diff IntMap Int = Compose IntMap Maybe
   type SeqType IntMap Int = DM.DMap
   type SeqPatchType IntMap Int = PatchDMap
   type SeqTypeKey IntMap Int a = Const2 Int a
@@ -204,7 +191,7 @@ dmapToHashMap = HM.fromList . fmap (\(Const2 k :=> Identity v) -> (k, v)) . DM.t
 
 
 instance (Hashable k, Ord k)=>ToPatchType (HashMap k) k v a where
-  type DiffType (HashMap k) k = Compose (HashMap k) Maybe
+  type Diff (HashMap k) k = Compose (HashMap k) Maybe
   type SeqType (HashMap k) k = DM.DMap
   type SeqPatchType (HashMap k) k = PatchDMap
   type SeqTypeKey (HashMap k) k a = Const2 k a
