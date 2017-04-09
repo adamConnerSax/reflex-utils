@@ -20,7 +20,7 @@ import Reflex.Dom.Contrib.FormBuilder.Builder
 import Reflex.Dom.Contrib.FormBuilder.DynValidation (accValidation)
 import Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
 import Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv)
-import Reflex.Dom.Contrib.ListHoldFunctions (listWithKeyShallowDiffMap)
+import Reflex.Dom.Contrib.ListHoldFunctions (listWithKeyShallowDiffMap, listWithKeyMap)
 
 -- reflex imports
 import qualified Reflex as R 
@@ -355,7 +355,7 @@ buildLBEMapLWK'::(FormInstanceC t m
 buildLBEMapLWK' editW _ mapDyn0 = do
   mapDynEv <- traceDynAsEv (const "buildLBEMapLWK'") mapDyn0
   mapDyn' <- R.holdDyn M.empty mapDynEv
-  mapOfDyn <- RD.listWithKey (R.traceDynWith (const "LWK' mapDyn0") mapDyn') editW -- Dynamic t (M.Map k (Dynamic t (Maybe (FValidation v)))
+  mapOfDyn <- listWithKeyMap (R.traceDynWith (const "LWK' mapDyn0") mapDyn') editW -- Dynamic t (M.Map k (Dynamic t (Maybe (FValidation v)))
   let mapFValDyn = M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
   return . DynValidation $ sequenceA <$> mapFValDyn
 
@@ -443,7 +443,7 @@ buildLBEMapLWK::(FormInstanceC t m
                  , Ord k, Show k)
                =>LBBuildF t m k v
 buildLBEMapLWK mFN map0Dyn = do
-  mapOfDynMaybe <- RD.listWithKey (R.traceDynWith (\m -> "LWK map0Dyn: " ++ show (M.keys m)) map0Dyn) editOne
+  mapOfDynMaybe <- listWithKeyMap (R.traceDynWith (\m -> "LWK map0Dyn: " ++ show (M.keys m)) map0Dyn) editOne
   return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
 
 
