@@ -94,7 +94,7 @@ library
                      , these
                      , tuple
                      , hashable
-                     , unordered-containers
+                     , unordered-containers >= 0.2.8.0
                      , validation
 
   if impl(ghcjs)
