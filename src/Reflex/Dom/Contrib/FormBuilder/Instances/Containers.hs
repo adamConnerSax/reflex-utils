@@ -98,9 +98,9 @@ buildAdjustableContainer::(FormInstanceC t m
                           , Ord k
                           , VFormBuilderC t m k
                           , VFormBuilderC t m v)
-  =>MapLike f g a k v
+  =>MapLike f g k v 
   ->MapElemWidgets g t m k v
-  ->BuildForm t m (f a)
+  ->BuildForm t m (f v)
 buildAdjustableContainer ml mews va mFN dmfa  = validateForm va . makeForm $ do
     fType <- getFormType
     case fType of
@@ -108,10 +108,10 @@ buildAdjustableContainer ml mews va mFN dmfa  = validateForm va . makeForm $ do
       ObserveOnly ->  unF $ buildLBEditOnly  ml mews mFN dmfa
   
 
-mapML::Ord k=>MapLike (M.Map k) (M.Map k) v k v
+mapML::Ord k=>MapLike (M.Map k) (M.Map k) k v
 mapML = MapLike id id LHF.diffMapNoEq LHF.listWithKeyMap LHF.listWithKeyShallowDiffMap
 
-mapEQML::(Ord k, Eq v)=>MapLike (M.Map k) (M.Map k) v k v
+mapEQML::(Ord k, Eq v)=>MapLike (M.Map k) (M.Map k) k v
 mapEQML = mapML { diffMap = LHF.diffMap }
 
 mapEditWidget::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>R.Dynamic t (M.Map k (FValidation v)) -> R.Event t (k,v) -> R.Event t (M.Map k v) -> FRW t m (k,v)
@@ -132,10 +132,10 @@ buildEqMap = buildAdjustableContainer mapEQML mapWidgets
 instance (FormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a)=>FormBuilder t m (M.Map k a) where
   buildForm =  buildMap
 
-listML::MapLike [] IM.IntMap a Int a
+listML::MapLike [] IM.IntMap Int v
 listML = MapLike (IM.fromAscList . zip [0..]) (fmap snd . IM.toList) LHF.diffIntMapNoEq LHF.listWithKeyIntMap LHF.listWithKeyShallowDiffIntMap
 
-listEqML::Eq a=>MapLike [] IM.IntMap a Int a
+listEqML::Eq a=>MapLike [] IM.IntMap Int a
 listEqML = listML { diffMap = LHF.diffIntMap }
 
 safeMaximum::Ord a=>[a]->Maybe a
@@ -172,7 +172,7 @@ buildEqList = buildAdjustableContainer listEqML listWidgets
 instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m [a] where
   buildForm =  buildList
 
-setEqML::Ord a=>MapLike S.Set IM.IntMap a Int a
+setEqML::Ord a=>MapLike S.Set IM.IntMap Int a
 setEqML = MapLike (IM.fromAscList . zip [0..] . S.toList) (S.fromList . fmap snd . IM.toList) LHF.diffIntMap LHF.listWithKeyIntMap LHF.listWithKeyShallowDiffIntMap 
 
 setEqWidgets::(FormInstanceC t m, VFormBuilderC t m a,Eq a)=>MapElemWidgets IM.IntMap t m Int a
@@ -195,10 +195,10 @@ intMapEditWidget _ newPair newMap = do
 intMapWidgets::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m v)=>MapElemWidgets IM.IntMap t m Int v
 intMapWidgets = MapElemWidgets showKeyEditVal intMapEditWidget
 
-intMapML::MapLike IM.IntMap IM.IntMap v Int v
+intMapML::MapLike IM.IntMap IM.IntMap Int v
 intMapML = MapLike id id  LHF.diffIntMapNoEq LHF.listWithKeyIntMap LHF.listWithKeyShallowDiffIntMap
 
-intMapEqML::Eq v=>MapLike IM.IntMap IM.IntMap v Int v
+intMapEqML::Eq v=>MapLike IM.IntMap IM.IntMap Int v
 intMapEqML = intMapML { diffMap = LHF.diffIntMap } 
 
 buildIntMap::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a)=>BuildForm t m (IM.IntMap a)
@@ -210,10 +210,10 @@ buildEqIntMap = buildAdjustableContainer intMapEqML intMapWidgets
 instance (FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a)=>FormBuilder t m (IM.IntMap a) where
   buildForm = buildIntMap
     
-sequenceML::MapLike Seq.Seq IM.IntMap a Int a
+sequenceML::MapLike Seq.Seq IM.IntMap Int v
 sequenceML = MapLike (IM.fromAscList . zip [0..] . F.toList) (Seq.fromList . fmap snd . IM.toList) LHF.diffIntMapNoEq LHF.listWithKeyIntMap LHF.listWithKeyShallowDiffIntMap
 
-sequenceEqML::Eq a=>MapLike Seq.Seq IM.IntMap a Int a
+sequenceEqML::Eq a=>MapLike Seq.Seq IM.IntMap Int a
 sequenceEqML = sequenceML { diffMap = LHF.diffIntMap }
 
 buildSequence::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m (Seq.Seq a)
@@ -235,10 +235,10 @@ hashMapEditWidget _ newPair newMap = do
 hashMapWidgets::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>MapElemWidgets (HML.HashMap k) t m k v
 hashMapWidgets = MapElemWidgets showKeyEditVal hashMapEditWidget
 
-hashMapML::(Ord k, Hashable k)=>MapLike (HML.HashMap k) (HML.HashMap k) v k v
+hashMapML::(Ord k, Hashable k)=>MapLike (HML.HashMap k) (HML.HashMap k) k v
 hashMapML = MapLike id id LHF.diffHashMapNoEq LHF.listWithKeyHashMap LHF.listWithKeyShallowDiffHashMap
 
-hashMapEqML::(Hashable k, Ord k, Eq v)=>MapLike (HML.HashMap k) (HML.HashMap k) v k v
+hashMapEqML::(Hashable k, Ord k, Eq v)=>MapLike (HML.HashMap k) (HML.HashMap k) k v
 hashMapEqML = hashMapML { diffMap = LHF.diffHashMap }
 
 buildHashMap::(FormInstanceC t m,Ord k, Hashable k, VFormBuilderC t m k, VFormBuilderC t m v)=>BuildForm t m (HML.HashMap k v)
@@ -252,7 +252,7 @@ instance (FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v, Ord k, Ha
 
 -- Can't do plain HashSet since we need (Eq a) for fromList. So we may as well take advantage in the diffing
 
-hashSetEqML::(Eq a, Hashable a)=>MapLike HS.HashSet IM.IntMap a Int a
+hashSetEqML::(Eq a, Hashable a)=>MapLike HS.HashSet IM.IntMap Int a
 hashSetEqML = MapLike (IM.fromList . zip [0..] . HS.toList) (HS.fromList . fmap snd . IM.toList) LHF.diffIntMap LHF.listWithKeyIntMap LHF.listWithKeyShallowDiffIntMap
 
 buildEqHashSet::(FormInstanceC t m,Hashable a, Eq a, VFormBuilderC t m a)=>BuildForm t m (HS.HashSet a)
@@ -266,17 +266,17 @@ instance (FormInstanceC t m, VFormBuilderC t m a, Hashable a, Eq a)=>FormBuilder
 type BuildF t m a    = FormValidator a->Maybe FieldName->DynMaybe t a->FRW t m a
 type BuildForm t m a = FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
 
-type LBBuildF' t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FRW t m (M.Map k v)
+type LBBuildF' g t m k v = Maybe FieldName->R.Dynamic t (g v)->FRW t m (g v)
 
 type LWKSDC t m = (RD.DomBuilder t m, MonadFix m, R.MonadHold t m)
 type LWKC t m = (LWKSDC t m, RD.PostBuild t m)
 
-data MapLike f g a k v = MapLike { toMap::f v->g v
-                                 , fromMap::g a->f a
-                                 , diffMap::g v -> g v -> g (Maybe v)
-                                 , listWithKeyF::forall t m.LWKC t m=>R.Dynamic t (g v) -> (k -> R.Dynamic t v->m a) -> m (R.Dynamic t (g a))
-                                 , listWithKeyShallowDiffF::forall t m.LWKSDC t m=>g v->R.Event t (g (Maybe v))->(k->v->R.Event t v->m a)->m (R.Dynamic t (g a))
-                                 }
+data MapLike f g k v = MapLike { toMap::f v->g v
+                               , fromMap::g v->f v
+                               , diffMap::forall v.g v -> g v -> g (Maybe v)
+                               , listWithKeyF::forall t m.LWKC t m=>R.Dynamic t (g v) -> (k -> R.Dynamic t v->m v) -> m (R.Dynamic t (g v))
+                               , listWithKeyShallowDiffF::forall t m.LWKSDC t m=>g v->R.Event t (g (Maybe v))->(k->v->R.Event t v->m v)->m (R.Dynamic t (g v))
+                               }
 
 data MapElemWidgets g t m k v = MapElemWidgets { elemW::ElemWidget t m k v                                
                                                , newOneWF::R.Dynamic t (g (FValidation v)) -> R.Event t (k,v)->R.Event t (g v)->FRW t m (k,v) 
@@ -296,18 +296,23 @@ elemWidgetToLBWidget ew k vDyn = fmap Just . unDynValidation <$> ew k vDyn
 class IsMap m where
   emptyMap::m a
   mapMaybe::(a -> Maybe b) -> m a -> m b
+  distributeOverDynPure::R.Reflex t=> m (R.Dynamic t v) -> R.Dynamic t (m v)
 
-instance IsMap (M.Map k) where
+
+instance Ord k=>IsMap (M.Map k) where
   emptyMap = M.empty
   mapMaybe = M.mapMaybe
+  distributeOverDynPure = R.distributeMapOverDynPure
 
 instance IsMap IM.IntMap where
   emptyMap = IM.empty
   mapMaybe = IM.mapMaybe
+  distributeOverDynPure = LHF.distributeIntMapOverDynPure
 
-instance IsMap (HML.HashMap k) where
+instance (Ord k, Hashable k)=>IsMap (HML.HashMap k) where
   emptyMap = HML.empty
   mapMaybe = HML.mapMaybe
+  distributeOverDynPure = LHF.distributeHashMapOverDynPure
   
 maybeMapToMap::IsMap map=>Maybe (map v) -> map v
 maybeMapToMap = fromMaybe emptyMap 
@@ -317,11 +322,11 @@ buildLBEditOnly::(FormInstanceC t m
 --                 , Ord k
                  , VFormBuilderC t m k
                  , VFormBuilderC t m v)
-  =>MapLike f g a k v
+  =>MapLike f g k v 
   ->MapElemWidgets g t m k v
   ->Maybe FieldName
-  ->DynMaybe t (f a)
-  ->Form t m (f a)
+  ->DynMaybe t (f v)
+  ->Form t m (f v)
 buildLBEditOnly (MapLike to from _ lwkF _) (MapElemWidgets eW _) mFN dmfa =  makeForm $ do
   let mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa
   fmap from <$> buildLBEMapLWK' lwkF (elemWidgetToLBWidget eW) mFN mapDyn0
@@ -331,11 +336,11 @@ buildLBDelete::(FormInstanceC t m
 --               , Ord k
                , VFormBuilderC t m k
                , VFormBuilderC t m v)
-  =>MapLike f g a k v
+  =>MapLike f g k v 
   ->MapElemWidgets g t m k v
   ->Maybe FieldName
-  ->DynMaybe t (f a)
-  ->Form t m (f a)
+  ->DynMaybe t (f v)
+  ->Form t m (f v)
 buildLBDelete (MapLike to from _ lwkF _) (MapElemWidgets eW _) mFN dmfa = makeForm $ do
   let eW' = editAndDeleteElemWidget eW (R.constDyn True)
       mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa
@@ -350,11 +355,11 @@ buildLBAddDelete::(FormInstanceC t m
 --                  , Ord k
                   , VFormBuilderC t m k
                   , VFormBuilderC t m v)
-  =>MapLike f g a k v
+  =>MapLike f g k v
   ->MapElemWidgets g t m k v
   ->Maybe FieldName
-  ->DynMaybe t (f a)
-  ->Form t m (f a)
+  ->DynMaybe t (f v)
+  ->Form t m (f v)
 buildLBAddDelete (MapLike to from diffMapF _ lwksdF) (MapElemWidgets eW nWF) mFN dmfa = makeForm $ fCol $ mdo
   let eW' k v0 vEv = R.holdDyn v0 vEv >>= \vDyn -> editAndDeleteElemWidget eW (R.constDyn True) k vDyn
       mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa 
@@ -372,7 +377,7 @@ buildLBAddDelete (MapLike to from diffMapF _ lwksdF) (MapElemWidgets eW nWF) mFN
   let newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv -- Event t (Map k (Maybe v))
       insertDiffEv = fmap Just . uncurry M.singleton <$> addEv  
       diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
-      mapEditsFVEv = R.updated . join $ R.distributeMapOverDynPure <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v)))
+      mapEditsFVEv = R.updated . join $ distributeOverDynPure <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v)))
       editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
   mapDyn <- R.holdDyn M.empty $ R.leftmost
             [
@@ -393,7 +398,7 @@ buildLBEMapLWK'::(FormInstanceC t m
                  , Ord k
                  , VFormBuilderC t m k
                  , VFormBuilderC t m v)
-  =>(R.Dynamic t (g v) -> (k -> R.Dynamic t v->m a) -> m (R.Dynamic t (f a)))->LBWidget t m k v->LBBuildF' t m k v
+  =>(R.Dynamic t (g v) -> (k -> R.Dynamic t v->m a) -> m (R.Dynamic t (g a)))->LBWidget t m k v->LBBuildF' g t m k v
 buildLBEMapLWK' lwkF editW _ mapDyn0 = do
   mapDynEv <- traceDynAsEv (const "buildLBEMapLWK'") mapDyn0
   mapDyn' <- R.holdDyn M.empty mapDynEv
