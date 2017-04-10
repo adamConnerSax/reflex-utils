@@ -37,7 +37,7 @@ import qualified Data.Map               as Map
 import           Data.IntMap            (IntMap)
 import qualified Data.IntMap            as IM
 
-import           Data.Hashable
+import           Data.Hashable          (Hashable)
 import           Data.HashMap.Strict    (HashMap)
 import qualified Data.HashMap.Strict    as HM
 
@@ -73,17 +73,13 @@ class (RD.Patch (SeqPatchType f k (SeqTypeKey f k a) Identity)
 
 
 --Sequenceable and ToPatch are enough for listHoldWithKey
-
 listHoldWithKeyGeneral::forall t m f k v a. (RD.DomBuilder t m, R.MonadHold t m
                                             , ToPatchType f k v a
                                             , Sequenceable (SeqType f k) (SeqPatchType f k) (SeqTypeKey f k a))
   =>f v -> R.Event t (Diff f k v) -> (k->v-> m a) -> m (R.Dynamic t (f a))
 listHoldWithKeyGeneral c0 c' h = do
-  let pf = Proxy :: Proxy f
-      pk = Proxy :: Proxy k
-      pv = Proxy :: Proxy v
-      makePatchSeq' = makePatchSeq pf
-      fromSeqType' = fromSeqType pk pv
+  let makePatchSeq' = makePatchSeq (Proxy :: Proxy f)
+      fromSeqType' = fromSeqType (Proxy :: Proxy k) (Proxy :: Proxy v)
       dc0 = toSeqTypeWithFunctor h c0
       dc' = fmap (makePatchSeq' h) c'
   (a0,a') <- sequenceWithPatch dc0 dc'
@@ -200,7 +196,7 @@ instance Ord k=>ToPatchType (Map k) k v a where
 
 instance Ord k=>HasFan (Map k) v where
   type FanInKey (Map k) = k
-  type FanSelKey (Map k)  v = Const2 k v
+  type FanSelKey (Map k) v = Const2 k v
   doFan _ = R.fanMap {- . fmap (Map.mapMaybe id) . fmap getCompose -}
   makeSelKey _ _ = Const2
 
@@ -362,7 +358,7 @@ listWithKeyHashMap::forall t m k v a. (RD.DomBuilder t m, MonadFix m, R.MonadHol
 listWithKeyHashMap = listWithKeyGeneral
 
 
----- previous things
+---- previous things, failures, etc.
 {-
 -- This class encapsulates the relationship between a container and a difftype, which represents changes to the container.
 -- This requires the diff type to be keyed, I think. Or maybe just the original container to have an Align instance?
