@@ -25,10 +25,10 @@ flag ghcjs
   description: Use GHCJS
   default: False
   
-custom-setup
-  setup-depends: base >= 4.6,
-                 cabal-macosx >= 0.2.3.4 && < 0.3,
-                 Cabal >= 1.24.2 && < 1.25
+--custom-setup
+--  setup-depends: base >= 4.6,
+--                cabal-macosx >= 0.2.3.4 && < 0.3,
+--                 Cabal >= 1.24.2 && < 1.25
                      
 library
   if flag(wkwebview) || flag(warp)
@@ -38,7 +38,8 @@ library
                   Reflex.Dom.Contrib.DynamicUtils
                   Reflex.Dom.Contrib.ReflexConstraints
                   Reflex.Dom.Contrib.CssUtils
-                  Reflex.Dom.Contrib.ListHoldFunctions
+                  Reflex.Dom.Contrib.ListHoldFunctions.Core
+                  Reflex.Dom.Contrib.ListHoldFunctions.Maps
                   Reflex.Dom.Contrib.Layout.All
                   Reflex.Dom.Contrib.Layout.Types
                   Reflex.Dom.Contrib.Layout.ClayUtils
