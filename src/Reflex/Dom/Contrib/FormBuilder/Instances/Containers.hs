@@ -20,7 +20,7 @@ import Reflex.Dom.Contrib.FormBuilder.Builder
 import Reflex.Dom.Contrib.FormBuilder.DynValidation (accValidation)
 import Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
 import Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv)
-import Reflex.Dom.Contrib.ListHoldFunctions (listWithKeyShallowDiffMap, listWithKeyMap)
+import Reflex.Dom.Contrib.ListHoldFunctions.Maps (listWithKeyShallowDiffMap, listWithKeyMap)
 
 -- reflex imports
 import qualified Reflex as R 
