@@ -9,6 +9,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances  #-}
 module Reflex.Dom.Contrib.FormBuilder.Instances.Containers () where
 
@@ -94,7 +95,9 @@ containerActionButton::(RD.PostBuild t m, RD.DomBuilder t m)=>T.Text -> m (RD.Ev
 containerActionButton = buttonNoSubmit'
 
 buildAdjustableContainer::(FormInstanceC t m
-                          , IsMap g
+                          , IsMap g k
+                          , Functor g
+                          , Traversable g
                           , Ord k
                           , VFormBuilderC t m k
                           , VFormBuilderC t m v)
@@ -273,9 +276,9 @@ type LWKC t m = (LWKSDC t m, RD.PostBuild t m)
 
 data MapLike f g k v = MapLike { toMap::f v->g v
                                , fromMap::g v->f v
-                               , diffMap::forall v.g v -> g v -> g (Maybe v)
-                               , listWithKeyF::forall t m.LWKC t m=>R.Dynamic t (g v) -> (k -> R.Dynamic t v->m v) -> m (R.Dynamic t (g v))
-                               , listWithKeyShallowDiffF::forall t m.LWKSDC t m=>g v->R.Event t (g (Maybe v))->(k->v->R.Event t v->m v)->m (R.Dynamic t (g v))
+                               , diffMap::g v -> g v -> g (Maybe v)
+                               , listWithKeyF::forall t m a.LWKC t m=>R.Dynamic t (g v) -> (k -> R.Dynamic t v->m a) -> m (R.Dynamic t (g a))
+                               , listWithKeyShallowDiffF::forall t m a.LWKSDC t m=>g v->R.Event t (g (Maybe v))->(k->v->R.Event t v->m a)->m (R.Dynamic t (g a))
                                }
 
 data MapElemWidgets g t m k v = MapElemWidgets { elemW::ElemWidget t m k v                                
@@ -293,32 +296,40 @@ type LBWidget t m k v = k->R.Dynamic t v->FR t m (R.Dynamic t (Maybe (FValidatio
 elemWidgetToLBWidget::(R.Reflex t, Functor m)=>ElemWidget t m k v->LBWidget t m k v
 elemWidgetToLBWidget ew k vDyn = fmap Just . unDynValidation <$> ew k vDyn
 
-class IsMap m where
+class IsMap m k | m->k where
   emptyMap::m a
   mapMaybe::(a -> Maybe b) -> m a -> m b
   distributeOverDynPure::R.Reflex t=> m (R.Dynamic t v) -> R.Dynamic t (m v)
+  singleton::k->v->m v
+  applyMapDiff::m (Maybe v) -> m v -> m v
 
-
-instance Ord k=>IsMap (M.Map k) where
+instance Ord k=>IsMap (M.Map k) k where
   emptyMap = M.empty
   mapMaybe = M.mapMaybe
   distributeOverDynPure = R.distributeMapOverDynPure
-
-instance IsMap IM.IntMap where
+  singleton = M.singleton
+  applyMapDiff = LHF.applyMapDiff
+  
+instance IsMap IM.IntMap Int where
   emptyMap = IM.empty
   mapMaybe = IM.mapMaybe
   distributeOverDynPure = LHF.distributeIntMapOverDynPure
+  singleton = IM.singleton
+  applyMapDiff = LHF.applyIntMapDiff
 
-instance (Ord k, Hashable k)=>IsMap (HML.HashMap k) where
+instance (Ord k, Hashable k)=>IsMap (HML.HashMap k) k where
   emptyMap = HML.empty
   mapMaybe = HML.mapMaybe
   distributeOverDynPure = LHF.distributeHashMapOverDynPure
+  singleton = HML.singleton
+  applyMapDiff = LHF.applyHashMapDiff
   
-maybeMapToMap::IsMap map=>Maybe (map v) -> map v
+maybeMapToMap::IsMap map k=>Maybe (map v) -> map v
 maybeMapToMap = fromMaybe emptyMap 
 
 buildLBEditOnly::(FormInstanceC t m
-                 , IsMap g
+                 , IsMap g k
+                 , Traversable g
 --                 , Ord k
                  , VFormBuilderC t m k
                  , VFormBuilderC t m v)
@@ -332,7 +343,8 @@ buildLBEditOnly (MapLike to from _ lwkF _) (MapElemWidgets eW _) mFN dmfa =  mak
   fmap from <$> buildLBEMapLWK' lwkF (elemWidgetToLBWidget eW) mFN mapDyn0
 
 buildLBDelete::(FormInstanceC t m
-               , IsMap g
+               , IsMap g k
+               , Traversable g
 --               , Ord k
                , VFormBuilderC t m k
                , VFormBuilderC t m v)
@@ -351,7 +363,9 @@ buildLBDelete (MapLike to from _ lwkF _) (MapElemWidgets eW _) mFN dmfa = makeFo
 --NB: I see why tagPromtlyDyn is required for pairWidgetEv (so when the new one is drawn, it sees the updated map) but not quite why
 -- that doesn't lead to a cycle.
 buildLBAddDelete::(FormInstanceC t m
-                  , IsMap g
+                  , Functor g
+                  , Traversable g
+                  , IsMap g k
 --                  , Ord k
                   , VFormBuilderC t m k
                   , VFormBuilderC t m v)
@@ -367,7 +381,7 @@ buildLBAddDelete (MapLike to from diffMapF _ lwksdF) (MapElemWidgets eW nWF) mFN
         AccSuccess old -> diffMapF old new
         AccFailure _ -> Just <$> new
   newInputMapEv <- dynAsEv mapDyn0 
-  updateMapDyn <- fItem $ lwksdF M.empty diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
+  updateMapDyn <- fItem $ lwksdF emptyMap diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
   addEv <- fRow $ mdo
     addPairDV <- fRow $ nWF mapDyn newPairEv newInputMapEv
     let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
@@ -375,11 +389,11 @@ buildLBAddDelete (MapLike to from diffMapF _ lwksdF) (MapElemWidgets eW nWF) mFN
     let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
     return newPairEv
   let newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv -- Event t (Map k (Maybe v))
-      insertDiffEv = fmap Just . uncurry M.singleton <$> addEv  
+      insertDiffEv = fmap Just . uncurry singleton <$> addEv  
       diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
       mapEditsFVEv = R.updated . join $ distributeOverDynPure <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v)))
-      editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
-  mapDyn <- R.holdDyn M.empty $ R.leftmost
+      editedMapEv = R.attachWith (flip applyMapDiff) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
+  mapDyn <- R.holdDyn emptyMap $ R.leftmost
             [
               fmap AccSuccess <$> newInputMapEv
             , editedMapEv
@@ -394,16 +408,17 @@ dynValidationToDynamicMaybe = fmap avToMaybe . unDynValidation
 -- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses.
 -- Just make widget into right form and do the distribute over the result
 buildLBEMapLWK'::(FormInstanceC t m
-                 , IsMap g
-                 , Ord k
+                 , Traversable g
+                 , IsMap g k
+--                 , Ord k
                  , VFormBuilderC t m k
                  , VFormBuilderC t m v)
-  =>(R.Dynamic t (g v) -> (k -> R.Dynamic t v->m a) -> m (R.Dynamic t (g a)))->LBWidget t m k v->LBBuildF' g t m k v
+  =>(forall a t n.LWKC t n=>R.Dynamic t (g v) -> (k -> R.Dynamic t v -> n a) -> n (R.Dynamic t (g a)))->LBWidget t m k v->LBBuildF' g t m k v
 buildLBEMapLWK' lwkF editW _ mapDyn0 = do
   mapDynEv <- traceDynAsEv (const "buildLBEMapLWK'") mapDyn0
-  mapDyn' <- R.holdDyn M.empty mapDynEv
+  mapDyn' <- R.holdDyn emptyMap mapDynEv
   mapOfDyn <- lwkF (R.traceDynWith (const "LWK' mapDyn0") mapDyn') editW -- Dynamic t (M.Map k (Dynamic t (Maybe (FValidation v)))
-  let mapFValDyn = mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
+  let mapFValDyn = mapMaybe id <$> (join $ distributeOverDynPure <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
   return . DynValidation $ sequenceA <$> mapFValDyn
 
 showKeyEditVal::(FormInstanceC t m
@@ -490,7 +505,7 @@ buildLBEMapLWK::(FormInstanceC t m
                  , Ord k, Show k)
                =>LBBuildF t m k v
 buildLBEMapLWK mFN map0Dyn = do
-  mapOfDynMaybe <- listWithKeyMap (R.traceDynWith (\m -> "LWK map0Dyn: " ++ show (M.keys m)) map0Dyn) editOne
+  mapOfDynMaybe <- LHF.listWithKeyMap (R.traceDynWith (\m -> "LWK map0Dyn: " ++ show (M.keys m)) map0Dyn) editOne
   return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
 
 
