@@ -158,7 +158,7 @@ listEditWidgetNoDup mapVDyn newPairEv newMapEv = do
       widget newKey = fRow $ do
         newElem <- fItem . unF $ buildForm' Nothing (constDynMaybe Nothing)
         return $ (,) <$> constDynValidation newKey <*> newElem
-      dupF (intKey,val) curMap = let isDup = elem val (IM.elems curMap) in if isDup then AccFailure [FNothing] else AccSuccess (intKey,val)
+      dupF (intKey,val) curMap = let isDup = L.elem val (IM.elems curMap) in if isDup then AccFailure [FNothing] else AccSuccess (intKey,val)
   newPair <- joinDynOfDynValidation <$> RD.widgetHold (widget 0) (widget <$> newKeyEv) -- DynValidation (k,v)
   return . DynValidation . fmap mergeAccValidation . unDynValidation $ dupF <$> newPair <*> (DynValidation $ sequenceA <$> mapVDyn)
 

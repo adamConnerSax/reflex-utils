@@ -9,7 +9,7 @@ author:              Adam Conner-Sax
 maintainer:          adam_conner_sax@yahoo.com
 copyright:           2015 Adam Conner-Sax
 category:            Web
-build-type:          Custom
+build-type:          Simple
 -- extra-source-files:
 cabal-version:       >=1.10
 
