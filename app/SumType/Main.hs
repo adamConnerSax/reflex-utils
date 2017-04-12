@@ -32,9 +32,6 @@ import           Data.Traversable                 (sequenceA)
 import           System.Process                   (spawnProcess)
 import           Text.Read                        (readMaybe)
 
---import           Generics.SOP                     ((:.:) (..), All2, Code,
---                                                   ConstructorName, Generic,
---                                                   HasDatatypeInfo, unComp)
 import           Reflex.Dom.Contrib.DynamicUtils
 import           Reflex.Dynamic.PerConstructor
 
