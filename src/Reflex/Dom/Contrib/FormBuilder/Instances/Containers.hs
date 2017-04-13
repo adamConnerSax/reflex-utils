@@ -115,6 +115,24 @@ buildAdjustableContainer ml mews va mFN dmfa  = validateForm va . makeForm $ do
     case fType of
       Interactive ->  unF $ buildLBAddDelete ml mews mFN dmfa 
       ObserveOnly ->  unF $ buildLBEditOnly  ml mews mFN dmfa
+
+buildAdjustableContainerWithSelect::(FormInstanceC t m
+                                    , LHFMap g
+                                    , LHFMapKey g ~ k
+                                    , Functor g                          
+                                    , Traversable g
+                                    , Ord k
+                                    , VFormBuilderC t m k
+                                    , VFormBuilderC t m v)
+  =>(g v -> M.Map k T.Text)
+  ->MapLike f g v 
+  ->MapElemWidgets g t m k v
+  ->BuildForm t m (f v)
+buildAdjustableContainerWithSelect labelKeys ml mews va mFN dmfa  = validateForm va . makeForm $ do
+    fType <- getFormType
+    case fType of
+      Interactive ->  unF $ buildLBAddDelete ml mews mFN dmfa 
+      ObserveOnly ->  unF $ buildLBEditOnlyWithSelect labelKeys ml mews mFN dmfa
   
 
 mapML::Ord k=>MapLike (M.Map k) (M.Map k) v
@@ -174,6 +192,9 @@ listWidgets = MapElemWidgets hideKeyEditVal listEditWidget
 
 buildList::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
 buildList = buildAdjustableContainer listML listWidgets
+
+--buildListWithSelect::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
+--buildListWithSelect = buildAdjustableContainerWithSelect (. IM.keys) listML listWidgets
 
 buildEqList::(FormInstanceC t m, Eq a, VFormBuilderC t m a, Eq a)=>BuildForm t m [a]
 buildEqList = buildAdjustableContainer listEqML listWidgets
@@ -451,9 +472,22 @@ buildSelectViewer labelKeys (MapElemWidgets eW nWF) mFN dmfv0 = mdo
   dmfv <- R.holdDyn lhfEmptyMap updatedMapEv
   return $ DynValidation $ AccSuccess <$> dmfv
       
+buildLBEditOnlyWithSelect::(FormInstanceC t m
+                           , LHFMap g
+                           , LHFMapKey g ~ k
+                           , Traversable g
+                           , VFormBuilderC t m k
+                           , VFormBuilderC t m v)
+  =>(g v -> M.Map k T.Text)
+  ->MapLike f g v 
+  ->MapElemWidgets g t m k v
+  ->Maybe FieldName
+  ->DynMaybe t (f v)
+  ->Form t m (f v)
+buildLBEditOnlyWithSelect labelKeys (MapLike to from _) widgets mFN dmfa =  makeForm $ do
+  let mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa
+  fmap from <$> buildSelectViewer labelKeys widgets mFN mapDyn0
       
-  
-
 showKeyEditVal::(FormInstanceC t m
                 , VFormBuilderC t m k
                 , VFormBuilderC t m v)=>ElemWidget t m k v
