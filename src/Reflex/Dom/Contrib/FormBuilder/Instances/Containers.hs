@@ -96,7 +96,6 @@ containerActionButton::(RD.PostBuild t m, RD.DomBuilder t m)=>T.Text -> m (RD.Ev
 containerActionButton = buttonNoSubmit'
 
 buildAdjustableContainer::(FormInstanceC t m
---                          , IsMap g k
                           , LHFMap g
                           , LHFMapKey g ~ k
                           , Functor g                          
@@ -272,9 +271,6 @@ type BuildF t m a    = FormValidator a->Maybe FieldName->DynMaybe t a->FRW t m a
 type BuildForm t m a = FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
 
 type LBBuildF' g t m k v = Maybe FieldName->R.Dynamic t (g v)->FRW t m (g v)
-
-type LWKSDC t m = (RD.DomBuilder t m, MonadFix m, R.MonadHold t m)
-type LWKC t m = (LWKSDC t m, RD.PostBuild t m)
 
 data MapLike f g v = MapLike { toMap::f v->g v
                              , fromMap::g v->f v
