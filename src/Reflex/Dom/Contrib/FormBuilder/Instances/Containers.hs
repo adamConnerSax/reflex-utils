@@ -34,12 +34,16 @@ import Control.Monad.Fix (MonadFix)
 import Control.Monad.Reader (lift,local)
 import Control.Monad.State (StateT, runStateT, get, put)
 import Control.Monad.Morph (hoist)
-import Control.Lens (view)
+import Control.Lens (view,(&),(.~))
 import Data.Functor.Compose (Compose(Compose,getCompose))
 import qualified Data.Text as T
 import           Text.Read                        (readMaybe)
 import Data.Validation (AccValidation(..))
 import qualified Data.Foldable as F
+import           Safe                              (headMay)
+
+
+
 -- imports only to make instances
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -277,9 +281,10 @@ data MapLike f g v = MapLike { toMap::f v->g v
                              , diffMap::g v -> g v -> g (Maybe v)
                              }
 
-data MapElemWidgets g t m k v = MapElemWidgets { elemW::ElemWidget t m k v                                
-                                               , newOneWF::R.Dynamic t (g (FValidation v)) -> R.Event t (k,v)->R.Event t (g v)->FRW t m (k,v) 
+data MapElemWidgets g t m k v = MapElemWidgets { elemW::ElemWidget t m k v
+                                               , newOneWF::R.Dynamic t (g (FValidation v)) -> R.Event t (k,v)->R.Event t (g v)->FRW t m (k,v)
                                                }
+
 
 
 instance (B.Validatable FValidation a, B.Validatable FValidation b)=>B.Validatable FValidation (a,b) where
@@ -396,6 +401,59 @@ buildLBEMapLWK' editW _ mapDyn0 = do
   let mapFValDyn = lhfMapMaybe id <$> (join $ LHF.distributeLHFMapOverDynPure <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
   return . DynValidation $ sequenceA <$> mapFValDyn
 
+boolToEither::Bool -> Either () ()
+boolToEither True = Right ()
+boolToEither False = Left ()
+
+-- NB: right event fires if true, left if false--(FalseEv,TrueEv)--which fits Either but is not intuitive, at least to me
+fanBool::R.Reflex t=>R.Event t Bool->(R.Event t (), R.Event t ())
+fanBool = R.fanEither . fmap boolToEither
+
+toSVLWKWidget::(RD.DomBuilder t m
+               ,RD.PostBuild t m)=>ElemWidget t m k v -> (k -> R.Dynamic t v -> R.Dynamic t Bool -> FR t m (R.Event t (FValidation v)))
+toSVLWKWidget ew k dv db = do
+   let divAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> db
+   dva <- RD.elDynAttr "div" divAttrs $ ew k dv
+   return $ R.updated $ unDynValidation dva  
+
+-- something using selectView
+buildSelectViewer::(FormInstanceC t m
+                   , Traversable g
+                   , LHFMap g
+                   , LHFMapKey g ~ k
+                   , VFormBuilderC t m k
+                   , VFormBuilderC t m v)
+  =>(g v->M.Map k T.Text)->MapElemWidgets g t m k v->LBBuildF' g t m k v
+buildSelectViewer labelKeys (MapElemWidgets eW nWF) mFN dmfv0 = mdo
+  newInputContainerEv <- dynAsEv dmfv0
+  let keyLabelMap = labelKeys <$> dmfv
+      selectWidget k0 = mdo
+        let ddConfig = RD.def & RD.dropdownConfig_attributes .~ R.constDyn ("size" =: "1")
+            newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m            
+            newk0Ev = R.attachWithMaybe newK0 (R.current k0Dyn) (R.updated keyLabelMap) -- has to be old k0, otherwise causality loop
+        k0Dyn <- R.holdDyn k0 newk0Ev
+        let dropdownWidget k =  RD._dropdown_value <$> RD.dropdown k keyLabelMap ddConfig -- this needs to know about deletes
+        selDyn <- join <$> RD.widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)        
+        LHF.selectViewListWithKeyLHFMap selDyn dmfv0 (toSVLWKWidget eW)  -- NB: this map doesn't need updating from edits or deletes
+
+      (nonNullEv,nullEv) = fanBool . R.updated . R.uniqDyn $ M.null <$> keyLabelMap
+      nullWidget = RD.el "div" (RD.text "Empty Container") >> return R.never
+      nullWidgetEv = nullWidget <$ nullEv
+      defaultKeyEv = R.fmapMaybe id $ R.tagPromptlyDyn (headMay . M.keys <$> keyLabelMap) nonNullEv -- headMay and fmapMaybe id are redundant here but...
+      widgetEv = R.leftmost [nullWidgetEv, selectWidget <$> defaultKeyEv]
+
+  mapEditEvDyn <- RD.widgetHold nullWidget widgetEv -- Dynamic (Event t (k,FValidation v))
+  mapEditEvBeh <- R.hold R.never (R.updated mapEditEvDyn)
+  let mapEditEv = R.switch mapEditEvBeh -- Event t (k,FValidation v)
+      mapPatchEv = uncurry lhfMapSingleton <$> mapEditEv
+      editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dmfv) (fmap avToMaybe <$> mapPatchEv)
+      updatedMapEv = R.leftmost [newInputContainerEv, editedMapEv] -- order matters here.  mapEditEv on new map will not have the whole map.  Arbitrary patch.
+  dmfv <- R.holdDyn lhfEmptyMap updatedMapEv
+  return $ DynValidation $ AccSuccess <$> dmfv
+      
+      
+  
+
 showKeyEditVal::(FormInstanceC t m
                 , VFormBuilderC t m k
                 , VFormBuilderC t m v)=>ElemWidget t m k v
@@ -448,6 +506,8 @@ visibleCSS = "style" =: "display: inline"
 
 ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
 ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
+
+
 
 -- unused from here down but good for reference
 type LBBuildF t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FR t m (R.Dynamic t (M.Map k v))

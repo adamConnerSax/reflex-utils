@@ -95,6 +95,7 @@ library
                      , these
                      , tuple
                      , hashable
+                     , safe
                      , unordered-containers >= 0.2.8.0
                      , validation
 
