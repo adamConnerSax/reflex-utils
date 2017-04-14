@@ -14,72 +14,73 @@
 {-# LANGUAGE UndecidableInstances      #-}
 module Main where
 
-import           Control.Lens                                (view, (^.))
-import           Control.Monad                               (foldM)
-import           Control.Monad.Fix                           (MonadFix)
-import           Control.Monad.IO.Class                      as IOC (MonadIO)
-import           Control.Monad.Reader                        (ask,runReaderT)
+import           Control.Lens                                        (view,
+                                                                      (^.))
+import           Control.Monad                                       (foldM)
+import           Control.Monad.Fix                                   (MonadFix)
+import           Control.Monad.IO.Class                              as IOC (MonadIO)
+import           Control.Monad.Reader                                (ask,
+                                                                      runReaderT)
 
-import           Data.Monoid                                 ((<>))
-import qualified GHC.Generics                                as GHC
-import           Prelude                                     hiding (div, rem,
-                                                              span)
-import           Text.Show.Pretty                            (ppShow)
+import           Data.Monoid                                         ((<>))
+import qualified GHC.Generics                                        as GHC
+import           Prelude                                             hiding
+                                                                      (div, rem,
+                                                                      span)
+import           Text.Show.Pretty                                    (ppShow)
 
-import           Data.ByteString                             (ByteString)
-import           Data.Default                                (def)
-import qualified Data.HashSet                                as HS
-import qualified Data.Map                                    as M
-import qualified Data.Sequence                               as Seq
-import qualified Data.Text                                   as T
-import           Data.Time.Calendar                          (Day (..),
-                                                              fromGregorian)
-import           Data.Time.Clock                             (UTCTime (..))
+import           Data.ByteString                                     (ByteString)
+import           Data.Default                                        (def)
+import qualified Data.HashSet                                        as HS
+import qualified Data.Map                                            as M
+import qualified Data.Sequence                                       as Seq
+import qualified Data.Text                                           as T
+import           Data.Time.Calendar                                  (Day (..), fromGregorian)
+import           Data.Time.Clock                                     (UTCTime (..))
 -- for a validation example...
-import           Control.Lens.Iso                            (iso)
-import           Data.Validation                             (AccValidation (..))
+import           Control.Lens.Iso                                    (iso)
+import           Data.Validation                                     (AccValidation (..))
 
 import           Reflex
-import qualified Reflex.Dom.Contrib.Widgets.Common           as RDC
-import           Reflex.Dom.Core                             hiding (InputElementConfig)
+import qualified Reflex.Dom.Contrib.Widgets.Common                   as RDC
+import           Reflex.Dom.Core                                     hiding (InputElementConfig)
 
-import           GHCJS.DOM.Types                             (JSM)
-import           Reflex.Dom.Contrib.CssUtils                 (CssLink,
-                                                              CssLinks (..),
-                                                              headElt)
-import           Reflex.Dom.Contrib.Layout.ClayUtils         (cssToBS)
-import           Reflex.Dom.Contrib.Layout.FlexLayout        (flexCol',
-                                                              flexCssBS,
-                                                              flexFill,
-                                                              flexItem',
-                                                              flexRow')
+import           GHCJS.DOM.Types                                     (JSM)
+import           Reflex.Dom.Contrib.CssUtils                         (CssLink, CssLinks (..),
+                                                                      headElt)
+import           Reflex.Dom.Contrib.Layout.ClayUtils                 (cssToBS)
+import           Reflex.Dom.Contrib.Layout.FlexLayout                (flexCol',
+                                                                      flexCssBS,
+                                                                      flexFill,
+                                                                      flexItem',
+                                                                      flexRow')
 import           Reflex.Dom.Contrib.Layout.TabLayout
-import           Reflex.Dom.Contrib.Layout.Types             (CssClass (..),
-                                                              CssClasses (..),
-                                                              LayoutDirection (..),
-                                                              LayoutOrientation (..),
-                                                              emptyCss,
-                                                              oneClass)
-import           Reflex.Dom.Contrib.ReflexConstraints        (MonadWidgetExtraC)
+import           Reflex.Dom.Contrib.Layout.Types                     (CssClass (..),
+                                                                      CssClasses (..),
+                                                                      LayoutDirection (..),
+                                                                      LayoutOrientation (..),
+                                                                      emptyCss,
+                                                                      oneClass)
+import           Reflex.Dom.Contrib.ReflexConstraints                (MonadWidgetExtraC)
 
 #ifdef USE_WKWEBVIEW
-import           Language.Javascript.JSaddle.WKWebView       (run)
+import           Language.Javascript.JSaddle.WKWebView               (run)
 #endif
 
 #ifdef USE_WARP
-import           Language.Javascript.JSaddle.Warp            (run)
+import           Language.Javascript.JSaddle.Warp                    (run)
 #endif
 
 --import Reflex.Dom.Contrib.Layout.LayoutP (doUnoptimizedLayout,doOptimizedLayout)
-import           DataBuilder                                 as B
+import           DataBuilder                                         as B
 import           Reflex.Dom.Contrib.FormBuilder
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
-import           Reflex.Dom.Contrib.FormBuilder.Instances     (FormInstanceC)
-import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers
+import           Reflex.Dom.Contrib.FormBuilder.Instances            (FormInstanceC)
+import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (buildListWithSelect)
 
 import           Css
 
-import qualified System.Process                              as SP
+import qualified System.Process                                      as SP
 
 --It's easy to add validation (via newtype wrapper)
 newtype Age = Age { unAge::Int } deriving (Show)
@@ -130,7 +131,7 @@ data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Gen
 instance Generic User
 instance HasDatatypeInfo User
 instance FormInstanceC t m=>FormBuilder t m User where
-  buildForm va mFN = liftF fCol . gBuildFormValidated va mFN 
+  buildForm va mFN = liftF fCol . gBuildFormValidated va mFN
 
 testUserForm::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m->m ()
 testUserForm cfg = do
@@ -167,8 +168,10 @@ instance FormInstanceC t m=>FormBuilder t m ReadableType where
 --We'll put these all in a Sum type to show how the form building handles that
 data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType | AA Age deriving (Show,GHC.Generic)
 
+newtype ListOfA = ListOfA [A] deriving (Show)
+
 --And then put those sum types in some other containerized contexts
-data B = B { int::Int, listOfA::[A] } deriving (Show,GHC.Generic)
+data B = B { int::Int, listOfA::ListOfA } deriving (Show,GHC.Generic)
 
 newtype MyMap = MyMap { map_String_B::M.Map String B } deriving (Show,GHC.Generic)
 
@@ -186,6 +189,11 @@ instance HasDatatypeInfo A
 instance FormInstanceC t m=>FormBuilder t m A where
   buildForm va mFN = liftF fRow . gBuildFormValidated va mFN
 
+convertValidator::FormValidator ListOfA -> FormValidator [A]
+convertValidator vLA lA = fmap (\(ListOfA x) -> x) $ vLA (ListOfA lA)
+
+instance (FormInstanceC t m, VFormBuilderC t m A)=>FormBuilder t m ListOfA where
+  buildForm va mFN = fmap ListOfA . buildListWithSelect (convertValidator va) mFN . fmap (\(ListOfA x)->x)
 
 instance Generic B
 instance HasDatatypeInfo B
@@ -230,16 +238,16 @@ buildDateOrDateTime va mFN dma =
   in fgvToForm . B.bSum $ customizeWidget <$> mdWrapped
 
 instance Generic DateOrDateTime
-instance HasDatatypeInfo DateOrDateTime 
+instance HasDatatypeInfo DateOrDateTime
 instance FormInstanceC t m=>FormBuilder t m DateOrDateTime where
-  buildForm = buildDateOrDateTime 
+  buildForm = buildDateOrDateTime
 
 -- put some data in for demo purposes
 
-b1 = B 12 [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
-b2 = B 4 [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
+b1 = B 12 $ ListOfA [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
+b2 = B 4 $ ListOfA [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
 
-c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 []) Seq.empty HS.empty)
+c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 (ListOfA [])) Seq.empty HS.empty)
 
 testMap::M.Map T.Text Int
 testMap = M.fromList [("A",1),("B",2)]
@@ -252,7 +260,7 @@ testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
 --  cDynM <- avMapToMap . fmap AccSuccess <$> runReaderT (buildLBEMapLVWK Nothing (constDyn testMap)) cfg
---  cDynM <- runSimpleFormR cfg (makeSimpleFormR $ (DynValidation . fmap AccSuccess <$> buildLBEMapLVWK Nothing (constDyn testMap))) 
+--  cDynM <- runSimpleFormR cfg (makeSimpleFormR $ (DynValidation . fmap AccSuccess <$> buildLBEMapLVWK Nothing (constDyn testMap)))
   cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just c)
   el "p" $ text "dynText:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
@@ -291,7 +299,7 @@ test cfg = do
   staticTabbedLayout def (complexFormTab cfg)
     [
       userFormTab cfg
-    , complexFormTab cfg 
+    , complexFormTab cfg
     , flowTestTab cfg
     ]
   return ()

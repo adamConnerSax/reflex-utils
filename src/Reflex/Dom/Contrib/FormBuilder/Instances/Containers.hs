@@ -11,7 +11,7 @@
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances  #-}
-module Reflex.Dom.Contrib.FormBuilder.Instances.Containers () where
+module Reflex.Dom.Contrib.FormBuilder.Instances.Containers (buildListWithSelect) where
 
 
 import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
@@ -41,7 +41,7 @@ import           Text.Read                        (readMaybe)
 import Data.Validation (AccValidation(..))
 import qualified Data.Foldable as F
 import           Safe                              (headMay)
-
+import Control.Arrow ((&&&))
 
 
 -- imports only to make instances
@@ -131,7 +131,7 @@ buildAdjustableContainerWithSelect::(FormInstanceC t m
 buildAdjustableContainerWithSelect labelKeys ml mews va mFN dmfa  = validateForm va . makeForm $ do
     fType <- getFormType
     case fType of
-      Interactive ->  unF $ buildLBAddDelete ml mews mFN dmfa 
+      Interactive ->  unF $ buildLBEditOnlyWithSelect labelKeys ml mews mFN dmfa 
       ObserveOnly ->  unF $ buildLBEditOnlyWithSelect labelKeys ml mews mFN dmfa
   
 
@@ -193,8 +193,8 @@ listWidgets = MapElemWidgets hideKeyEditVal listEditWidget
 buildList::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
 buildList = buildAdjustableContainer listML listWidgets
 
---buildListWithSelect::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
---buildListWithSelect = buildAdjustableContainerWithSelect (. IM.keys) listML listWidgets
+buildListWithSelect::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
+buildListWithSelect = buildAdjustableContainerWithSelect (M.fromList . fmap (id &&& (T.pack . show)) . IM.keys) listML listWidgets
 
 buildEqList::(FormInstanceC t m, Eq a, VFormBuilderC t m a, Eq a)=>BuildForm t m [a]
 buildEqList = buildAdjustableContainer listEqML listWidgets
@@ -445,9 +445,9 @@ buildSelectViewer::(FormInstanceC t m
                    , VFormBuilderC t m k
                    , VFormBuilderC t m v)
   =>(g v->M.Map k T.Text)->MapElemWidgets g t m k v->LBBuildF' g t m k v
-buildSelectViewer labelKeys (MapElemWidgets eW nWF) mFN dmfv0 = mdo
-  newInputContainerEv <- dynAsEv dmfv0
-  let keyLabelMap = labelKeys <$> dmfv
+buildSelectViewer labelKeys (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
+  newInputContainerEv <- dynAsEv dgvIn
+  let keyLabelMap = labelKeys <$> dgvForDD
       selectWidget k0 = mdo
         let ddConfig = RD.def & RD.dropdownConfig_attributes .~ R.constDyn ("size" =: "1")
             newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m            
@@ -455,7 +455,7 @@ buildSelectViewer labelKeys (MapElemWidgets eW nWF) mFN dmfv0 = mdo
         k0Dyn <- R.holdDyn k0 newk0Ev
         let dropdownWidget k =  RD._dropdown_value <$> RD.dropdown k keyLabelMap ddConfig -- this needs to know about deletes
         selDyn <- join <$> RD.widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)        
-        LHF.selectViewListWithKeyLHFMap selDyn dmfv0 (toSVLWKWidget eW)  -- NB: this map doesn't need updating from edits or deletes
+        LHF.selectViewListWithKeyLHFMap selDyn dgvForDD (toSVLWKWidget eW)  -- NB: this map doesn't need updating from edits or deletes
 
       (nonNullEv,nullEv) = fanBool . R.updated . R.uniqDyn $ M.null <$> keyLabelMap
       nullWidget = RD.el "div" (RD.text "Empty Container") >> return R.never
@@ -463,14 +463,25 @@ buildSelectViewer labelKeys (MapElemWidgets eW nWF) mFN dmfv0 = mdo
       defaultKeyEv = R.fmapMaybe id $ R.tagPromptlyDyn (headMay . M.keys <$> keyLabelMap) nonNullEv -- headMay and fmapMaybe id are redundant here but...
       widgetEv = R.leftmost [nullWidgetEv, selectWidget <$> defaultKeyEv]
 
-  mapEditEvDyn <- RD.widgetHold nullWidget widgetEv -- Dynamic (Event t (k,FValidation v))
+  mapEditEvDyn <- fRow $ RD.widgetHold nullWidget widgetEv -- Dynamic (Event t (k,FValidation v))
   mapEditEvBeh <- R.hold R.never (R.updated mapEditEvDyn)
   let mapEditEv = R.switch mapEditEvBeh -- Event t (k,FValidation v)
       mapPatchEv = uncurry lhfMapSingleton <$> mapEditEv
-      editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dmfv) (fmap avToMaybe <$> mapPatchEv)
-      updatedMapEv = R.leftmost [newInputContainerEv, editedMapEv] -- order matters here.  mapEditEv on new map will not have the whole map.  Arbitrary patch.
-  dmfv <- R.holdDyn lhfEmptyMap updatedMapEv
-  return $ DynValidation $ AccSuccess <$> dmfv
+      editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dgv) (fmap avToMaybe <$> mapPatchEv)
+
+  addEv <- fRow $ mdo -- Event t (k, v)
+    addPairDV <- fRow $ nWF (fmap AccSuccess <$> dgv) newPairEv newInputContainerEv
+    let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
+    addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
+    let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
+    return newPairEv
+  let insertDiffEv = fmap Just . uncurry lhfMapSingleton <$> addEv
+      mapAfterInsertEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dgv) insertDiffEv
+      updatedMapForDDEv = R.leftmost [newInputContainerEv, mapAfterInsertEv] --widget already knows about edits
+      updatedMapEv = R.leftmost [updatedMapForDDEv, editedMapEv] -- order matters here.  mapEditEv on new map will not have the whole map.  Arbitrary patch.
+  dgvForDD <- R.holdDyn lhfEmptyMap updatedMapForDDEv -- input to dropdown widget 
+  dgv <- R.holdDyn lhfEmptyMap updatedMapEv
+  return $ DynValidation $ AccSuccess <$> dgv
       
 buildLBEditOnlyWithSelect::(FormInstanceC t m
                            , LHFMap g
