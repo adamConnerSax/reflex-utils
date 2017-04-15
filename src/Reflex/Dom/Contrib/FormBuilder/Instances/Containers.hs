@@ -132,7 +132,7 @@ buildAdjustableContainerWithSelect labelKeys ml mews va mFN dmfa  = validateForm
     fType <- getFormType
     case fType of
       Interactive ->  unF $ buildLBWithSelect labelKeys ml mews mFN dmfa 
-      ObserveOnly ->  unF $ buildLBWithSelect labelKeys ml mews mFN dmfa
+      ObserveOnly ->  unF $ buildLBWithSelectEditOnly labelKeys ml mews mFN dmfa
   
 
 mapML::Ord k=>MapLike (M.Map k) (M.Map k) v
@@ -540,7 +540,7 @@ buildLBWithSelect labelKeys (MapLike to from _) widgets mFN dmfa =  makeForm $ d
   fmap from <$> buildSelectViewer labelKeys widgets mFN mapDyn0
 
 
-{-
+
 buildLBWithSelectEditOnly::(FormInstanceC t m
                            , LHFMap g
                            , LHFMapKey g ~ k
@@ -559,10 +559,7 @@ buildLBWithSelectEditOnly labelKeys (MapLike to from _) (MapElemWidgets eW _)  m
   newInputContainerEv <- dynAsEv dgv -- generate events when the input changes
   (_,editedMapEv) <- selectWidget labelKeys eW dgv
   res <- R.holdDyn lhfEmptyMap (R.leftmost [newInputContainerEv, editedMapEv])
-  return . from . DynValidation $ AccSuccess <$> res
--}
-
-
+  return . DynValidation $ AccSuccess . from <$> res
 
     
 showKeyEditVal::(FormInstanceC t m
