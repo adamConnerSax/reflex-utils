@@ -76,7 +76,7 @@ import           DataBuilder                                         as B
 import           Reflex.Dom.Contrib.FormBuilder
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.Instances            (FormInstanceC)
-import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (buildListWithSelect)
+import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (buildList, buildListWithSelect)
 
 import           Css
 
@@ -243,9 +243,10 @@ instance FormInstanceC t m=>FormBuilder t m DateOrDateTime where
   buildForm = buildDateOrDateTime
 
 -- put some data in for demo purposes
-
-b1 = B 12 $ ListOfA [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
-b2 = B 4 $ ListOfA [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
+lOfA1 = ListOfA [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
+lOfA2 = ListOfA [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
+b1 = B 12 $ lOfA1
+b2 = B 4 $ lOfA2
 
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 (ListOfA [])) Seq.empty HS.empty)
 

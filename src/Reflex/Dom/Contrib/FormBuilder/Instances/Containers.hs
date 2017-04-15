@@ -11,7 +11,12 @@
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances  #-}
-module Reflex.Dom.Contrib.FormBuilder.Instances.Containers (buildListWithSelect) where
+module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
+  (
+    buildListWithSelect
+  , buildList
+  , buildEqList
+  ) where
 
 
 import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
@@ -99,6 +104,12 @@ buttonNoSubmit' t = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "button" ("type"
 containerActionButton::(RD.PostBuild t m, RD.DomBuilder t m)=>T.Text -> m (RD.Event t ())
 containerActionButton = buttonNoSubmit'
 
+-- TODO: Make this f T.Text and generalize dropdown to accept any LHFMap
+data LabelStrategy k v = LabelValues (v -> T.Text) | LabelKeys (k -> T.Text) 
+labelLHFMap::(LHFMap f,Ord (LHFMapKey f))=>LabelStrategy (LHFMapKey f) v -> f v -> M.Map (LHFMapKey f)  T.Text
+labelLHFMap (LabelValues lv) = M.fromList . uncurry zip . (lhfMapKeys &&& (fmap lv . lhfMapElems)) 
+labelLHFMap (LabelKeys   lk) = M.fromList . uncurry zip . (id &&& fmap lk) . lhfMapKeys  
+
 buildAdjustableContainer::(FormInstanceC t m
                           , LHFMap g
                           , LHFMapKey g ~ k
@@ -124,15 +135,15 @@ buildAdjustableContainerWithSelect::(FormInstanceC t m
                                     , Ord k
                                     , VFormBuilderC t m k
                                     , VFormBuilderC t m v)
-  =>(g v -> M.Map k T.Text)
+  =>LabelStrategy k v
   ->MapLike f g v 
   ->MapElemWidgets g t m k v
   ->BuildForm t m (f v)
-buildAdjustableContainerWithSelect labelKeys ml mews va mFN dmfa  = validateForm va . makeForm $ do
+buildAdjustableContainerWithSelect labelStrategy ml mews va mFN dmfa  = validateForm va . makeForm $ do
     fType <- getFormType
     case fType of
-      Interactive ->  unF $ buildLBWithSelect labelKeys ml mews mFN dmfa 
-      ObserveOnly ->  unF $ buildLBWithSelectEditOnly labelKeys ml mews mFN dmfa
+      Interactive ->  unF $ buildLBWithSelect labelStrategy ml mews mFN dmfa 
+      ObserveOnly ->  unF $ buildLBWithSelectEditOnly labelStrategy ml mews mFN dmfa
   
 
 mapML::Ord k=>MapLike (M.Map k) (M.Map k) v
@@ -194,7 +205,7 @@ buildList::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
 buildList = buildAdjustableContainer listML listWidgets
 
 buildListWithSelect::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
-buildListWithSelect = buildAdjustableContainerWithSelect (M.fromList . fmap (id &&& (T.pack . show)) . IM.keys) listML listWidgets
+buildListWithSelect = buildAdjustableContainerWithSelect (LabelKeys (T.pack . show)) listML listWidgets
 
 buildEqList::(FormInstanceC t m, Eq a, VFormBuilderC t m a, Eq a)=>BuildForm t m [a]
 buildEqList = buildAdjustableContainer listEqML listWidgets
@@ -444,12 +455,12 @@ buildSelectViewer::(FormInstanceC t m
                    , LHFMapKey g ~ k
                    , VFormBuilderC t m k
                    , VFormBuilderC t m v)
-  =>(g v->M.Map k T.Text)->MapElemWidgets g t m k v->LBBuildF' g t m k v
-buildSelectViewer labelKeys (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
+  =>LabelStrategy k v->MapElemWidgets g t m k v->LBBuildF' g t m k v
+buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
   newInputContainerEv <- dynAsEv dgvIn -- generate events when the input changes
   
   -- chooser widget with dropdown
-  (maybeSelDyn, editedMapEv) <- selectWidget labelKeys eW dgvForDD
+  (maybeSelDyn, editedMapEv) <- selectWidget labelStrategy eW dgvForDD
 --  let editDiffEv = fmap avToMaybe . uncurry lhfMapSingleton <$> mapEditEv
 --      editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dgv) editDiffEv  -- has edits; these don't get fed back in.
 
@@ -483,16 +494,17 @@ selectWidget::(FormInstanceC t m
               , LHFMapKey g ~ k
               , VFormBuilderC t m k
               , VFormBuilderC t m v)
-  =>(g v->M.Map k T.Text)->ElemWidget t m k v->R.Dynamic t (g v)->FR t m (R.Dynamic t (Maybe k), R.Event t (g v))
-selectWidget labelKeys eW dgv = do
+  =>LabelStrategy k v->ElemWidget t m k v->R.Dynamic t (g v)->FR t m (R.Dynamic t (Maybe k), R.Event t (g v))
+selectWidget labelStrategy eW dgv = do
   -- we need to deal differently with the null and non-null container case
   -- and we only want to know when we've changed from one to the other
-  let (nonNullEv,nullEv) = fanBool . R.updated . R.uniqDyn $ lhfMapNull <$> dgv
+  inputNullEv <- dynAsEv (R.uniqDyn $ lhfMapNull <$> dgv)
+  let (nonNullEv,nullEv) = fanBool inputNullEv -- . R.updated . R.uniqDyn $ lhfMapNull <$> dgv
       nullWidget = RD.el "div" (RD.text "Empty Container") >> return (R.constDyn Nothing, R.never)
       nullWidgetEv = nullWidget <$ nullEv
       -- This one needs to be prompt since the container just became non-null
       defaultKeyEv = R.fmapMaybe id $ R.tagPromptlyDyn (headMay . lhfMapKeys <$> dgv) nonNullEv -- headMay and fmapMaybe id are redundant here but...
-      sWidget k0 = selectWidgetWithDefault labelKeys eW k0 dgv
+      sWidget k0 = selectWidgetWithDefault labelStrategy eW k0 dgv
       widgetEv = R.leftmost [nullWidgetEv, sWidget <$> defaultKeyEv]
   selWidget <- fRow $ RD.widgetHold nullWidget widgetEv
   let maybeSelDyn =  join $ fst <$> selWidget -- Dynamic t (Maybe k)
@@ -510,9 +522,9 @@ selectWidgetWithDefault::(FormInstanceC t m
                          , LHFMapKey g ~ k
                          , VFormBuilderC t m k
                          , VFormBuilderC t m v)
-  =>(g v->M.Map k T.Text)->ElemWidget t m k v->k->R.Dynamic t (g v)->FR t m (R.Dynamic t (Maybe k), R.Event t (k, FValidation v))
-selectWidgetWithDefault labelKeys eW k0 dgv = mdo
-  let keyLabelMap = labelKeys <$> dgv -- dynamic map for the dropdown/chooser.  dgvForDD will change on input change or new element add. Not edits. Deletes?
+  =>LabelStrategy k v->ElemWidget t m k v->k->R.Dynamic t (g v)->FR t m (R.Dynamic t (Maybe k), R.Event t (k, FValidation v))
+selectWidgetWithDefault labelStrategy eW k0 dgv = mdo
+  let keyLabelMap = labelLHFMap labelStrategy <$> dgv -- dynamic map for the dropdown/chooser.  dgvForDD will change on input change or new element add. Not edits. Deletes?
       ddConfig = RD.def & RD.dropdownConfig_attributes .~ R.constDyn ("size" =: "1")
       newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m  -- compute new default key           
       newk0Ev = R.attachWithMaybe newK0 (R.current k0Dyn) (R.updated keyLabelMap) -- has to be old k0, otherwise causality loop
@@ -529,15 +541,15 @@ buildLBWithSelect::(FormInstanceC t m
                    , Traversable g
                    , VFormBuilderC t m k
                    , VFormBuilderC t m v)
-  =>(g v -> M.Map k T.Text)
+  =>LabelStrategy k v
   ->MapLike f g v 
   ->MapElemWidgets g t m k v
   ->Maybe FieldName
   ->DynMaybe t (f v)
   ->Form t m (f v)
-buildLBWithSelect labelKeys (MapLike to from _) widgets mFN dmfa =  makeForm $ do
+buildLBWithSelect labelStrategy (MapLike to from _) widgets mFN dmfa =  makeForm $ do
   let mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa
-  fmap from <$> buildSelectViewer labelKeys widgets mFN mapDyn0
+  fmap from <$> buildSelectViewer labelStrategy widgets mFN mapDyn0
 
 
 
@@ -547,17 +559,16 @@ buildLBWithSelectEditOnly::(FormInstanceC t m
                            , Traversable g
                            , VFormBuilderC t m k
                            , VFormBuilderC t m v)
-  =>(g v -> M.Map k T.Text)
+  =>LabelStrategy k v
   ->MapLike f g v 
   ->MapElemWidgets g t m k v
   ->Maybe FieldName
   ->DynMaybe t (f v)
   ->Form t m (f v)
-buildLBWithSelectEditOnly labelKeys (MapLike to from _) (MapElemWidgets eW _)  mFN dmfv =  makeForm $ do
-  let toG x = fmap maybeMapToMap . getCompose $ to <$> x
-      dgv = toG dmfv
-  newInputContainerEv <- dynAsEv dgv -- generate events when the input changes
-  (_,editedMapEv) <- selectWidget labelKeys eW dgv
+buildLBWithSelectEditOnly labelStrategy (MapLike to from _) (MapElemWidgets eW _)  mFN dmfv =  makeForm $ do
+  let dgv = fmap maybeMapToMap . getCompose $ to <$> dmfv
+  newInputContainerEv <- dynAsEv dgv -- generate events when the input changes and at postbuild
+  (_,editedMapEv) <- selectWidget labelStrategy eW dgv
   res <- R.holdDyn lhfEmptyMap (R.leftmost [newInputContainerEv, editedMapEv])
   return . DynValidation $ AccSuccess . from <$> res
 
