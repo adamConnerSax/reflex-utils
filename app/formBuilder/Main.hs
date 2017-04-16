@@ -262,7 +262,7 @@ testComplexForm cfg = do
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
 --  cDynM <- avMapToMap . fmap AccSuccess <$> runReaderT (buildLBEMapLVWK Nothing (constDyn testMap)) cfg
 --  cDynM <- runSimpleFormR cfg (makeSimpleFormR $ (DynValidation . fmap AccSuccess <$> buildLBEMapLVWK Nothing (constDyn testMap)))
-  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just c)
+  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just lOfA1)
   el "p" $ text "dynText:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed:"

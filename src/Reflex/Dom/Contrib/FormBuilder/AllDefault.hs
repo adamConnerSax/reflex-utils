@@ -148,10 +148,18 @@ defSumF conWidgets = fRow $ do
       inputIndexEv = whichFired events
   validClasses <- validDataClasses
   formType <- getFormType
-  let observeOnlyAttr = if formType == ObserveOnly then ("disabled" RD.=: "") else M.empty
-      ddAttrs = (titleAttr "Constructor" <> observeOnlyAttr)
-      ddConfig = RD.DropdownConfig inputIndexEv (R.constDyn ddAttrs)
-  chosenIndexEv <- fItem $ RD._dropdown_change <$> RD.dropdown 0 (RD.constDyn $ M.fromList indexedNames) ddConfig
+  let selectionControl = case formType of
+        Interactive ->
+          let ddAttrs = (titleAttr "Constructor") -- <> observeOnlyAttr)
+              ddConfig = RD.DropdownConfig inputIndexEv (R.constDyn ddAttrs)
+          in RD._dropdown_change <$> RD.dropdown 0 (RD.constDyn $ M.fromList indexedNames) ddConfig          
+        ObserveOnly -> do
+          let newConNameEv = R.fmapMaybe (\n -> T.pack <$> safeIndex n names) inputIndexEv
+          curConName <- R.holdDyn "" newConNameEv
+          RD.el "div" (RD.dynText curConName) >> R.never
+
+--  let observeOnlyAttr = if formType == ObserveOnly then ("disabled" RD.=: "") else M.empty      
+  chosenIndexEv <- fItem $ selectionControl
   let newIndexEv = R.leftmost [inputIndexEv,chosenIndexEv]
   curIndex <- R.holdDyn 0 newIndexEv
   let switchWidgetEv = R.updated . R.uniqDyn $ curIndex

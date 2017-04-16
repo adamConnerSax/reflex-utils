@@ -530,7 +530,6 @@ selectWidgetWithDefault labelStrategy eW k0 dgv = mdo
       ddConfig = RD.DropdownConfig newk0Ev (R.constDyn ("size" =: "1"))
       dropdownWidget k =  RD._dropdown_value <$> RD.dropdown k keyLabelMap ddConfig 
   k0Dyn <- R.holdDyn k0 newk0Ev 
---  selDyn <- join <$> RD.widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)
   selDyn <- dropdownWidget k0
   editEv <- LHF.selectViewListWithKeyLHFMap selDyn dgv (toSVLWKWidget eW)  -- NB: this map doesn't need updating from edits or deletes
   return (Just <$> selDyn, editEv) -- we need the selection to make the delete button work
