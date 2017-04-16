@@ -1,16 +1,16 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE KindSignatures        #-}
-{-# LANGUAGE RecursiveDo           #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE RecursiveDo            #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE TupleSections          #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE UndecidableInstances   #-}
 module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
   (
     buildListWithSelect
@@ -19,34 +19,34 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
   ) where
 
 
-import Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
+import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
 -- All the basic (primitive types, tuples, etc.) are in here
-import Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC,dynAsEv,traceDynAsEv)
-import Reflex.Dom.Contrib.FormBuilder.Builder
-import Reflex.Dom.Contrib.FormBuilder.DynValidation (accValidation)
-import Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
-import Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv)
+import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
+import           Reflex.Dom.Contrib.FormBuilder.Builder
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation (accValidation)
+import           Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
+import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv)
 import qualified Reflex.Dom.Contrib.ListHoldFunctions.Maps as LHF
-import Reflex.Dom.Contrib.ListHoldFunctions.Maps (LHFMap(..))
+import           Reflex.Dom.Contrib.ListHoldFunctions.Maps (LHFMap(..))
 
 -- reflex imports
 import qualified Reflex as R 
 import qualified Reflex.Dom as RD
-import Reflex.Dom ((=:))
+import           Reflex.Dom ((=:))
 
-import Control.Monad (join)
-import Control.Monad.Fix (MonadFix)
-import Control.Monad.Reader (lift,local)
-import Control.Monad.State (StateT, runStateT, get, put)
-import Control.Monad.Morph (hoist)
-import Control.Lens (view,(&),(.~))
-import Data.Functor.Compose (Compose(Compose,getCompose))
+import           Control.Monad (join)
+import           Control.Monad.Fix (MonadFix)
+import           Control.Monad.Reader (lift,local)
+import           Control.Monad.State (StateT, runStateT, get, put)
+import           Control.Monad.Morph (hoist)
+import           Control.Lens (view,(&),(.~))
+import           Data.Functor.Compose (Compose(Compose,getCompose))
 import qualified Data.Text as T
 import           Text.Read                        (readMaybe)
-import Data.Validation (AccValidation(..))
+import           Data.Validation (AccValidation(..))
 import qualified Data.Foldable as F
 import           Safe                              (headMay)
-import Control.Arrow ((&&&))
+import           Control.Arrow ((&&&))
 
 
 -- imports only to make instances
@@ -55,11 +55,11 @@ import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.Sequence as Seq
 import qualified Data.Set as S
-import Data.Hashable (Hashable)
+import           Data.Hashable (Hashable)
 import qualified Data.HashMap.Lazy as HML
 import qualified Data.HashSet as HS
-import Data.Maybe (fromMaybe,catMaybes,isNothing,fromJust)
-import Data.Monoid ((<>))
+import           Data.Maybe (fromMaybe,catMaybes,isNothing,fromJust)
+import           Data.Monoid ((<>))
 -- my libs
 import qualified DataBuilder as B
 
@@ -110,15 +110,12 @@ labelLHFMap::(LHFMap f,Ord (LHFMapKey f))=>LabelStrategy (LHFMapKey f) v -> f v 
 labelLHFMap (LabelValues lv) = M.fromList . uncurry zip . (lhfMapKeys &&& (fmap lv . lhfMapElems)) 
 labelLHFMap (LabelKeys   lk) = M.fromList . uncurry zip . (id &&& fmap lk) . lhfMapKeys  
 
-buildAdjustableContainer::(FormInstanceC t m
-                          , LHFMap g
-                          , LHFMapKey g ~ k
-                          , Functor g                          
-                          , Traversable g
-                          , Ord k
-                          , VFormBuilderC t m k
-                          , VFormBuilderC t m v)
-  =>MapLike f g v 
+type VFormBuilderBoth t m a b = (VFormBuilderC t m a, VFormBuilderC t m b)
+type LHFMapForForm g k = (Functor g, Traversable g, LHFMap g, LHFMapKey g ~ k, Ord k) 
+type ContainerForm t m g k v = (FormInstanceC t m, LHFMapForForm g k, VFormBuilderBoth t m k v)
+
+buildAdjustableContainer::ContainerForm t m g k v
+  =>MapLike f g v
   ->MapElemWidgets g t m k v
   ->BuildForm t m (f v)
 buildAdjustableContainer ml mews va mFN dmfa  = validateForm va . makeForm $ do
@@ -127,14 +124,7 @@ buildAdjustableContainer ml mews va mFN dmfa  = validateForm va . makeForm $ do
       Interactive ->  unF $ buildLBAddDelete ml mews mFN dmfa 
       ObserveOnly ->  unF $ buildLBEditOnly  ml mews mFN dmfa
 
-buildAdjustableContainerWithSelect::(FormInstanceC t m
-                                    , LHFMap g
-                                    , LHFMapKey g ~ k
-                                    , Functor g                          
-                                    , Traversable g
-                                    , Ord k
-                                    , VFormBuilderC t m k
-                                    , VFormBuilderC t m v)
+buildAdjustableContainerWithSelect::ContainerForm t m g k v
   =>LabelStrategy k v
   ->MapLike f g v 
   ->MapElemWidgets g t m k v
@@ -152,22 +142,23 @@ mapML = MapLike id id LHF.lhfMapDiffNoEq
 mapEQML::(Ord k, Eq v)=>MapLike (M.Map k) (M.Map k) v
 mapEQML = mapML { diffMap = LHF.lhfMapDiff }
 
-mapEditWidget::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>R.Dynamic t (M.Map k (FValidation v)) -> R.Event t (k,v) -> R.Event t (M.Map k v) -> FRW t m (k,v)
+mapEditWidget::(FormInstanceC t m, VFormBuilderBoth t m k v)
+  =>R.Dynamic t (M.Map k (FValidation v)) -> R.Event t (k,v) -> R.Event t (M.Map k v) -> FRW t m (k,v)
 mapEditWidget _ newPair newMap = do
   let pairWidget = unF $ buildForm' Nothing (constDynMaybe Nothing)
       pairWidgetEv = pairWidget <$ R.leftmost [() <$ newPair, () <$ newMap]
   joinDynOfDynValidation <$> RD.widgetHold pairWidget pairWidgetEv -- DynValidation (k,v)
 
-mapWidgets::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)=>MapElemWidgets (M.Map k) t m k v
+mapWidgets::(FormInstanceC t m, VFormBuilderBoth t m k v)=>MapElemWidgets (M.Map k) t m k v
 mapWidgets = MapElemWidgets showKeyEditVal mapEditWidget
 
-buildMap::(FormInstanceC t m,Ord k, VFormBuilderC t m k, VFormBuilderC t m v)=>BuildForm t m (M.Map k v)
+buildMap::(FormInstanceC t m,Ord k, VFormBuilderBoth t m k v)=>BuildForm t m (M.Map k v)
 buildMap = buildAdjustableContainer mapML mapWidgets
 
-buildEqMap::(FormInstanceC t m,Ord k, Eq v, VFormBuilderC t m k, VFormBuilderC t m v)=>BuildForm t m (M.Map k v)
+buildEqMap::(FormInstanceC t m,Ord k, Eq v, VFormBuilderBoth t m k v)=>BuildForm t m (M.Map k v)
 buildEqMap = buildAdjustableContainer mapEQML mapWidgets
 
-instance (FormInstanceC t m, Ord k, VFormBuilderC t m k, VFormBuilderC t m a)=>FormBuilder t m (M.Map k a) where
+instance (FormInstanceC t m, Ord k, VFormBuilderBoth t m k a)=>FormBuilder t m (M.Map k a) where
   buildForm =  buildMap
 
 listML::MapLike [] IM.IntMap v
@@ -179,7 +170,11 @@ listEqML = listML { diffMap = LHF.lhfMapDiff }
 safeMaximum::Ord a=>[a]->Maybe a
 safeMaximum l = if null l then Nothing else Just $ maximum l
 
-listEditWidget::(FormInstanceC t m, VFormBuilderC t m a)=>R.Dynamic t (IM.IntMap (FValidation a)) -> R.Event t (Int, a) -> R.Event t (IM.IntMap a) -> FRW t m (Int,a)
+listEditWidget::(FormInstanceC t m, VFormBuilderC t m a)
+  =>R.Dynamic t (IM.IntMap (FValidation a))
+  -> R.Event t (Int, a)
+  -> R.Event t (IM.IntMap a)
+  -> FRW t m (Int,a)
 listEditWidget _ newPairEv newMapEv = do
   let newKeyEv = R.leftmost [(+1) . fst <$>  newPairEv, maybe 0 (+1) . safeMaximum . IM.keys <$> newMapEv]
       widget newKey = fRow $ do
@@ -207,7 +202,7 @@ buildList = buildAdjustableContainer listML listWidgets
 buildListWithSelect::(FormInstanceC t m, VFormBuilderC t m a)=>BuildForm t m [a]
 buildListWithSelect = buildAdjustableContainerWithSelect (LabelKeys (T.pack . show)) listML listWidgets
 
-buildEqList::(FormInstanceC t m, Eq a, VFormBuilderC t m a, Eq a)=>BuildForm t m [a]
+buildEqList::(FormInstanceC t m, VFormBuilderC t m a, Eq a)=>BuildForm t m [a]
 buildEqList = buildAdjustableContainer listEqML listWidgets
 
 instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m [a] where
@@ -225,14 +220,14 @@ buildSet = buildAdjustableContainer setEqML setEqWidgets
 instance (FormInstanceC t m, VFormBuilderC t m a, Ord a)=>FormBuilder t m (S.Set a) where
   buildForm = buildSet
 
-intMapEditWidget::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m v)
+intMapEditWidget::(FormInstanceC t m, VFormBuilderBoth t m Int v)
   =>R.Dynamic t (IM.IntMap (FValidation v)) -> R.Event t (Int,v) -> R.Event t (IM.IntMap v) -> FRW t m (Int,v)
 intMapEditWidget _ newPair newMap = do
   let pairWidget = unF $ buildForm' Nothing (constDynMaybe Nothing)
       pairWidgetEv = pairWidget <$ R.leftmost [() <$ newPair, () <$ newMap]
   joinDynOfDynValidation <$> RD.widgetHold pairWidget pairWidgetEv -- DynValidation (Int,v)
 
-intMapWidgets::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m v)=>MapElemWidgets IM.IntMap t m Int v
+intMapWidgets::(FormInstanceC t m, VFormBuilderBoth t m Int v)=>MapElemWidgets IM.IntMap t m Int v
 intMapWidgets = MapElemWidgets showKeyEditVal intMapEditWidget
 
 intMapML::MapLike IM.IntMap IM.IntMap v
@@ -241,13 +236,13 @@ intMapML = MapLike id id  LHF.lhfMapDiffNoEq
 intMapEqML::Eq v=>MapLike IM.IntMap IM.IntMap v
 intMapEqML = intMapML { diffMap = LHF.lhfMapDiff } 
 
-buildIntMap::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a)=>BuildForm t m (IM.IntMap a)
+buildIntMap::(FormInstanceC t m, VFormBuilderBoth t m Int a)=>BuildForm t m (IM.IntMap a)
 buildIntMap = buildAdjustableContainer intMapML intMapWidgets
 
-buildEqIntMap::(FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a, Eq a)=>BuildForm t m (IM.IntMap a)
+buildEqIntMap::(FormInstanceC t m, VFormBuilderBoth t m Int a, Eq a)=>BuildForm t m (IM.IntMap a)
 buildEqIntMap = buildAdjustableContainer intMapEqML intMapWidgets
 
-instance (FormInstanceC t m, VFormBuilderC t m Int, VFormBuilderC t m a)=>FormBuilder t m (IM.IntMap a) where
+instance (FormInstanceC t m, VFormBuilderBoth t m Int a)=>FormBuilder t m (IM.IntMap a) where
   buildForm = buildIntMap
     
 sequenceML::MapLike Seq.Seq IM.IntMap v
@@ -265,8 +260,11 @@ buildEqSequence  = buildAdjustableContainer sequenceEqML listWidgets
 instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (Seq.Seq a) where
   buildForm = buildSequence
 
-hashMapEditWidget::(FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v)
-  =>R.Dynamic t (HML.HashMap k (FValidation v)) -> R.Event t (k,v) -> R.Event t (HML.HashMap k v) -> FRW t m (k,v)
+hashMapEditWidget::(FormInstanceC t m, VFormBuilderBoth t m k v)
+  =>R.Dynamic t (HML.HashMap k (FValidation v))
+  -> R.Event t (k,v)
+  -> R.Event t (HML.HashMap k v)
+  -> FRW t m (k,v)
 hashMapEditWidget _ newPair newMap = do
   let pairWidget = unF $ buildForm' Nothing (constDynMaybe Nothing)
       pairWidgetEv = pairWidget <$ R.leftmost [() <$ newPair, () <$ newMap]
@@ -281,13 +279,19 @@ hashMapML = MapLike id id LHF.lhfMapDiffNoEq
 hashMapEqML::(Hashable k, Ord k, Eq v)=>MapLike (HML.HashMap k) (HML.HashMap k) v
 hashMapEqML = hashMapML { diffMap = LHF.lhfMapDiff }
 
-buildHashMap::(FormInstanceC t m,Ord k, Hashable k, VFormBuilderC t m k, VFormBuilderC t m v)=>BuildForm t m (HML.HashMap k v)
+buildHashMap::(FormInstanceC t m,Ord k, Hashable k, VFormBuilderBoth t m k v)
+  =>BuildForm t m (HML.HashMap k v)
 buildHashMap = buildAdjustableContainer hashMapML hashMapWidgets
 
-buildEqHashMap::(FormInstanceC t m,Ord k, Hashable k, VFormBuilderC t m k, VFormBuilderC t m v, Eq v)=>BuildForm t m (HML.HashMap k v)
+buildEqHashMap::(FormInstanceC t m,Ord k, Hashable k, VFormBuilderBoth t m k v, Eq v)
+  =>BuildForm t m (HML.HashMap k v)
 buildEqHashMap = buildAdjustableContainer hashMapEqML hashMapWidgets
 
-instance (FormInstanceC t m, VFormBuilderC t m k, VFormBuilderC t m v, Ord k, Hashable k, Eq k)=>FormBuilder t m (HML.HashMap k v) where
+instance (FormInstanceC t m
+         , VFormBuilderBoth t m k v
+         , Ord k
+         , Hashable k
+         , Eq k)=>FormBuilder t m (HML.HashMap k v) where
   buildForm = buildHashMap
 
 -- Can't do plain HashSet since we need (Eq a) for fromList. So we may as well take advantage in the diffing
@@ -329,22 +333,19 @@ type LBWidget t m k v = k->R.Dynamic t v->FR t m (R.Dynamic t (Maybe (FValidatio
 elemWidgetToLBWidget::(R.Reflex t, Functor m)=>ElemWidget t m k v->LBWidget t m k v
 elemWidgetToLBWidget ew k vDyn = fmap Just . unDynValidation <$> ew k vDyn
 
+{-
 class IsMap m k | m->k where
   emptyMap::m a
   mapMaybe::(a -> Maybe b) -> m a -> m b
   distributeOverDynPure::R.Reflex t=> m (R.Dynamic t v) -> R.Dynamic t (m v)
   singleton::k->v->m v
   applyMapDiff::m (Maybe v) -> m v -> m v
+-}
 
 maybeMapToMap::LHFMap f=>Maybe (f v) -> f v
 maybeMapToMap = fromMaybe lhfEmptyMap 
 
-buildLBEditOnly::(FormInstanceC t m
-                 , LHFMap g
-                 , LHFMapKey g ~ k
-                 , Traversable g
-                 , VFormBuilderC t m k
-                 , VFormBuilderC t m v)
+buildLBEditOnly::ContainerForm t m g k v
   =>MapLike f g v 
   ->MapElemWidgets g t m k v
   ->Maybe FieldName
@@ -354,12 +355,7 @@ buildLBEditOnly (MapLike to from _) (MapElemWidgets eW _) mFN dmfa =  makeForm $
   let mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa
   fmap from <$> buildLBEMapLWK' (elemWidgetToLBWidget eW) mFN mapDyn0
 
-buildLBDelete::(FormInstanceC t m
-               , LHFMap g
-               , LHFMapKey g ~ k
-               , Traversable g
-               , VFormBuilderC t m k
-               , VFormBuilderC t m v)
+buildLBDelete::ContainerForm t m g k v
   =>MapLike f g v 
   ->MapElemWidgets g t m k v
   ->Maybe FieldName
@@ -374,13 +370,7 @@ buildLBDelete (MapLike to from _) (MapElemWidgets eW _) mFN dmfa = makeForm $ do
 
 --NB: I see why tagPromtlyDyn is required for pairWidgetEv (so when the new one is drawn, it sees the updated map) but not quite why
 -- that doesn't lead to a cycle.
-buildLBAddDelete::(FormInstanceC t m
-                  , Functor g
-                  , Traversable g
-                  , LHFMap g
-                  , LHFMapKey g ~ k
-                  , VFormBuilderC t m k
-                  , VFormBuilderC t m v)
+buildLBAddDelete::ContainerForm t m g k v
   =>MapLike f g v
   ->MapElemWidgets g t m k v
   ->Maybe FieldName
@@ -395,12 +385,7 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   newInputMapEv <- dynAsEv mapDyn0 
   updateMapDyn <- fItem $ LHF.listWithKeyShallowDiffLHFMap lhfEmptyMap diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
   
-  addEv <- fRow $ mdo
-    addPairDV <- fRow $ nWF mapDyn newPairEv newInputMapEv
-    let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
-    addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
-    let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
-    return newPairEv
+  addEv <- fRow $ newItemWidget nWF mapDyn newInputMapEv
 
   let newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv -- Event t (Map k (Maybe v))
       insertDiffEv = fmap Just . uncurry lhfMapSingleton <$> addEv  
@@ -415,19 +400,26 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   return . DynValidation $ fmap from . sequenceA <$> mapDyn
 
 
+newItemWidget::ContainerForm t m g k v
+  =>(R.Dynamic t (g (FValidation v)) -> R.Event t (k,v)->R.Event t (g v)->FRW t m (k,v))
+  -> R.Dynamic t (g (FValidation v))
+  -> R.Event t (g v)
+  -> FR t m (R.Event t (k,v))
+newItemWidget editPairW mapDyn newInputMapEv = mdo
+  addPairDV <- fRow $ editPairW mapDyn newPairEv newInputMapEv
+  let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
+  addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
+  let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
+  return newPairEv
+
+
 
 dynValidationToDynamicMaybe::R.Reflex t=>DynValidation t a -> R.Dynamic t (Maybe a)
 dynValidationToDynamicMaybe = fmap avToMaybe . unDynValidation 
 
 -- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses.
 -- Just make widget into right form and do the distribute over the result
-buildLBEMapLWK'::(FormInstanceC t m
-                 , Traversable g
-                 , LHFMap g
-                 , LHFMapKey g ~ k
-                 , VFormBuilderC t m k
-                 , VFormBuilderC t m v)
-  =>LBWidget t m k v->LBBuildF' g t m k v
+buildLBEMapLWK'::ContainerForm t m g k v=>LBWidget t m k v->LBBuildF' g t m k v
 buildLBEMapLWK' editW _ mapDyn0 = do
   mapDynEv <- dynAsEv mapDyn0 
   mapDyn' <- R.holdDyn lhfEmptyMap mapDynEv
@@ -444,7 +436,8 @@ fanBool::R.Reflex t=>R.Event t Bool->(R.Event t (), R.Event t ())
 fanBool = R.fanEither . fmap boolToEither
 
 toSVLWKWidget::(RD.DomBuilder t m
-               ,RD.PostBuild t m)=>ElemWidget t m k v -> (k -> R.Dynamic t v -> R.Dynamic t Bool -> FR t m (R.Event t (FValidation v)))
+               ,RD.PostBuild t m)
+  =>ElemWidget t m k v -> (k -> R.Dynamic t v -> R.Dynamic t Bool -> FR t m (R.Event t (FValidation v)))
 toSVLWKWidget ew k dv db = do
    let divAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> db
    dva <- RD.elDynAttr "div" divAttrs $ ew k dv
@@ -455,8 +448,7 @@ buildSelectViewer::(FormInstanceC t m
                    , Traversable g
                    , LHFMap g
                    , LHFMapKey g ~ k
-                   , VFormBuilderC t m k
-                   , VFormBuilderC t m v)
+                   , VFormBuilderBoth t m k v)
   =>LabelStrategy k v->MapElemWidgets g t m k v->LBBuildF' g t m k v
 buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
   newInputContainerEv <- dynAsEv dgvIn -- generate events when the input changes
@@ -471,12 +463,7 @@ buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
   let deleteEv = R.fmapMaybe id $ R.tag (R.current maybeSelDyn) deleteButtonEv  -- Event t k, only fires if there is a current selection
       deleteDiffEv = flip lhfMapSingleton Nothing <$> deleteEv -- Event t (k, Nothing)  
         
-  addEv <- fRow $ mdo -- Event t (k, v)
-    addPairDV <- fRow $ nWF (fmap AccSuccess <$> dgv) newPairEv newInputContainerEv
-    let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
-    addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
-    let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
-    return newPairEv
+  addEv <- fRow $ newItemWidget nWF (fmap AccSuccess <$> dgv) newInputContainerEv
     
   let insertDiffEv = fmap Just . uncurry lhfMapSingleton <$> addEv
       insertDeleteDiffEv = R.leftmost [insertDiffEv, deleteDiffEv]
@@ -494,9 +481,11 @@ selectWidget::(FormInstanceC t m
               , Traversable g
               , LHFMap g
               , LHFMapKey g ~ k
-              , VFormBuilderC t m k
-              , VFormBuilderC t m v)
-  =>LabelStrategy k v->ElemWidget t m k v->R.Dynamic t (g v)->FR t m (R.Dynamic t (Maybe k), R.Event t (g v))
+              , VFormBuilderBoth t m k v)
+  =>LabelStrategy k v
+  ->ElemWidget t m k v
+  ->R.Dynamic t (g v)
+  ->FR t m (R.Dynamic t (Maybe k), R.Event t (g v))
 selectWidget labelStrategy eW dgv = do
   -- we need to deal differently with the null and non-null container case
   -- and we only want to know when we've changed from one to the other
@@ -518,13 +507,12 @@ selectWidget labelStrategy eW dgv = do
   return (maybeSelDyn, editedMapEv)
 
 
-selectWidgetWithDefault::(FormInstanceC t m
-                         , Traversable g
-                         , LHFMap g
-                         , LHFMapKey g ~ k
-                         , VFormBuilderC t m k
-                         , VFormBuilderC t m v)
-  =>LabelStrategy k v->ElemWidget t m k v->k->R.Dynamic t (g v)->FR t m (R.Dynamic t (Maybe k), R.Event t (k, FValidation v))
+selectWidgetWithDefault::ContainerForm t m g k v
+  =>LabelStrategy k v
+  ->ElemWidget t m k v
+  ->k
+  ->R.Dynamic t (g v)
+  ->FR t m (R.Dynamic t (Maybe k), R.Event t (k, FValidation v))
 selectWidgetWithDefault labelStrategy eW k0 dgv = mdo
   let keyLabelMap = labelLHFMap labelStrategy <$> dgv -- dynamic map for the dropdown/chooser.  dgvForDD will change on input change or new element add. Not edits. Deletes?
       newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m  -- compute new default key           
@@ -537,12 +525,7 @@ selectWidgetWithDefault labelStrategy eW k0 dgv = mdo
   return (Just <$> selDyn, editEv) -- we need the selection to make the delete button work
   
     
-buildLBWithSelect::(FormInstanceC t m
-                   , LHFMap g
-                   , LHFMapKey g ~ k
-                   , Traversable g
-                   , VFormBuilderC t m k
-                   , VFormBuilderC t m v)
+buildLBWithSelect::ContainerForm t m g k v
   =>LabelStrategy k v
   ->MapLike f g v 
   ->MapElemWidgets g t m k v
@@ -555,12 +538,7 @@ buildLBWithSelect labelStrategy (MapLike to from _) widgets mFN dmfa =  makeForm
 
 
 
-buildLBWithSelectEditOnly::(FormInstanceC t m
-                           , LHFMap g
-                           , LHFMapKey g ~ k
-                           , Traversable g
-                           , VFormBuilderC t m k
-                           , VFormBuilderC t m v)
+buildLBWithSelectEditOnly::ContainerForm t m g k v
   =>LabelStrategy k v
   ->MapLike f g v 
   ->MapElemWidgets g t m k v
@@ -575,9 +553,7 @@ buildLBWithSelectEditOnly labelStrategy (MapLike to from _) (MapElemWidgets eW _
   return . DynValidation $ AccSuccess . from <$> res
 
     
-showKeyEditVal::(FormInstanceC t m
-                , VFormBuilderC t m k
-                , VFormBuilderC t m v)=>ElemWidget t m k v
+showKeyEditVal::(FormInstanceC t m, VFormBuilderBoth t m k v)=>ElemWidget t m k v
 showKeyEditVal k vDyn = do
   vEv <- dynAsEv vDyn -- traceDynAsEv (const "showKeyEditVal") vDyn
   mvDyn <- R.holdDyn Nothing (Just <$> vEv)
@@ -594,9 +570,7 @@ hideKeyEditVal _ vDyn = do
   fRow . fItem . unF $ buildForm' Nothing (Compose mvDyn)
 
 
-editAndDeleteElemWidget::(FormInstanceC t m
-                         , VFormBuilderC t m k
-                         , VFormBuilderC t m v)
+editAndDeleteElemWidget::(FormInstanceC t m, VFormBuilderBoth t m k v)
   =>ElemWidget t m k v->R.Dynamic t Bool->LBWidget t m k v
 editAndDeleteElemWidget eW visibleDyn k vDyn = mdo
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
@@ -628,17 +602,11 @@ visibleCSS = "style" =: "display: inline"
 ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
 ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
 
-
-
 -- unused from here down but good for reference
 type LBBuildF t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FR t m (R.Dynamic t (M.Map k v))
 
-buildLBEMapWithAdd::(FormInstanceC t m
-                    , VFormBuilderC t m k
-                    , VFormBuilderC t m v
-                    , Ord k)
-                  =>LBBuildF t m k v -- simple builder
-                  ->LBBuildF t m k v
+buildLBEMapWithAdd::(FormInstanceC t m, VFormBuilderBoth t m k v, Ord k)
+  =>LBBuildF t m k v->LBBuildF t m k v
 buildLBEMapWithAdd lbbf mFN mapDyn0 = fCol $ mdo
   initialMapEv <- dynAsEv mapDyn0
   editedMapDyn <- fItem $ lbbf mFN mapDyn -- Dynamic t (M.Map k v)
@@ -654,10 +622,7 @@ buildLBEMapWithAdd lbbf mFN mapDyn0 = fCol $ mdo
 
 
 -- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses. 
-buildLBEMapLWK::(FormInstanceC t m
-                 , VFormBuilderC t m v
-                 , Ord k, Show k)
-               =>LBBuildF t m k v
+buildLBEMapLWK::(FormInstanceC t m, VFormBuilderC t m v, Ord k, Show k)=>LBBuildF t m k v
 buildLBEMapLWK mFN map0Dyn = do
   mapOfDynMaybe <- LHF.listWithKeyLHFMap map0Dyn editOne
   return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
@@ -671,10 +636,7 @@ editOne k valDyn = do
 -- now do with ListViewWithKey so we can put in delete events
 -- NB: ListViewWithKey returns an Event t (M.Map k v) but it contains only the keys for which things have changed
 -- NB: ListViewWithKey gets only mapDyn0 as input.  Only need to update if something *else* changes the map.
-buildLBEMapLVWK::(FormInstanceC t m
-                  , VFormBuilderC t m v
-                  , Ord k , Show k)
-                => LBBuildF t m k v
+buildLBEMapLVWK::(FormInstanceC t m, VFormBuilderC t m v, Ord k , Show k)=> LBBuildF t m k v
 buildLBEMapLVWK mFN mapDyn0 = mdo
   let editF k valDyn = R.updated <$> editOne k valDyn -- editOneEv (R.constDyn True) k valDyn
   newInputMapEv <- dynAsEv mapDyn0

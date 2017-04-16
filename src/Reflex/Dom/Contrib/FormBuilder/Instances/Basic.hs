@@ -19,51 +19,61 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        , traceDynAsEv
        , buildDynReadMaybe
        , buildDynReadable
---       , BasicC
        , FormInstanceC
        , buildFormIso
        ) where
 
-import           Control.Lens                          (over, view, (^.))
-import           Control.Monad                         (join)
-import           Control.Monad.Fix                     (MonadFix)
-import           Control.Monad.Reader                  (lift)
-import           Data.Functor.Compose                  (Compose(Compose,getCompose))
-import qualified Data.Map                              as M
-import           Data.Maybe                            (fromMaybe,fromJust) --FIX FromJust
-import           Data.Monoid                           ((<>))
-import           Data.Readable                         (Readable, fromText)
-import qualified Data.Text                             as T
-import           Data.Validation                       (AccValidation (..))
-import           Text.Read                             (readMaybe)
+import           Control.Lens                                 (over, view, (^.))
+import           Control.Monad                                (join)
+import           Control.Monad.Fix                            (MonadFix)
+import           Control.Monad.Reader                         (lift)
+import           Data.Functor.Compose                         (Compose (Compose, getCompose))
+import qualified Data.Map                                     as M
+import           Data.Maybe                                   (fromJust,
+                                                               fromMaybe)
+import           Data.Monoid                                  ((<>))
+import           Data.Readable                                (Readable,
+                                                               fromText)
+import qualified Data.Text                                    as T
+import           Data.Validation                              (AccValidation (..))
+import           Text.Read                                    (readMaybe)
 
-import           Control.Lens                          (view)
-import           Control.Lens.Iso                      (Iso', from, iso)
+import           Control.Lens                                 (view)
+import           Control.Lens.Iso                             (Iso', from, iso)
 
 -- types for instances
-import           Data.ByteString                       (ByteString)
-import           Data.Int                              (Int16, Int32, Int64,
-                                                        Int8)
-import           Data.Time.Calendar                    (Day, fromGregorian)
-import           Data.Time.Clock                       (UTCTime (..),
-                                                        secondsToDiffTime)
-import           Data.Tuple.Select                     (sel1, sel2, sel3, sel4,
-                                                        sel5)
-import           Data.Word                             (Word16, Word32, Word64,
-                                                        Word8)
+import           Data.ByteString                              (ByteString)
+import           Data.Int                                     (Int16, Int32,
+                                                               Int64, Int8)
+import           Data.Time.Calendar                           (Day,
+                                                               fromGregorian)
+import           Data.Time.Clock                              (UTCTime (..),
+                                                               secondsToDiffTime)
+import           Data.Tuple.Select                            (sel1, sel2, sel3,
+                                                               sel4, sel5)
+import           Data.Word                                    (Word16, Word32,
+                                                               Word64, Word8)
 -- reflex imports
-import qualified Reflex                                as R
-import qualified Reflex.Dom                            as RD
+import qualified Reflex                                       as R
+import qualified Reflex.Dom                                   as RD
 import           Reflex.Dom.Contrib.Widgets.Common
 
 -- From this lib
 
-import qualified DataBuilder                           as B
-import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv,traceMDynAsEv,traceDynMAsEv)
-import           Reflex.Dom.Contrib.Layout.Types       (emptyCss, toCssString)
-import           Reflex.Dom.Contrib.ReflexConstraints
+import qualified DataBuilder                                  as B
+import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv,
+                                                               dynamicMaybeAsEv,
+                                                               mDynAsEv,
+                                                               traceDynAsEv,
+                                                               traceDynMAsEv,
+                                                               traceMDynAsEv)
 import           Reflex.Dom.Contrib.FormBuilder.Builder
-import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynMaybe,constDynMaybe,dynMaybeAsEv)
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynMaybe,
+                                                               constDynMaybe,
+                                                               dynMaybeAsEv)
+import           Reflex.Dom.Contrib.Layout.Types              (emptyCss,
+                                                               toCssString)
+import           Reflex.Dom.Contrib.ReflexConstraints
 -- instances
 
 --some helpers
@@ -149,7 +159,7 @@ restrictWidget' restrictFunc wFunc cfg = do
   w <- wFunc cfg
   let e = R.leftmost [(_widgetConfig_setValue cfg), restrictFunc w]
   v <- R.holdDyn (_widgetConfig_initialValue cfg) e
-  return $ w { _hwidget_value = v 
+  return $ w { _hwidget_value = v
              , _hwidget_change = e
              }
 
@@ -190,7 +200,7 @@ instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (R.Dynamic t 
 -- | String and Text
 instance FormInstanceC t m=>FormBuilder t m T.Text where
   buildForm va mFN initialMDyn = makeForm $ do
-    inputEv <- traceDynMAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")") (getCompose initialMDyn) -- FIXTrace
+    inputEv <- dynamicMaybeAsEv (getCompose initialMDyn) -- traceDynMAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")") (getCompose initialMDyn) -- FIXTrace
 --    inputEv <- maybe (return R.never) (traceDynAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")")) mInitialDyn  -- mDynAsEv mInitialDyn
     formWidget' inputEv "" id va id mFN Nothing $ textWidgetValue mFN
 
@@ -276,17 +286,17 @@ instance FormInstanceC t m=>FormBuilder t m Day where
 
 
 -- uses generics to build instances
-instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a) 
+instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a)
 
 instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (Either a b)
 
 -- if two things are Isomorphic, we can use one to build the other
--- NB: Isomorphic sum types will end up using the constructors, etc. of the one used to bootstrap 
+-- NB: Isomorphic sum types will end up using the constructors, etc. of the one used to bootstrap
 buildFormIso::(FormInstanceC t m, VFormBuilderC t m a)=>Iso' a b->FormValidator b->Maybe FieldName->DynMaybe t b->Form t m b
 buildFormIso isoAB vb mFN dmb = makeForm $ do
   let a2b = view isoAB
       b2a = view $ from isoAB
-  unF $ a2b <$> buildForm (fmap b2a . vb . a2b) mFN (b2a <$> dmb)  
+  unF $ a2b <$> buildForm (fmap b2a . vb . a2b) mFN (b2a <$> dmb)
 
 avToEither::AccValidation a b -> Either a b
 avToEither (AccSuccess x) = Right x
@@ -315,8 +325,8 @@ instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuil
   buildForm va mFN tupMDyn = validateForm va . makeForm $ do
       maW <- unF $ buildForm' Nothing (sel1 <$> tupMDyn)
       mbW <- unF $ buildForm' Nothing (sel2 <$> tupMDyn)
-      return $ (,) <$> maW <*> mbW 
-  
+      return $ (,) <$> maW <*> mbW
+
 instance (FormInstanceC t m
          , VFormBuilderC t m a
          , VFormBuilderC t m b
