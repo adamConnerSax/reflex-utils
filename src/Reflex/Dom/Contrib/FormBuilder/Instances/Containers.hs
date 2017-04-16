@@ -525,12 +525,13 @@ selectWidgetWithDefault::(FormInstanceC t m
   =>LabelStrategy k v->ElemWidget t m k v->k->R.Dynamic t (g v)->FR t m (R.Dynamic t (Maybe k), R.Event t (k, FValidation v))
 selectWidgetWithDefault labelStrategy eW k0 dgv = mdo
   let keyLabelMap = labelLHFMap labelStrategy <$> dgv -- dynamic map for the dropdown/chooser.  dgvForDD will change on input change or new element add. Not edits. Deletes?
-      ddConfig = RD.def & RD.dropdownConfig_attributes .~ R.constDyn ("size" =: "1")
       newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m  -- compute new default key           
       newk0Ev = R.attachWithMaybe newK0 (R.current k0Dyn) (R.updated keyLabelMap) -- has to be old k0, otherwise causality loop
+      ddConfig = RD.DropdownConfig newk0Ev (R.constDyn ("size" =: "1"))
       dropdownWidget k =  RD._dropdown_value <$> RD.dropdown k keyLabelMap ddConfig 
   k0Dyn <- R.holdDyn k0 newk0Ev 
-  selDyn <- join <$> RD.widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)        
+--  selDyn <- join <$> RD.widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)
+  selDyn <- dropdownWidget k0
   editEv <- LHF.selectViewListWithKeyLHFMap selDyn dgv (toSVLWKWidget eW)  -- NB: this map doesn't need updating from edits or deletes
   return (Just <$> selDyn, editEv) -- we need the selection to make the delete button work
   
