@@ -141,7 +141,6 @@ safeIndex n l = let ln = take (n+1) l in if length ln == (n+1) then Just (last l
 safeHead::[a]->Maybe a
 safeHead = safeIndex 0
 
--- FIXME:  unsafe functions, head and (!!)
 -- FIXME: write a version that uses all the widgets at once, hiding the unused ones.  THat will be more efficient in the case when switching is expected
 defSumF::DefaultConfigurationC t m=>[(B.ConName,R.Event t (),FRW t m a)]->FRW t m a
 defSumF conWidgets = fRow $ do
@@ -168,7 +167,7 @@ defSumF conWidgets = fRow $ do
         RD.el "span" $ RD.text msg
         return $ dynValidationErr [FInvalid msg]
       newWidgetEv = fromMaybe (errorW "index error in defSumF!") . (\n -> safeIndex n widgets) <$> switchWidgetEv
-  fItem $ DynValidation . join . fmap unDynValidation <$> RD.widgetHold (fromMaybe (errorW "empty widget list in defSumF!") $ safeHead widgets) newWidgetEv
+  fItem $ joinDynOfDynValidation <$> RD.widgetHold (fromMaybe (errorW "empty widget list in defSumF!") $ safeHead widgets) newWidgetEv
 
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 
