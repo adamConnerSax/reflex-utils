@@ -394,12 +394,14 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
         AccFailure _ -> Just <$> new
   newInputMapEv <- dynAsEv mapDyn0 
   updateMapDyn <- fItem $ LHF.listWithKeyShallowDiffLHFMap lhfEmptyMap diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
+  
   addEv <- fRow $ mdo
     addPairDV <- fRow $ nWF mapDyn newPairEv newInputMapEv
     let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
     addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
     let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
     return newPairEv
+
   let newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv -- Event t (Map k (Maybe v))
       insertDiffEv = fmap Just . uncurry lhfMapSingleton <$> addEv  
       diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
@@ -427,9 +429,9 @@ buildLBEMapLWK'::(FormInstanceC t m
                  , VFormBuilderC t m v)
   =>LBWidget t m k v->LBBuildF' g t m k v
 buildLBEMapLWK' editW _ mapDyn0 = do
-  mapDynEv <- traceDynAsEv (const "buildLBEMapLWK'") mapDyn0
+  mapDynEv <- dynAsEv mapDyn0 
   mapDyn' <- R.holdDyn lhfEmptyMap mapDynEv
-  mapOfDyn <- LHF.listWithKeyLHFMap (R.traceDynWith (const "LWK' mapDyn0") mapDyn') editW -- Dynamic t (M.Map k (Dynamic t (Maybe (FValidation v)))
+  mapOfDyn <- LHF.listWithKeyLHFMap mapDyn' editW -- Dynamic t (M.Map k (Dynamic t (Maybe (FValidation v)))
   let mapFValDyn = lhfMapMaybe id <$> (join $ LHF.distributeLHFMapOverDynPure <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
   return . DynValidation $ sequenceA <$> mapFValDyn
 
@@ -577,7 +579,7 @@ showKeyEditVal::(FormInstanceC t m
                 , VFormBuilderC t m k
                 , VFormBuilderC t m v)=>ElemWidget t m k v
 showKeyEditVal k vDyn = do
-  vEv <- traceDynAsEv (const "showKeyEditVal") vDyn
+  vEv <- dynAsEv vDyn -- traceDynAsEv (const "showKeyEditVal") vDyn
   mvDyn <- R.holdDyn Nothing (Just <$> vEv)
   let showKey k = toReadOnly $ buildForm' Nothing (constDynMaybe (Just k))
   fRow $ do
@@ -587,7 +589,7 @@ showKeyEditVal k vDyn = do
 
 hideKeyEditVal::(FormInstanceC t m, VFormBuilderC t m v)=>ElemWidget t m k v
 hideKeyEditVal _ vDyn = do
-  vEv <- traceDynAsEv (const "hideKeyEditVal") vDyn
+  vEv <- dynAsEv vDyn -- traceDynAsEv (const "hideKeyEditVal") vDyn
   mvDyn <- R.holdDyn Nothing (Just <$> vEv)
   fRow . fItem . unF $ buildForm' Nothing (Compose mvDyn)
 
@@ -657,14 +659,14 @@ buildLBEMapLWK::(FormInstanceC t m
                  , Ord k, Show k)
                =>LBBuildF t m k v
 buildLBEMapLWK mFN map0Dyn = do
-  mapOfDynMaybe <- LHF.listWithKeyLHFMap (R.traceDynWith (\m -> "LWK map0Dyn: " ++ show (M.keys m)) map0Dyn) editOne
+  mapOfDynMaybe <- LHF.listWithKeyLHFMap map0Dyn editOne
   return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
 
 
 editOne::(FormInstanceC t m, VFormBuilderC t m v, Show k)=>k->R.Dynamic t v->FR t m (R.Dynamic t (Maybe v))
 editOne k valDyn = do
   fItem $ RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k)
-  fItem $ fmap avToMaybe . unDynValidation <$> (unF $ buildForm' Nothing (Compose $ Just <$> R.traceDynWith (const "editOne valDyn") valDyn))
+  fItem $ fmap avToMaybe . unDynValidation <$> (unF $ buildForm' Nothing (Compose $ Just <$> valDyn))
 
 -- now do with ListViewWithKey so we can put in delete events
 -- NB: ListViewWithKey returns an Event t (M.Map k v) but it contains only the keys for which things have changed
@@ -675,12 +677,12 @@ buildLBEMapLVWK::(FormInstanceC t m
                 => LBBuildF t m k v
 buildLBEMapLVWK mFN mapDyn0 = mdo
   let editF k valDyn = R.updated <$> editOne k valDyn -- editOneEv (R.constDyn True) k valDyn
-  newInputMapEv <- traceDynAsEv (\m->"LVWK mapDyn0" ++ show (M.keys m)) mapDyn0
-  mapEditsEv  <- R.traceEventWith (\m->"LVWK mapEditsEv: " ++ show (M.keys m)) <$> RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
-  let editedMapEv = R.traceEventWith (\m->"LVWK editedMap: " ++ show (M.keys m)) $ R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv
+  newInputMapEv <- dynAsEv mapDyn0
+  mapEditsEv  <- RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
+  let editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv
       mapEv = R.leftmost [newInputMapEv, editedMapEv]
   mapDyn <- R.holdDyn M.empty mapEv
-  return (R.traceDynWith (\m -> "LVWK mapDyn: " ++ show (M.keys m)) mapDyn)
+  return mapDyn
 
 
 

@@ -12,52 +12,54 @@ module Reflex.Dom.Contrib.FormBuilder.AllDefault (DefaultConfigurationC) where
 -- | A useful default config for quick form building
 -- | Also serves as an example for building others
 -- | and defFailureF and defSumF can be re-used for other implementations
-import           Reflex.Dom.Contrib.Layout.FlexLayout          (flexCenter,
-                                                                flexCol,
-                                                                flexFill,
-                                                                flexItem,
-                                                                flexItem',
-                                                                flexRow)
-import           Reflex.Dom.Contrib.Layout.Types               (CssClasses (..), LayoutDirection (..),
-                                                                LayoutOrientation (..),
-                                                                emptyCss,
-                                                                oneClass,
-                                                                toCssString)
+import           Reflex.Dom.Contrib.Layout.FlexLayout           (flexCenter,
+                                                                 flexCol,
+                                                                 flexFill,
+                                                                 flexItem,
+                                                                 flexItem',
+                                                                 flexRow)
+import           Reflex.Dom.Contrib.Layout.Types                (CssClasses (..),
+                                                                 LayoutDirection (..),
+                                                                 LayoutOrientation (..),
+                                                                 emptyCss,
+                                                                 oneClass,
+                                                                 toCssString)
 
-import           Reflex.Dom.Contrib.CssUtils                   (CssLinks (..))
-import           Reflex.Dom.Contrib.Layout.ClayUtils           (cssToBS)
-import           Reflex.Dom.Contrib.ReflexConstraints          (MonadWidgetExtraC)
+import           Reflex.Dom.Contrib.CssUtils                    (CssLinks (..))
 import           Reflex.Dom.Contrib.FormBuilder.Builder
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.Instances       (formWidget)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
+import           Reflex.Dom.Contrib.Layout.ClayUtils            (cssToBS)
+import           Reflex.Dom.Contrib.ReflexConstraints           (MonadWidgetExtraC)
 
-import qualified DataBuilder                                   as B
+import qualified DataBuilder                                    as B
 
-import qualified Reflex                                        as R
-import qualified Reflex.Dom                                    as RD
-import qualified Reflex.Dom.Widget.Basic                       as RD
-import           Reflex.Dom.Contrib.Widgets.Common             (Widget0 (..), WidgetConfig (..),
-                                                                htmlDropdownStatic)
+import qualified Reflex                                         as R
+import qualified Reflex.Dom                                     as RD
+import           Reflex.Dom.Contrib.Widgets.Common              (Widget0 (..), WidgetConfig (..),
+                                                                 htmlDropdownStatic)
+import qualified Reflex.Dom.Widget.Basic                        as RD
 
-import           Clay                                          hiding (head, id)
-import qualified Clay                                          as C
-import qualified Clay.Flexbox                                  as Flexbox
-import           Control.Monad.Fix                             (MonadFix)
-import           Control.Monad                                 (join)
-import           Control.Monad.IO.Class                        (MonadIO)
-import           Control.Monad.Reader                          (ask, asks, lift,
-                                                                local)
-import           Data.ByteString                               (ByteString)
-import           Data.Default                                  (Default (..))
-import qualified Data.Map                                      as M
-import           Data.Maybe                                    (fromMaybe)
-import           Data.Monoid                                   ((<>))
-import qualified Data.Text                                     as T
-import           Data.Functor.Compose                          (Compose(Compose,getCompose))
+import           Clay                                           hiding (head,
+                                                                 id)
+import qualified Clay                                           as C
+import qualified Clay.Flexbox                                   as Flexbox
+import           Control.Monad                                  (join)
+import           Control.Monad.Fix                              (MonadFix)
+import           Control.Monad.IO.Class                         (MonadIO)
+import           Control.Monad.Reader                           (ask, asks,
+                                                                 lift, local)
+import           Data.ByteString                                (ByteString)
+import           Data.Default                                   (Default (..))
+import           Data.Functor.Compose                           (Compose (Compose, getCompose))
+import qualified Data.Map                                       as M
+import           Data.Maybe                                     (fromMaybe)
+import           Data.Monoid                                    ((<>))
+import qualified Data.Text                                      as T
 
-import           Prelude                                       hiding (div, rem,
-                                                                span)
+import           Prelude                                        hiding (div,
+                                                                 rem, span)
 
 instance Default (FormIncludedCss) where
   def = FormIncludedCss defaultCss (CssLinks [])
@@ -152,13 +154,12 @@ defSumF conWidgets = fRow $ do
         Interactive ->
           let ddAttrs = (titleAttr "Constructor") -- <> observeOnlyAttr)
               ddConfig = RD.DropdownConfig inputIndexEv (R.constDyn ddAttrs)
-          in RD._dropdown_change <$> RD.dropdown 0 (RD.constDyn $ M.fromList indexedNames) ddConfig          
+          in RD._dropdown_change <$> RD.dropdown 0 (RD.constDyn $ M.fromList indexedNames) ddConfig
         ObserveOnly -> do
           let newConNameEv = R.fmapMaybe (\n -> T.pack <$> safeIndex n names) inputIndexEv
           curConName <- R.holdDyn "" newConNameEv
-          RD.el "div" (RD.dynText curConName) >> R.never
+          RD.divClass "sf-observed-constructor" (RD.dynText curConName) >> return R.never
 
---  let observeOnlyAttr = if formType == ObserveOnly then ("disabled" RD.=: "") else M.empty      
   chosenIndexEv <- fItem $ selectionControl
   let newIndexEv = R.leftmost [inputIndexEv,chosenIndexEv]
   curIndex <- R.holdDyn 0 newIndexEv
@@ -169,28 +170,6 @@ defSumF conWidgets = fRow $ do
       newWidgetEv = fromMaybe (errorW "index error in defSumF!") . (\n -> safeIndex n widgets) <$> switchWidgetEv
   fItem $ DynValidation . join . fmap unDynValidation <$> RD.widgetHold (fromMaybe (errorW "empty widget list in defSumF!") $ safeHead widgets) newWidgetEv
 
-
-{-
-data FRPair t m a = FRPair { frpCN::B.ConName, frpV::FRW t m a }
-
-instance Eq (FRPair t m a) where
-  (FRPair a _) == (FRPair b _) = a == b
-
-do
-  let conNames = fst . unzip $ conWidgets
-      getFRP::B.ConName->[(B.ConName,FRW t m a)]->FRPair t m a
-      getFRP cn = FRPair cn . fromJust . M.lookup cn . M.fromList
-      pft (x,y) = FRPair x y
-      defPair = maybe (pft $ head conWidgets) (`getFRP` conWidgets) mDefCon
-  validClasses <- validDataClasses
-  let attrsDyn = R.constDyn (cssClassAttr validClasses <> titleAttr "Constructor")
-      wc = WidgetConfig RD.never defPair attrsDyn
-      constructorDD x = R.uniqDyn <$> _widget0_value <$> htmlDropdownStatic conNames T.pack (`getFRP` conWidgets) x -- m (Dynamic t (FRPair t m a))
-  fRow $ do
-    frpCW <- fItemL $ formWidget id (T.pack . frpCN) Nothing wc constructorDD
-    let rebuildEv = R.traceEventWith (const "defSumF!!") $ R.updated frpCW
-    unF $ switchingForm (makeForm . frpV) defPair rebuildEv
--}
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 
 boxMargin m = sym margin (rem m)
@@ -225,6 +204,9 @@ isValidData = div # ".sf-valid"
 
 isInvalidData::Selector
 isInvalidData = div # ".sf-invalid"
+
+isObservedConstructor::Selector
+isObservedConstructor = div # ".sf-observed-constructor"
 
 
 formElements = do
@@ -278,8 +260,8 @@ observerDefaultCss = do
   isObserver ? do
     background ghostwhite
     summary ? cursor pointer
---    isFormItem ? do
---      cssSolidTextBox 0.1 lightslategrey black
     isValidData ? do
       cssOutlineTextBox 0.1 black black
       sym padding (rem 0.1)
+    isObservedConstructor ? do
+      cssOutlineTextBox 0.1 red red
