@@ -385,10 +385,9 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   newInputMapEv <- dynAsEv mapDyn0 
   updateMapDyn <- fItem $ LHF.listWithKeyShallowDiffLHFMap lhfEmptyMap diffMapEv eW' -- Dynamic t (Map k (Dynamic t (Maybe (FValidation v))))
   
-  addEv <- fRow $ newItemWidget nWF mapDyn newInputMapEv
+  insertDiffEv <- fRow $ newItemWidget nWF mapDyn newInputMapEv
 
   let newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv -- Event t (Map k (Maybe v))
-      insertDiffEv = fmap Just . uncurry lhfMapSingleton <$> addEv  
       diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
       mapEditsFVEv = R.updated . join $ LHF.distributeLHFMapOverDynPure <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v)))
       editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
@@ -404,13 +403,14 @@ newItemWidget::ContainerForm t m g k v
   =>(R.Dynamic t (g (FValidation v)) -> R.Event t (k,v)->R.Event t (g v)->FRW t m (k,v))
   -> R.Dynamic t (g (FValidation v))
   -> R.Event t (g v)
-  -> FR t m (R.Event t (k,v))
+  -> FR t m (R.Event t (g (Maybe v)))
 newItemWidget editPairW mapDyn newInputMapEv = mdo
   addPairDV <- fRow $ editPairW mapDyn newPairEv newInputMapEv
   let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
   addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
   let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
-  return newPairEv
+      addDiffEv = fmap Just . uncurry lhfMapSingleton <$> newPairEv  
+  return addDiffEv
 
 
 
@@ -455,18 +455,15 @@ buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
   
   -- chooser widget with dropdown
   (maybeSelDyn, editedMapEv) <- selectWidget labelStrategy eW dgvForDD
---  let editDiffEv = fmap avToMaybe . uncurry lhfMapSingleton <$> mapEditEv
---      editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dgv) editDiffEv  -- has edits; these don't get fed back in.
 
   -- we should make the button inactive if the container is empty
   deleteButtonEv <- fRow $ buttonNoSubmit' "delete"
   let deleteEv = R.fmapMaybe id $ R.tag (R.current maybeSelDyn) deleteButtonEv  -- Event t k, only fires if there is a current selection
       deleteDiffEv = flip lhfMapSingleton Nothing <$> deleteEv -- Event t (k, Nothing)  
         
-  addEv <- fRow $ newItemWidget nWF (fmap AccSuccess <$> dgv) newInputContainerEv
+  insertDiffEv <- fRow $ newItemWidget nWF (fmap AccSuccess <$> dgv) newInputContainerEv
     
-  let insertDiffEv = fmap Just . uncurry lhfMapSingleton <$> addEv
-      insertDeleteDiffEv = R.leftmost [insertDiffEv, deleteDiffEv]
+  let insertDeleteDiffEv = R.leftmost [insertDiffEv, deleteDiffEv]
       mapAfterInsertDeleteEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dgv) insertDeleteDiffEv
       
   let updatedMapForDDEv = R.leftmost [newInputContainerEv, mapAfterInsertDeleteEv] --widget already knows about edits

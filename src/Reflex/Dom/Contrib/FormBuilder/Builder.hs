@@ -66,6 +66,9 @@ import           DataBuilder                                 as BExport (Builder
                                                                          GBuilder (..),
                                                                          MDWrapped (..))                                                            
 import qualified DataBuilder                                 as B
+import           Generics.SOP                                (NP(..),(:.:)(..),unComp)
+import           Generics.SOP.DMapUtilities                  (npToDMap,dMapToNP,TypeListTag(..))
+import qualified Data.Dependent.Map                          as DM
 import           Reflex                                      as ReflexExport (PushM)
 import qualified Reflex                                      as R
 import qualified Reflex.Dom                                  as RD
@@ -109,9 +112,14 @@ type FormValidator a = B.Validator (FValidation) a
 validateForm::(Functor m, R.Reflex t)=>FormValidator a->Form t m a->Form t m a
 validateForm va = makeForm . fmap DynValidation . B.unFGV . B.validateFGV va . B.FGV . fmap unDynValidation . unF
 
-
 dynMaybeToGBuildInput::R.Reflex t=>DynMaybe t a -> B.GV (R.Dynamic t) FValidation a
 dynMaybeToGBuildInput = B.GV . fmap maybeToAV . getCompose
+
+{-
+-- custom sequencing using DMap
+sequenceDynamicUsingDMap::R.Reflex t=>NP ((R.Dynamic t) :.: f) xs -> R.Dynamic t (NP f xs) --B.CustomSequenceG (R.Dynamic t)
+sequenceDynamicUsingDMap = fmap (fromJust . dMapToNP) . R.distributeDMapOverDynPure . DM.map unComp . npToDMap
+-}
 
 class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
   buildForm::FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
