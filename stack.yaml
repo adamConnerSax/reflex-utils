@@ -15,7 +15,7 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/adamConnerSax/reflex-sumType-utilities
-    commit: "c78e921ec5095be33f37c7ae7720042d6846aa7f"
+    commit: "470b8a18da9425b4fa9338144009182bcffe5575"
   extra-dep: true
 - location:
     git: https://github.com/ghcjs/jsaddle
