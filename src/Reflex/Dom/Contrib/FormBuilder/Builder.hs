@@ -66,8 +66,8 @@ import           DataBuilder                                 as BExport (Builder
                                                                          GBuilder (..),
                                                                          MDWrapped (..))                                                            
 import qualified DataBuilder                                 as B
-import           Generics.SOP                                (NP(..),(:.:)(..),unComp)
-import           Generics.SOP.DMapUtilities                  (npToDMap,dMapToNP,TypeListTag(..))
+import           Generics.SOP                                (NP(..),(:.:)(..),unComp,unI,hmap)
+import           Generics.SOP.DMapUtilities                  (npToDMap,dMapToNP,npUnCompose,npRecompose,npSequenceViaDMap)
 import qualified Data.Dependent.Map                          as DM
 import           Reflex                                      as ReflexExport (PushM)
 import qualified Reflex                                      as R
@@ -80,6 +80,7 @@ import           Control.Monad.Fix                           (MonadFix)
 import           Control.Monad.Morph
 import           Control.Monad.Reader                        (MonadReader (..),
                                                               runReaderT)
+import           Control.Monad.Identity                      (runIdentity)                 
 import           Data.Functor.Compose                        (Compose (..))
 import           Data.These                                  (These(..))
 import           Data.Align                                  (align)
@@ -115,25 +116,43 @@ validateForm va = makeForm . fmap DynValidation . B.unFGV . B.validateFGV va . B
 dynMaybeToGBuildInput::R.Reflex t=>DynMaybe t a -> B.GV (R.Dynamic t) FValidation a
 dynMaybeToGBuildInput = B.GV . fmap maybeToAV . getCompose
 
-{-
--- custom sequencing using DMap
-sequenceDynamicUsingDMap::R.Reflex t=>NP ((R.Dynamic t) :.: f) xs -> R.Dynamic t (NP f xs) --B.CustomSequenceG (R.Dynamic t)
-sequenceDynamicUsingDMap = fmap (fromJust . dMapToNP) . R.distributeDMapOverDynPure . DM.map unComp . npToDMap
--}
 
+-- custom sequencing using DMap
+--sequenceDynamicUsingDMap::R.Reflex t=>B.CustomSequenceG (R.Dynamic t)
+--sequenceDynamicUsingDMap = fmap (hmap (runIdentity . unComp) . npRecompose . fromJust . dMapToNP) . R.distributeDMapOverDynPure . npToDMap . npUnCompose
+
+{-
 class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
   buildForm::FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
-  default buildForm::(GBuilder (FR t m) (R.Dynamic t) FValidation a)
+  default buildForm::(B.GBuilder (FR t m) (R.Dynamic t) FValidation a)
                    =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
-  buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . gBuildValidated va mFN . dynMaybeToGBuildInput
+  buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . B.gBuildValidated va mFN . dynMaybeToGBuildInput
+ 
 
 -- helper function for using the genericBuilder in an instance rather than as the instance.  Useful for additional layout, etc.
 gBuildFormValidated::(RD.DomBuilder t m
                      , RD.MonadHold t m
                      , RD.PostBuild t m
-                     , GBuilder (FR t m) (R.Dynamic t) FValidation a)
+                     , B.GBuilder (FR t m) (R.Dynamic t) FValidation a)
   =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
-gBuildFormValidated va mFN = fgvToForm  . gBuildValidated va mFN . dynMaybeToGBuildInput
+gBuildFormValidated va mFN = fgvToForm  . B.gBuildValidated va mFN . dynMaybeToGBuildInput
+-}
+
+class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
+  buildForm::FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
+  default buildForm::(B.GBuilderCS (FR t m) (R.Dynamic t) FValidation a)
+                   =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
+  buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . B.gBuildValidatedCS (npSequenceViaDMap R.distributeDMapOverDynPure) va mFN . dynMaybeToGBuildInput
+ 
+
+-- helper function for using the genericBuilder in an instance rather than as the instance.  Useful for additional layout, etc.
+gBuildFormValidated::(RD.DomBuilder t m
+                     , RD.MonadHold t m
+                     , RD.PostBuild t m
+                     , B.GBuilderCS (FR t m) (R.Dynamic t) FValidation a)
+  =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
+gBuildFormValidated va mFN = fgvToForm  . B.gBuildValidatedCS (npSequenceViaDMap R.distributeDMapOverDynPure) va mFN . dynMaybeToGBuildInput
+
 
 type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable FValidation a)
 
