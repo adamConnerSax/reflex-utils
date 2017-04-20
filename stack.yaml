@@ -7,7 +7,7 @@ resolver: lts-8.9
 packages:
 - location:
     git: https://github.com/adamConnerSax/perConstructor-sop
-    commit: "5d03f1664f382ab44db2b25ef97f11bd0c5cabee"
+    commit: "fc6abddfa236bac1f9742e95128f31c93d1abbb8"
   extra-dep: true 
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
@@ -15,7 +15,7 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/adamConnerSax/reflex-sumType-utilities
-    commit: "470b8a18da9425b4fa9338144009182bcffe5575"
+    commit: "35ac9cbb41995f2cea875bce55f3ec35590e4f15"
   extra-dep: true
 - location:
     git: https://github.com/ghcjs/jsaddle

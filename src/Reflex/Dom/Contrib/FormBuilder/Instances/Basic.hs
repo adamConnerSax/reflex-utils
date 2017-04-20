@@ -9,6 +9,8 @@
 {-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE DeriveAnyClass        #-}
 --{-# LANGUAGE DeriveGeneric         #-}
 
 module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
@@ -321,6 +323,12 @@ instance {-# OVERLAPPABLE #-} (FormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
 -- generics for (,) since mkDyn is not an optimization here
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c)=>FormBuilder t m (a,b,c)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d)=>FormBuilder t m (a,b,c,d)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d, VFormBuilderC t m e)=>FormBuilder t m (a,b,c,d,e) 
+
+{-
 instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b) where
   buildForm va mFN tupMDyn = validateForm va . makeForm $ do
       maW <- unF $ buildForm' Nothing (sel1 <$> tupMDyn)
@@ -350,6 +358,7 @@ instance (FormInstanceC t m
       mdW <- unF $ buildForm' Nothing (sel4 <$> tupMDyn)
       return $ (,,,) <$> maW <*> mbW <*> mcW <*> mdW
 
+
 instance (FormInstanceC t m
          , VFormBuilderC t m a
          , VFormBuilderC t m b
@@ -364,3 +373,4 @@ instance (FormInstanceC t m
       meW <- unF $ buildForm' Nothing (sel5 <$> tupMDyn)
       return $ (,,,,) <$> maW <*> mbW <*> mcW <*> mdW <*> meW
 
+-}

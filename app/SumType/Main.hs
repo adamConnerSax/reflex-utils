@@ -34,6 +34,7 @@ import           Text.Read                        (readMaybe)
 
 import           Reflex.Dom.Contrib.DynamicUtils
 import           Reflex.Dynamic.PerConstructor
+import           Reflex.Dynamic.ProductHold  
 
 
 import qualified GHC.Generics                     as GHC
@@ -59,6 +60,10 @@ data TestProd = TestProd Int Double deriving (Show,GHC.Generic)
 instance Generic TestProd
 instance HasDatatypeInfo TestProd
 
+
+data TestProdHold = TestProdHold Int T.Text Double Int T.Text Double deriving (Show,GHC.Generic)
+instance Generic TestProdHold
+instance HasDatatypeInfo TestProdHold
 
 testWidget::JSM ()
 testWidget = mainWidget $ do
@@ -90,6 +95,12 @@ testWidget = mainWidget $ do
   dynMTP <- buildSum (Compose . constDyn . Just $ TestProd 2 2.0)
   el "br" blank
   dynMaybeText dynMTP
+  el "br" blank
+  el "span" $ text "TestProdHold: "
+  dynMTPH <- buildSum (Compose . constDyn . Just $ TestProdHold 12 "Hello" 3.14 13 "Goodbye" 3.0)
+  el "br" blank
+  _ <- buildUnsafeEqProduct dynMTPH
+  dynMaybeText dynMTPH
   return ()
 
 dynMaybeText::(ReflexConstraints t m, Show a)=>DynMaybe t a->m ()
@@ -159,7 +170,6 @@ instance TestBuilder t m a => TestBuilder t m (Maybe a) where
 
 instance (TestBuilder t m a, TestBuilder t m b) => TestBuilder t m (Either a b) where
   build = buildSum
-
 
 
 
