@@ -97,6 +97,7 @@ testWidget = mainWidget $ do
   dynMaybeText dynMTP
   el "br" blank
   el "span" $ text "TestProdHold: "
+  el "br" blank
   dynMTPH <- buildSum (Compose . constDyn . Just $ TestProdHold 12 "Hello" 3.14 13 "Goodbye" 3.0)
   el "br" blank
   _ <- buildUnsafeDynMBuildableEqProduct dynMTPH
