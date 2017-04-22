@@ -34,7 +34,7 @@ import           Text.Read                        (readMaybe)
 
 import           Reflex.Dom.Contrib.DynamicUtils
 import           Reflex.Dynamic.PerConstructor
-import           Reflex.Dynamic.ProductHold  
+import           Reflex.Dynamic.EqProduct
 
 
 import qualified GHC.Generics                     as GHC
@@ -99,7 +99,8 @@ testWidget = mainWidget $ do
   el "span" $ text "TestProdHold: "
   dynMTPH <- buildSum (Compose . constDyn . Just $ TestProdHold 12 "Hello" 3.14 13 "Goodbye" 3.0)
   el "br" blank
-  _ <- buildUnsafeEqProduct dynMTPH
+  _ <- buildUnsafeDynMBuildableEqProduct dynMTPH
+  el "br" blank
   dynMaybeText dynMTPH
   return ()
 
