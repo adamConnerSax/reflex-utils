@@ -35,6 +35,7 @@ import           Text.Read                        (readMaybe)
 import           Reflex.Dom.Contrib.DynamicUtils
 import           Reflex.Dynamic.PerConstructor
 import           Reflex.Dynamic.EqProduct
+import           Reflex.Dynamic.CollectDyn
 
 
 import qualified GHC.Generics                     as GHC
@@ -59,7 +60,6 @@ instance HasDatatypeInfo TestSum
 data TestProd = TestProd Int Double deriving (Show,GHC.Generic)
 instance Generic TestProd
 instance HasDatatypeInfo TestProd
-
 
 data TestProdHold = TestProdHold Int T.Text Double Int T.Text Double deriving (Show,GHC.Generic)
 instance Generic TestProdHold
@@ -86,16 +86,19 @@ testWidget = mainWidget $ do
   el "span" $ text "Double: "
   dynMDouble <- build (Compose . constDyn $ Nothing)
   el "br" blank
+
   el "span" $ text "TestSum: "
   dynMTS <- buildSum (C <$> dynMDouble)
   el "br" blank
   dynMaybeText dynMTS
   el "br" blank
+
   el "span" $ text "TestProd: "
   dynMTP <- buildSum (Compose . constDyn . Just $ TestProd 2 2.0)
   el "br" blank
   dynMaybeText dynMTP
   el "br" blank
+
   el "span" $ text "TestProdHold: "
   el "br" blank
   dynMTPH <- buildSum (Compose . constDyn . Just $ TestProdHold 12 "Hello" 3.14 13 "Goodbye" 3.0)
@@ -103,6 +106,14 @@ testWidget = mainWidget $ do
   _ <- buildUnsafeDynMBuildableEqProduct dynMTPH
   el "br" blank
   dynMaybeText dynMTPH
+
+  el "span" $ text "CollectDynGeneric: "
+  el "br" blank
+  let dynTuple::Reflex t=>Dynamic t (Maybe Double, Maybe Int)
+      dynTuple = collectDynGeneric ((getCompose dynMInt),(getCompose dynMInt))
+  el "br" blank
+  dynText (T.pack . show <$> dynTuple)  
+  
   return ()
 
 dynMaybeText::(ReflexConstraints t m, Show a)=>DynMaybe t a->m ()

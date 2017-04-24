@@ -67,7 +67,7 @@ import           DataBuilder                                 as BExport (Builder
                                                                          MDWrapped (..))                                                            
 import qualified DataBuilder                                 as B
 import           Generics.SOP                                (NP(..),(:.:)(..),unComp,unI,hmap)
-import           Generics.SOP.DMapUtilities                  (npToDMap,dMapToNP,npUnCompose,npRecompose,npSequenceViaDMap)
+import           Generics.SOP.DMapUtilities                  (npToDMap,dMapToNP,npUnCompose,npReCompose,npSequenceViaDMap)
 import qualified Data.Dependent.Map                          as DM
 import           Reflex                                      as ReflexExport (PushM)
 import qualified Reflex                                      as R
