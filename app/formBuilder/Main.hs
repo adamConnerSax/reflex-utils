@@ -223,16 +223,15 @@ instance FormInstanceC t m=>FormBuilder t m BRec where
 
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
-
 buildDateOrDateTime::FormInstanceC t m
   =>FormValidator DateOrDateTime
-  ->Maybe FieldName
-  ->DynMaybe t DateOrDateTime
-  ->Form t m DateOrDateTime
+  -> Maybe FieldName
+  -> DynMaybe t DateOrDateTime
+  -> Form t m DateOrDateTime
 buildDateOrDateTime va mFN dma =
   let mdWrapped = buildFMDWrappedList mFN dma
       customizeWidget (MDWrapped hd (cn,mfn) w) = case cn of
-        "Date" -> MDWrapped hd (cn,mfn) w
+        "Date"     -> MDWrapped hd (cn,mfn) w
         "DateTime" -> MDWrapped hd (cn,mfn) w
         _          -> MDWrapped hd (cn,mfn) w
   in fgvToForm . B.bSum $ customizeWidget <$> mdWrapped
@@ -260,9 +259,7 @@ testComplexForm::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m -
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
---  cDynM <- avMapToMap . fmap AccSuccess <$> runReaderT (buildLBEMapLVWK Nothing (constDyn testMap)) cfg
---  cDynM <- runSimpleFormR cfg (makeSimpleFormR $ (DynValidation . fmap AccSuccess <$> buildLBEMapLVWK Nothing (constDyn testMap)))
-  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just lOfA1)
+  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just c)
   el "p" $ text "dynText:"
   dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
   el "p" $ text "Observed:"
@@ -330,7 +327,7 @@ main = run formBuilderMain
 main::IO ()
 main = do
   let port :: Int = 3702
-  pHandle <- SP.spawnProcess "open" ["http://localhost:" ++ show port]
+  _ <- SP.spawnProcess "open" ["http://localhost:" ++ show port]
   run port formBuilderMain
 #endif
 

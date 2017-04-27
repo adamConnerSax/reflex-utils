@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -8,31 +9,28 @@
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE RecursiveDo           #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE StandaloneDeriving    #-}
-{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE UndecidableInstances  #-}
 --{-# LANGUAGE DeriveGeneric         #-}
-
+{-# OPTIONS -fno-warn-orphans      #-}
 module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        (
          formWidget
        , formWidget'
        , dynAsEv
-       , traceDynAsEv
        , buildDynReadMaybe
        , buildDynReadable
        , FormInstanceC
        , buildFormIso
        ) where
 
-import           Control.Lens                                 (over, view, (^.))
+import           Control.Lens                                 (over, view)
 import           Control.Monad                                (join)
 import           Control.Monad.Fix                            (MonadFix)
 import           Control.Monad.Reader                         (lift)
 import           Data.Functor.Compose                         (Compose (Compose, getCompose))
 import qualified Data.Map                                     as M
-import           Data.Maybe                                   (fromJust,
-                                                               fromMaybe)
+import           Data.Maybe                                   (fromMaybe)
 import           Data.Monoid                                  ((<>))
 import           Data.Readable                                (Readable,
                                                                fromText)
@@ -40,7 +38,6 @@ import qualified Data.Text                                    as T
 import           Data.Validation                              (AccValidation (..))
 import           Text.Read                                    (readMaybe)
 
-import           Control.Lens                                 (view)
 import           Control.Lens.Iso                             (Iso', from, iso)
 
 -- types for instances
@@ -51,8 +48,6 @@ import           Data.Time.Calendar                           (Day,
                                                                fromGregorian)
 import           Data.Time.Clock                              (UTCTime (..),
                                                                secondsToDiffTime)
-import           Data.Tuple.Select                            (sel1, sel2, sel3,
-                                                               sel4, sel5)
 import           Data.Word                                    (Word16, Word32,
                                                                Word64, Word8)
 -- reflex imports
@@ -64,14 +59,9 @@ import           Reflex.Dom.Contrib.Widgets.Common
 
 import qualified DataBuilder                                  as B
 import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv,
-                                                               dynamicMaybeAsEv,
-                                                               mDynAsEv,
-                                                               traceDynAsEv,
-                                                               traceDynMAsEv,
-                                                               traceMDynAsEv)
+                                                               dynamicMaybeAsEv)
 import           Reflex.Dom.Contrib.FormBuilder.Builder
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynMaybe,
-                                                               constDynMaybe,
                                                                dynMaybeAsEv)
 import           Reflex.Dom.Contrib.Layout.Types              (emptyCss,
                                                                toCssString)
@@ -106,7 +96,7 @@ formWidget::forall t m a b.(R.Reflex t,RD.DomBuilder t m, R.MonadHold t m, RD.Po
 formWidget f fString mFN wc widget = do
   let addToAttrs::R.Reflex t=>T.Text->Maybe T.Text->RD.Dynamic t (M.Map T.Text T.Text)->RD.Dynamic t (M.Map T.Text T.Text)
       addToAttrs attr mVal attrsDyn = case mVal of
-        Nothing -> attrsDyn
+        Nothing  -> attrsDyn
         Just val -> M.union (attr RD.=: val) <$> attrsDyn
   isObserver <- (==ObserveOnly) <$> getFormType
   inputCfg <- view inputConfig
@@ -172,7 +162,7 @@ parseAndValidate::Maybe FieldName->(T.Text -> Maybe a)->FormValidator a->T.Text-
 parseAndValidate mFN parse va t =
   case parse t of
     Nothing -> AccFailure [FNoParse $ parseError mFN t]
-    Just y -> va y
+    Just y  -> va y
 
 
 buildDynReadable::(FormInstanceC t m, Readable a, Show a)
@@ -271,7 +261,7 @@ instance FormInstanceC t m=>FormBuilder t m UTCTime where
   buildForm va mFN initialMDyn = makeForm $ do
     let vfwt x = case x of
           Nothing -> AccFailure [FNoParse "Couldn't parse as UTCTime."]
-          Just y -> va y
+          Just y  -> va y
         initialDateTime = Just $ UTCTime (fromGregorian 1971 1 1) (secondsToDiffTime 0)
     inputEv <- dynMaybeAsEv initialMDyn
     formWidget' inputEv initialDateTime Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
@@ -281,16 +271,16 @@ instance FormInstanceC t m=>FormBuilder t m Day where
   buildForm va mFN initialMDyn = makeForm $ do
     let vfwt x = case x of
           Nothing -> AccFailure [FNoParse "Couldn't parse as Day."]
-          Just y -> va y
+          Just y  -> va y
         initialDay = Just $ fromGregorian 1971 1 1
     inputEv <- dynMaybeAsEv initialMDyn
     formWidget' inputEv initialDay Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
 
 
 -- uses generics to build instances
-instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a)
 
-instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (Either a b)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (Either a b)
 
 -- if two things are Isomorphic, we can use one to build the other
 -- NB: Isomorphic sum types will end up using the constructors, etc. of the one used to bootstrap
@@ -305,7 +295,7 @@ avToEither (AccSuccess x) = Right x
 avToEither (AccFailure x) = Left x
 
 eitherToAV::Either a b->AccValidation a b
-eitherToAV (Left x) = AccFailure x
+eitherToAV (Left x)  = AccFailure x
 eitherToAV (Right x) = AccSuccess x
 
 -- NB: Here, AccSuccess will appear as Right and AccFailure as Left in the forms.  To Avoid this we need to build a specific instance.
@@ -326,51 +316,5 @@ instance {-# OVERLAPPABLE #-} (FormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=
 deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
 deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c)=>FormBuilder t m (a,b,c)
 deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d)=>FormBuilder t m (a,b,c,d)
-deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d, VFormBuilderC t m e)=>FormBuilder t m (a,b,c,d,e) 
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d, VFormBuilderC t m e)=>FormBuilder t m (a,b,c,d,e)
 
-{-
-instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b) where
-  buildForm va mFN tupMDyn = validateForm va . makeForm $ do
-      maW <- unF $ buildForm' Nothing (sel1 <$> tupMDyn)
-      mbW <- unF $ buildForm' Nothing (sel2 <$> tupMDyn)
-      return $ (,) <$> maW <*> mbW
-
-instance (FormInstanceC t m
-         , VFormBuilderC t m a
-         , VFormBuilderC t m b
-         , VFormBuilderC t m c)=>FormBuilder t m (a,b,c) where
-  buildForm va mFN tupMDyn = validateForm va . makeForm $ do
-      maW <- unF $ buildForm' Nothing (sel1 <$> tupMDyn)
-      mbW <- unF $ buildForm' Nothing (sel2 <$> tupMDyn)
-      mcW <- unF $ buildForm' Nothing (sel3 <$> tupMDyn)
-      return $ (,,) <$> maW <*> mbW <*> mcW
-
-
-instance (FormInstanceC t m
-         , VFormBuilderC t m a
-         , VFormBuilderC t m b
-         , VFormBuilderC t m c
-         , VFormBuilderC t m d)=>FormBuilder t m (a,b,c,d) where
-  buildForm va mFN tupMDyn = validateForm va . makeForm $ do
-      maW <- unF $ buildForm' Nothing (sel1 <$> tupMDyn)
-      mbW <- unF $ buildForm' Nothing (sel2 <$> tupMDyn)
-      mcW <- unF $ buildForm' Nothing (sel3 <$> tupMDyn)
-      mdW <- unF $ buildForm' Nothing (sel4 <$> tupMDyn)
-      return $ (,,,) <$> maW <*> mbW <*> mcW <*> mdW
-
-
-instance (FormInstanceC t m
-         , VFormBuilderC t m a
-         , VFormBuilderC t m b
-         , VFormBuilderC t m c
-         , VFormBuilderC t m d
-         , VFormBuilderC t m e)=>FormBuilder t m (a,b,c,d,e) where
-  buildForm va mFN tupMDyn = validateForm va . makeForm $ do
-      maW <- unF $ buildForm' Nothing (sel1 <$> tupMDyn)
-      mbW <- unF $ buildForm' Nothing (sel2 <$> tupMDyn)
-      mcW <- unF $ buildForm' Nothing (sel3 <$> tupMDyn)
-      mdW <- unF $ buildForm' Nothing (sel4 <$> tupMDyn)
-      meW <- unF $ buildForm' Nothing (sel5 <$> tupMDyn)
-      return $ (,,,,) <$> maW <*> mbW <*> mcW <*> mdW <*> meW
-
--}

@@ -11,19 +11,44 @@
 {-# LANGUAGE TupleSections          #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances   #-}
+-- | Module with machinery for building reflex-dom forms/dynamic editors from containers.
+--
+-- This module also contains FormBuilder instances for the various basic container types (Map, List, Set, IntMap, Sequence, HashMap, HashSet)
+-- These are based on mapping the container to something map-like (Map, IntMap, HashMap)
 module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
   (
+    -- * Container form builders
     buildListWithSelect
   , buildList
   , buildEqList
+  , buildMap
+  , buildEqMap
+  , buildSet
+  , buildIntMap
+  , buildEqIntMap
+  , buildSequence
+  , buildEqSequence
+  , buildHashMap
+  , buildEqHashMap
+  , buildEqHashSet
+
+  -- * Types for mapping containers to builders
+  , MapLike(..)
+  , MapElemWidgets(..)
+  , buildAdjustableContainer
+  , buildAdjustableContainerWithSelect
   ) where
 
 
 import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
--- All the basic (primitive types, tuples, etc.) are in here
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
-import           Reflex.Dom.Contrib.FormBuilder.Builder
-import           Reflex.Dom.Contrib.FormBuilder.DynValidation (accValidation)
+import           Reflex.Dom.Contrib.FormBuilder.Builder (DynMaybe(..), Form(..), FR, FRW, unF, FieldName, VFormBuilderC
+                                                        , FormBuilder(buildForm), makeForm, buildForm', getFormType, toReadOnly
+                                                        , FValidation, validateForm
+                                                        , constDynMaybe, FormType(..), FormValidator
+                                                        , fItem, fItemR, fRow, fCol, fCenter, avToMaybe)
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynValidation(..),constDynValidation,joinDynOfDynValidation
+                                                              ,accValidation, mergeAccValidation, FormError(FNothing))
 import           Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
 import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv)
 import qualified Reflex.Dom.Contrib.ListHoldFunctions.Maps as LHF
@@ -333,15 +358,6 @@ type LBWidget t m k v = k->R.Dynamic t v->FR t m (R.Dynamic t (Maybe (FValidatio
 elemWidgetToLBWidget::(R.Reflex t, Functor m)=>ElemWidget t m k v->LBWidget t m k v
 elemWidgetToLBWidget ew k vDyn = fmap Just . unDynValidation <$> ew k vDyn
 
-{-
-class IsMap m k | m->k where
-  emptyMap::m a
-  mapMaybe::(a -> Maybe b) -> m a -> m b
-  distributeOverDynPure::R.Reflex t=> m (R.Dynamic t v) -> R.Dynamic t (m v)
-  singleton::k->v->m v
-  applyMapDiff::m (Maybe v) -> m v -> m v
--}
-
 maybeMapToMap::LHFMap f=>Maybe (f v) -> f v
 maybeMapToMap = fromMaybe lhfEmptyMap 
 
@@ -411,7 +427,6 @@ newItemWidget editPairW mapDyn newInputMapEv = mdo
   let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
       addDiffEv = fmap Just . uncurry lhfMapSingleton <$> newPairEv  
   return addDiffEv
-
 
 
 dynValidationToDynamicMaybe::R.Reflex t=>DynValidation t a -> R.Dynamic t (Maybe a)

@@ -1,13 +1,13 @@
-{-# LANGUAGE ConstraintKinds        #-}
-{-# LANGUAGE DataKinds              #-}
-{-# LANGUAGE DefaultSignatures      #-}
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE OverloadedStrings      #-}
-{-# LANGUAGE RankNTypes             #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DefaultSignatures     #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
 module Reflex.Dom.Contrib.FormBuilder.Builder
        (
          module Reflex.Dom.Contrib.FormBuilder.DynValidation
@@ -51,44 +51,53 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        ) where
 
 
-import           Reflex.Dom.Contrib.Layout.Types             (CssClass,
-                                                              CssClasses (..),
-                                                              IsCssClass (..),
-                                                              LayoutOrientation (..),
-                                                              emptyCss)
+import           Reflex.Dom.Contrib.Layout.Types              (CssClass,
+                                                               CssClasses (..),
+                                                               IsCssClass (..),
+                                                               LayoutOrientation (..),
+                                                               emptyCss)
 
-import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv)
+import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv,
+                                                               traceDynAsEv)
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation
 
-import           DataBuilder                                 as BExport (Builder (..),
-                                                                         FieldName,
-                                                                         GBuilder (..),
-                                                                         MDWrapped (..))                                                            
-import qualified DataBuilder                                 as B
-import           Generics.SOP                                (NP(..),(:.:)(..),unComp,unI,hmap)
-import           Generics.SOP.DMapUtilities                  (npToDMap,dMapToNP,npUnCompose,npReCompose,npSequenceViaDMap)
-import qualified Data.Dependent.Map                          as DM
-import           Reflex                                      as ReflexExport (PushM)
-import qualified Reflex                                      as R
-import qualified Reflex.Dom                                  as RD
+import qualified Data.Dependent.Map                           as DM
+import           DataBuilder                                  as BExport (Builder (..),
+                                                                          FieldName,
+                                                                          GBuilder (..),
+                                                                          MDWrapped (..))
+import qualified DataBuilder                                  as B
+import           Generics.SOP                                 ((:.:) (..),
+                                                               NP (..), hmap,
+                                                               unComp, unI)
+import           Generics.SOP.DMapUtilities                   (dMapToNP,
+                                                               npReCompose,
+                                                               npSequenceViaDMap,
+                                                               npToDMap,
+                                                               npUnCompose)
+import           Reflex                                       as ReflexExport (PushM)
+import qualified Reflex                                       as R
+import qualified Reflex.Dom                                   as RD
 
-import           Control.Arrow                               ((&&&))
-import           Control.Lens                                (view)
-import           Control.Monad                               (join)
-import           Control.Monad.Fix                           (MonadFix)
+import           Control.Arrow                                ((&&&))
+import           Control.Lens                                 (view)
+import           Control.Monad                                (join)
+import           Control.Monad.Fix                            (MonadFix)
+import           Control.Monad.Identity                       (runIdentity)
 import           Control.Monad.Morph
-import           Control.Monad.Reader                        (MonadReader (..),
-                                                              runReaderT)
-import           Control.Monad.Identity                      (runIdentity)                 
-import           Data.Functor.Compose                        (Compose (..))
-import           Data.These                                  (These(..))
-import           Data.Align                                  (align)
-import qualified Data.Map                                    as M
-import           Data.Maybe                                  (fromMaybe, isJust,fromJust)
-import           Data.Monoid                                 ((<>))
-import qualified Data.Text                                   as T
-import           Data.Validation                             (AccValidation (..))
+import           Control.Monad.Reader                         (MonadReader (..),
+                                                               runReaderT)
+import           Data.Align                                   (align)
+import           Data.Functor.Compose                         (Compose (..))
+import qualified Data.Map                                     as M
+import           Data.Maybe                                   (fromJust,
+                                                               fromMaybe,
+                                                               isJust)
+import           Data.Monoid                                  ((<>))
+import qualified Data.Text                                    as T
+import           Data.These                                   (These (..))
+import           Data.Validation                              (AccValidation (..))
 --import           Language.Haskell.TH
 
 
@@ -117,17 +126,13 @@ dynMaybeToGBuildInput::R.Reflex t=>DynMaybe t a -> B.GV (R.Dynamic t) FValidatio
 dynMaybeToGBuildInput = B.GV . fmap maybeToAV . getCompose
 
 
--- custom sequencing using DMap
---sequenceDynamicUsingDMap::R.Reflex t=>B.CustomSequenceG (R.Dynamic t)
---sequenceDynamicUsingDMap = fmap (hmap (runIdentity . unComp) . npRecompose . fromJust . dMapToNP) . R.distributeDMapOverDynPure . npToDMap . npUnCompose
-
 {-
 class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
   buildForm::FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
   default buildForm::(B.GBuilder (FR t m) (R.Dynamic t) FValidation a)
                    =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
   buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . B.gBuildValidated va mFN . dynMaybeToGBuildInput
- 
+
 
 -- helper function for using the genericBuilder in an instance rather than as the instance.  Useful for additional layout, etc.
 gBuildFormValidated::(RD.DomBuilder t m
@@ -143,7 +148,7 @@ class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m 
   default buildForm::(B.GBuilderCS (FR t m) (R.Dynamic t) FValidation a)
                    =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
   buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . B.gBuildValidatedCS (npSequenceViaDMap R.distributeDMapOverDynPure) va mFN . dynMaybeToGBuildInput
- 
+
 
 -- helper function for using the genericBuilder in an instance rather than as the instance.  Useful for additional layout, etc.
 gBuildFormValidated::(RD.DomBuilder t m
@@ -168,15 +173,13 @@ buildFMDWrappedList::(RD.DomBuilder t m
                      , B.HasDatatypeInfo a
                      , B.All2 (B.And (Builder (FR t m) (R.Dynamic t) FValidation) (B.Validatable (FValidation))) (B.Code a))
   =>Maybe FieldName->DynMaybe t a->[FMDWrapped t m a]
-buildFMDWrappedList mFN = B.buildMDWrappedList mFN . B.GV . fmap maybeToAV . getCompose 
+buildFMDWrappedList mFN = B.buildMDWrappedList mFN . B.GV . fmap maybeToAV . getCompose
 
 actOnDBWidget::Functor m=>(FRW t m a -> FRW t m a) -> B.FGV (FR t m) (R.Dynamic t) FValidation a -> B.FGV (FR t m) (R.Dynamic t) FValidation a
 actOnDBWidget f = B.FGV . fmap unDynValidation . f . fmap DynValidation . B.unFGV
 
-
-
 toReadOnly::Monad m=>Form t m a -> Form t m a
-toReadOnly form = makeForm . local setToObserve $ unF form 
+toReadOnly form = makeForm . local setToObserve $ unF form
 
 instance (RD.DomBuilder t m, FormBuilder t m a)=>B.Builder (FR t m) (R.Dynamic t) (FValidation) a where
   buildValidated va mFN = B.FGV . fmap unDynValidation . unF . buildForm va mFN . Compose . fmap avToMaybe . B.unGV
@@ -213,9 +216,9 @@ formWithSubmitAction cfg ma submitWidget = do
 
 observeDynamic::(RD.DomBuilder t m, VFormBuilderC t m a)=>FormConfiguration t m->R.Dynamic t a->m (DynValidation t a)
 observeDynamic cfg aDyn = do
-  aEv <- traceDynAsEv (const "observeDynamic") aDyn
-  aDyn' <- R.holdDyn Nothing (Just <$> aEv) 
-  runForm (setToObserve cfg) $ buildForm' Nothing (Compose aDyn') 
+  aEv <- dynAsEv aDyn
+  aDyn' <- R.holdDyn Nothing (Just <$> aEv)
+  runForm (setToObserve cfg) $ buildForm' Nothing (Compose aDyn')
 
 
 observeWidget::(RD.DomBuilder t m ,VFormBuilderC t m a)=>FormConfiguration t m->m a->m (DynValidation t a)
@@ -307,11 +310,11 @@ instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m)=> B.Buildable (F
 
   bSum mwWidgets = B.FGV . fmap unDynValidation $ do
     let mapHasDefault = R.fmapMaybe (\x -> if x then Just () else Nothing)
-        mapValue      = fmap DynValidation . B.unFGV  
-    let f (MDWrapped isConDyn (conName,mFN) fgvWidget) = (conName, mapHasDefault (R.updated isConDyn), mapValue fgvWidget)
+        mapValue      = fmap DynValidation . B.unFGV
+        f (MDWrapped isConDyn (conName,mFN) fgvWidget) = (conName, mapHasDefault (R.updated isConDyn), mapValue fgvWidget)
         constrList = f <$> mwWidgets
     sF <- sumF . _builderFunctions <$> ask
-    sF constrList 
+    sF constrList
 
 
 type FMDWrapped t m a = B.MDWrapped (FR t m) (R.Dynamic t) (FValidation) a
