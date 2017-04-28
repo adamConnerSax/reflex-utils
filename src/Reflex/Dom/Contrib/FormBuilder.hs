@@ -3,13 +3,13 @@ module Reflex.Dom.Contrib.FormBuilder
          module Reflex.Dom.Contrib.FormBuilder.Builder
        , module Reflex.Dom.Contrib.FormBuilder.AllDefault
        , module Reflex.Dom.Contrib.FormBuilder.Instances
+       , module Generics.SOP
        ) where
+import           Generics.SOP                              (Generic,
+                                                            HasDatatypeInfo)
 import           Reflex.Dom.Contrib.FormBuilder.AllDefault
 import           Reflex.Dom.Contrib.FormBuilder.Builder
-import           Reflex.Dom.Contrib.FormBuilder.Instances
-  (
-    buildDynReadMaybe
-  , buildDynReadable
-  , FormInstanceC -- constraints on widget monad in which forms are built
-  , VFormBuilderC -- constraint to indicate existence of a specific builder, for a sub-part.  Adds validator constraint.
-  )
+import           Reflex.Dom.Contrib.FormBuilder.Instances  (FormInstanceC,
+                                                            VFormBuilderC,
+                                                            buildDynReadMaybe,
+                                                            buildDynReadable)
