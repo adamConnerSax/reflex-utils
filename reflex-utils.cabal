@@ -33,6 +33,7 @@ library
                   Reflex.Dom.Contrib.DynamicUtils
                   Reflex.Dom.Contrib.ReflexConstraints
                   Reflex.Dom.Contrib.CssUtils
+                  Reflex.Dom.Contrib.Widgets.SafeDropdown
                   Reflex.Dom.Contrib.ListHoldFunctions.Core
                   Reflex.Dom.Contrib.ListHoldFunctions.Maps
                   Reflex.Dom.Contrib.Layout.All
