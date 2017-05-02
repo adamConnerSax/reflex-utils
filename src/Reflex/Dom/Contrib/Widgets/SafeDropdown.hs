@@ -52,7 +52,7 @@ data SafeDropdownConfig t k
 instance Reflex t => Default (SafeDropdownConfig t k) where
   def = SafeDropdownConfig never (constDyn M.empty)
 
-safeDropdown :: forall k t m . (RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)
+safeDropdown :: forall k t m. (RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)
   => Maybe k -> Dynamic t (M.Map k T.Text) -> SafeDropdownConfig t k ->m (SafeDropdown t k)
 safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   postbuild <- RD.getPostBuild
