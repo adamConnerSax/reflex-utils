@@ -13,6 +13,7 @@ module Reflex.Dom.Contrib.Widgets.SafeDropdown
     SafeDropdown(..)
   , SafeDropdownConfig(..)
   , safeDropdown
+  , safeDropdownOfLabelKeyedValue
   ) where
 
 import Reflex.Dom.Contrib.DynamicUtils (dynAsEv)
@@ -78,13 +79,13 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   return $ SafeDropdown (join $ _safeDropdown_value <$> safeDyn) (R.switch . current $ _safeDropdown_change <$> safeDyn)
 
 
-safeDropDownOfLabelKeyedValue :: forall m t v l. (RD.DomBuilder t m
+safeDropdownOfLabelKeyedValue :: forall m t v l. (RD.DomBuilder t m
                                                  , MonadFix m
                                                  , R.MonadHold t m
                                                  , RD.PostBuild t m
                                                  , Ord l)
   => (l -> T.Text) -> Maybe l -> Dynamic t (M.Map l v) -> SafeDropdownConfig t l -> m (SafeDropdown t v)
-safeDropDownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
+safeDropdownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
   let sdOptionsDyn = M.mapWithKey (\l _ -> labelToText l) <$> optionsDyn
       maybeLookup opts ml = ml >>= flip M.lookup opts
       mapEvent mlEv = R.attachWith maybeLookup (current optionsDyn) mlEv
