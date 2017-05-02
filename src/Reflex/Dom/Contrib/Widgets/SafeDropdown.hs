@@ -11,8 +11,13 @@
 module Reflex.Dom.Contrib.Widgets.SafeDropdown
   (
     SafeDropdown(..)
+  , safeDropdown_value
+  , safeDropdown_change
   , SafeDropdownConfig(..)
+  , safeDropdownConfig_setValue
+  , safeDropdownConfig_attributes
   , safeDropdown
+  , safeDropdownOfLabelKeyedValue
   ) where
 
 import Reflex.Dom.Contrib.DynamicUtils (dynAsEv)
@@ -31,14 +36,6 @@ import Safe (headMay)
 import qualified Data.Map as M
 import qualified Data.Text as T
 
-
-
--- | Safe dropdown widget
--- 1. Needs no default, though you can supply one.  Otherwise supply Nothing.  If supplied, it's checked to see if in map and ignored if not.
--- 2. Checks if value set by setValue is present.  Ignores if not. Forwards to internal dropdown otherwise.
--- 3. Checks if current selection has been removed. Switches to something else (if possible) in that case.
--- 4. Disappears from DOM (via widgetHold) if map of options is empty.  Reappears when there are options.
--- 5. value and change are both Maybe to account for the possibility of an empty set of options.  Change could still be k but then not fire when options become empty?
 data SafeDropdown t k
   = SafeDropdown { _safeDropdown_value :: Dynamic t (Maybe k)
                  , _safeDropdown_change :: Event t (Maybe k)
@@ -52,13 +49,21 @@ data SafeDropdownConfig t k
 instance Reflex t => Default (SafeDropdownConfig t k) where
   def = SafeDropdownConfig never (constDyn M.empty)
 
-safeDropdown :: forall k t m. (RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)
+
+-- | Safe dropdown widget
+-- 1. Needs no default, though you can supply one.  Otherwise supply Nothing.  If supplied, it's checked to see if in map and ignored if not.
+-- 2. Checks if value set by setValue is present.  Ignores if not. Forwards to internal dropdown otherwise.
+-- 3. Checks if current selection has been removed. Switches to something else (if possible) in that case.
+-- 4. Disappears from DOM (via widgetHold) if map of options is empty.  Reappears when there are options.
+-- 5. value and change are both Maybe to account for the possibility of an empty set of options.
+-- Change could still be k but then not fire when options become empty?
+safeDropdown :: forall k t m . (RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)
   => Maybe k -> Dynamic t (M.Map k T.Text) -> SafeDropdownConfig t k ->m (SafeDropdown t k)
 safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   postbuild <- RD.getPostBuild
   optionsNullEv <- dynAsEv (R.uniqDyn $ M.null <$> optionsDyn)
   let (someOptionsEv, noOptionsEv) = fanBool optionsNullEv
-      (setToNothingEv, defaultKeySetEv) = R.fanEither $ (maybe (Left ()) Right) <$> leftmost [setEv, Just <$> (R.fmapMaybe (const k0m) postbuild)]
+      (setToNothingEv, defaultKeySetEv) = R.fanEither $ maybe (Left ()) Right <$> leftmost [setEv, Just <$> R.fmapMaybe (const k0m) postbuild]
       noOptionsWidget ev = return $ SafeDropdown (constDyn Nothing) ev
       noOptionsWidgetEv = noOptionsWidget (Nothing <$ noOptionsEv) <$ leftmost [noOptionsEv, setToNothingEv]
       defaultKeyNewOptionsEv = R.fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> optionsDyn) someOptionsEv
@@ -69,12 +74,27 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
         let newK0 curK m = if M.member curK m then Nothing else headMay $ M.keys m
             newK0Ev = attachWithMaybe newK0 (current $ RD._dropdown_value dd) (updated optionsDyn)
             ddConfig = DropdownConfig (leftmost [newK0Ev, defaultKeySetSafeEv]) attrsDyn  
-        k0Dyn <- R.holdDyn k0 newK0Ev
+--        k0Dyn <- R.holdDyn k0 newK0Ev
         dd <- dropdown k0 optionsDyn ddConfig
         return $ SafeDropdown (Just <$> RD._dropdown_value dd) (Just <$> RD._dropdown_change dd)
       newWidgetEv = leftmost [noOptionsWidgetEv, dropdownWidget <$> defaultKeyNewOptionsEv]
   safeDyn <- widgetHold (noOptionsWidget never) newWidgetEv -- Dynamic t (SafeDropdown t k)
   return $ SafeDropdown (join $ _safeDropdown_value <$> safeDyn) (R.switch . current $ _safeDropdown_change <$> safeDyn)
+
+
+safeDropdownOfLabelKeyedValue :: forall m t v l. (RD.DomBuilder t m
+                                                 , MonadFix m
+                                                 , R.MonadHold t m
+                                                 , RD.PostBuild t m
+                                                 , Ord l)
+  => (l -> T.Text) -> Maybe l -> Dynamic t (M.Map l v) -> SafeDropdownConfig t l -> m (SafeDropdown t v)
+safeDropdownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
+  let sdOptionsDyn = M.mapWithKey (\l _ -> labelToText l) <$> optionsDyn
+      maybeLookup opts ml = ml >>= flip M.lookup opts
+      mapEvent = R.attachWith maybeLookup (current optionsDyn) 
+      mapDynamic = R.zipDynWith maybeLookup optionsDyn 
+  SafeDropdown valDyn changeEv <- safeDropdown l0m sdOptionsDyn cfg -- SafeDropdown t l
+  return $ SafeDropdown (mapDynamic valDyn) (mapEvent changeEv)
 
 boolToEither::Bool -> Either () ()
 boolToEither True = Right ()
