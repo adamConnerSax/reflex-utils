@@ -26,6 +26,7 @@ import qualified Reflex as R
 import Control.Lens (makeLenses)
 import Control.Monad (join)
 import Control.Monad.Fix (MonadFix)
+import Control.Arrow ((&&&))
 import Data.Default
 import Safe (headMay)
 import qualified Data.Map as M
@@ -75,6 +76,21 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
       newWidgetEv = leftmost [noOptionsWidgetEv, dropdownWidget <$> defaultKeyNewOptionsEv]
   safeDyn <- widgetHold (noOptionsWidget never) newWidgetEv -- Dynamic t (SafeDropdown t k)
   return $ SafeDropdown (join $ _safeDropdown_value <$> safeDyn) (R.switch . current $ _safeDropdown_change <$> safeDyn)
+
+
+safeDropDownOfLabelKeyedValue :: forall m t v l. (RD.DomBuilder t m
+                                                 , MonadFix m
+                                                 , R.MonadHold t m
+                                                 , RD.PostBuild t m
+                                                 , Ord l)
+  => (l -> T.Text) -> Maybe l -> Dynamic t (M.Map l v) -> SafeDropdownConfig t l -> m (SafeDropdown t v)
+safeDropDownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
+  let sdOptionsDyn = M.mapWithKey (\l _ -> labelToText l) <$> optionsDyn
+      maybeLookup opts ml = ml >>= flip M.lookup opts
+      mapEvent mlEv = R.attachWith maybeLookup (current optionsDyn) mlEv
+      mapDynamic mlDyn = R.zipDynWith maybeLookup optionsDyn mlDyn
+  SafeDropdown valDyn changeEv <- safeDropdown l0m sdOptionsDyn cfg -- SafeDropdown t l
+  return $ SafeDropdown (mapDynamic valDyn) (mapEvent changeEv)
 
 boolToEither::Bool -> Either () ()
 boolToEither True = Right ()
