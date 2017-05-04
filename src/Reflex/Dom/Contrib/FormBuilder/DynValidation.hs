@@ -1,7 +1,12 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
-module Reflex.Dom.Contrib.FormBuilder.DynValidation where
+module Reflex.Dom.Contrib.FormBuilder.DynValidation
+ (
+   module Reflex.Dom.Contrib.FormBuilder.DynValidation
+ , module Data.Validation
+ )
+where
 
 import           Control.Monad     (join)
 import           Data.Text         (Text)
@@ -19,6 +24,9 @@ type DynMaybe t = Compose (Dynamic t) Maybe
 
 constDynMaybe::Reflex t=>Maybe a->DynMaybe t a
 constDynMaybe = Compose . constDyn 
+
+justDynMaybe::Reflex t => Dynamic t a -> DynMaybe t a
+justDynMaybe = Compose . fmap Just
 
 dynMaybeAsEv::PostBuild t m=>DynMaybe t a -> m (Event t a)
 dynMaybeAsEv = dynamicMaybeAsEv . getCompose

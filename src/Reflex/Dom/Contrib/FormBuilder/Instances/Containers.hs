@@ -22,7 +22,9 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
   , buildList
   , buildEqList
   , buildMap
+  , buildMapEditOnly
   , buildEqMap
+  , buildEqMapEditOnly
   , buildSet
   , buildIntMap
   , buildEqIntMap
@@ -139,6 +141,13 @@ type VFormBuilderBoth t m a b = (VFormBuilderC t m a, VFormBuilderC t m b)
 type LHFMapForForm g k = (Functor g, Traversable g, LHFMap g, LHFMapKey g ~ k, Ord k) 
 type ContainerForm t m g k v = (FormInstanceC t m, LHFMapForForm g k, VFormBuilderBoth t m k v)
 
+buildContainerEditOnly::ContainerForm t m g k v
+  =>MapLike f g v
+  ->MapElemWidgets g t m k v
+  ->BuildForm t m (f v)
+buildContainerEditOnly ml mews va mFN = validateForm va . buildLBEditOnly ml mews mFN
+
+
 buildAdjustableContainer::ContainerForm t m g k v
   =>MapLike f g v
   ->MapElemWidgets g t m k v
@@ -180,8 +189,15 @@ mapWidgets = MapElemWidgets showKeyEditVal mapEditWidget
 buildMap::(FormInstanceC t m,Ord k, VFormBuilderBoth t m k v)=>BuildForm t m (M.Map k v)
 buildMap = buildAdjustableContainer mapML mapWidgets
 
+buildMapEditOnly :: (FormInstanceC t m,Ord k, VFormBuilderBoth t m k v)=>BuildForm t m (M.Map k v)
+buildMapEditOnly = buildContainerEditOnly mapML mapWidgets
+
 buildEqMap::(FormInstanceC t m,Ord k, Eq v, VFormBuilderBoth t m k v)=>BuildForm t m (M.Map k v)
 buildEqMap = buildAdjustableContainer mapEQML mapWidgets
+
+buildEqMapEditOnly :: (FormInstanceC t m, Ord k, Eq v, VFormBuilderBoth t m k v)=>BuildForm t m (M.Map k v)
+buildEqMapEditOnly = buildContainerEditOnly mapEQML mapWidgets
+
 
 instance (FormInstanceC t m, Ord k, VFormBuilderBoth t m k a)=>FormBuilder t m (M.Map k a) where
   buildForm =  buildMap
