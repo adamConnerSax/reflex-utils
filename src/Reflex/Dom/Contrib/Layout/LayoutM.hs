@@ -23,8 +23,10 @@ module Reflex.Dom.Contrib.Layout.LayoutM
        , addNewLayoutNode
        ) where
 
+import           Data.Functor.Misc               (ComposeMaybe (..))
 import           GHCJS.DOM.Types                 (MonadJSM (liftJSM'))
 import qualified Reflex                          as R
+import qualified Reflex.Class                    as R
 import qualified Reflex.Dom                      as RD
 import qualified Reflex.Host.Class               as RC
 
@@ -67,7 +69,7 @@ addCssUpdate d (AddToDynamic d') = d <> d'
 
 -- biased to 2nd arg.
 mergeCssUpdates::CssUpdate->CssUpdate->CssUpdate
-mergeCssUpdates _ (UpdateDynamic d) = UpdateDynamic d
+mergeCssUpdates _ (UpdateDynamic d)                 = UpdateDynamic d
 mergeCssUpdates (UpdateDynamic d) (AddToDynamic d') = UpdateDynamic (d <> d')
 mergeCssUpdates (AddToDynamic d1) (AddToDynamic d2) = AddToDynamic (d1 <> d2)
 
@@ -216,21 +218,23 @@ instance RD.TriggerEvent t m => RD.TriggerEvent t (LayoutM t m) where
   {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
   newEventWithLazyTriggerWithOnComplete = lift . RD.newEventWithLazyTriggerWithOnComplete
 
-instance RD.MonadAdjust t m => RD.MonadAdjust t (StateT s m) where
+
+instance R.MonadAdjust t m => R.MonadAdjust t (StateT s m) where
   runWithReplace a0 a' = do
     s <- get
-    lift $ RD.runWithReplace (evalStateT a0 s) $ fmap (`evalStateT` s) a'
-  sequenceDMapWithAdjust dm0 dm' = do
+    lift $ R.runWithReplace (evalStateT a0 s) $ fmap (`evalStateT` s) a'
+  traverseDMapWithKeyWithAdjust f dm0 dm' = do
     s <- get
-    let loweredDm0 = DMap.map (`evalStateT` s) dm0
-        loweredDm' = RD.ffor dm' $ \(RD.PatchDMap p) -> RD.PatchDMap $
-          DMap.map (\(RD.ComposeMaybe mv) -> RD.ComposeMaybe $ fmap (`evalStateT` s) mv) p
-    lift $ RD.sequenceDMapWithAdjust loweredDm0 loweredDm'
+    lift $ R.traverseDMapWithKeyWithAdjust (\k v -> evalStateT (f k v) s) dm0 dm'
+  traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = do
+    s <- get
+    lift $ R.traverseDMapWithKeyWithAdjustWithMove (\k v -> evalStateT (f k v) s) dm0 dm'
 
 
-instance RD.MonadAdjust t m => RD.MonadAdjust t (LayoutM t m) where
-  runWithReplace a0 a' = LayoutM $ RD.runWithReplace (coerce a0) (RD.coerceEvent a')
-  sequenceDMapWithAdjust dm0 dm' = LayoutM $ RD.sequenceDMapWithAdjust (coerce dm0) (RD.coerceEvent dm')
+instance R.MonadAdjust t m => R.MonadAdjust t (LayoutM t m) where
+  runWithReplace a0 a' = LayoutM $ R.runWithReplace (coerce a0) (RD.coerceEvent a')
+  traverseDMapWithKeyWithAdjust f dm0 dm' = LayoutM $ R.traverseDMapWithKeyWithAdjust (coerce . f) dm0 dm'
+  traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = LayoutM $ R.traverseDMapWithKeyWithAdjustWithMove (coerce . f) dm0 dm'
 
 {-
 instance RD.HasWebView m => RD.HasWebView (LayoutM t m) where
