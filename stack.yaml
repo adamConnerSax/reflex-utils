@@ -49,8 +49,8 @@ packages:
   - reflex-dom-core
   - reflex-dom
 - location:
-    git: https://github.com/adamConnerSax/reflex-dom-contrib
-    commit: "f545fdd9f7c4e018f5bce89ee5d6f46cc05a91fe"
+    git: https://github.com/reflex-frp/reflex-dom-contrib
+    commit: "e112e1054a3a50d9ff402eaca0c583a4ccbd56d3"
   extra-dep: true
 #- '../dataBuilder'  
 - '.'
