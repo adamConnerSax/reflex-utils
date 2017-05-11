@@ -7,7 +7,7 @@ resolver: lts-8.11
 packages:
 - location:
     git: https://github.com/adamConnerSax/perConstructor-sop
-    commit: "2eff06f2a89971f09b4bf752be4066c80786a781"
+    commit: "0ad25c04cbf4010752f07ca8291ce7ddb684ec5f"
   extra-dep: true 
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
