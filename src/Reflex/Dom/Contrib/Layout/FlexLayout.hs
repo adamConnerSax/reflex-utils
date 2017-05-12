@@ -103,7 +103,7 @@ flexCol'::(RD.DomBuilder t m)=>CssClasses->m a->m a
 flexCol' classes = RD.divClass ("gl-flex-col "  <> toCssString classes)
 
 flexItem'::(RD.DomBuilder t m)=>CssClasses->m a->m a
-flexItem' classes = RD.divClass ("gl-flex-item " <> toCssString classes)
+flexItem' classes = RD.divClass ("gl-flex-item-1 " <> toCssString classes)
 
 flexSizedItem'::(RD.DomBuilder t m)=>CssClasses->Int->m a->m a
 flexSizedItem' classes n = let n' = Prelude.min n numberFlexGrowOptions in RD.divClass $ T.pack ("gl-flex-item-" ++ show n')  <> toCssString classes
