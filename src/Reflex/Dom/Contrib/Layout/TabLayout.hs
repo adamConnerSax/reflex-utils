@@ -106,17 +106,16 @@ tabCss = do
 tabCssBS::B.ByteString
 tabCssBS = cssToBS tabCss
 
-data TabInfo t m a = TabInfo { tabID::T.Text,
-                               tabName::T.Text,
-                               tabWidget::(RD.DomBuilder t m,MonadIO (R.PushM t))=>m a }
-
-
+data TabInfo t m a = TabInfo { tabID :: T.Text
+                             , tabName :: T.Text
+                             , tabLabelAttrs :: R.Dynamic t (M.Map T.Text T.Text) 
+                             , tabWidget :: (RD.DomBuilder t m, MonadIO (R.PushM t)) => m a }
 
 instance Eq (TabInfo t m a) where
-  (TabInfo _ x _) == (TabInfo _ y _) = x == y
+  (TabInfo _ x _ _) == (TabInfo _ y _ _) = x == y
 
 instance Ord (TabInfo t m a) where
-  compare (TabInfo _ x _) (TabInfo _ y _) = compare x y
+  compare (TabInfo _ x _ _) (TabInfo _ y _ _) = compare x y
 
 
 -- NB, if you use other than the defaults you will need to add css to manage functionality
@@ -144,7 +143,9 @@ staticTabbedLayout config curTab tabs = do
                                         <> ("type" RD.=: "radio")
                                         <> ("name" RD.=: "grp")
                                         <> curTabchecked tab) RD.blank 
-      makeLabelAttrs tab ct = attrsIf ("for" RD.=: tabID tab) (tabClass $ indicatorOnClass config) (tabClass $ indicatorOffClass config) ((==tab) <$> ct)
+      makeLabelAttrs tab ct =
+        let selAttrs = attrsIf ("for" RD.=: tabID tab) (tabClass $ indicatorOnClass config) (tabClass $ indicatorOffClass config) ((==tab) <$> ct)
+        in R.zipDynWith M.union selAttrs (tabLabelAttrs tab)
       makeTabAttrs tab ct = attrsIf (tabClass $ tabPaneClass config) ("style" RD.=: "display: block") ("style" RD.=: "display: none") ((==tab) <$> ct)
       tabLabelEv tab ct = fmap (const tab) . (RD.domEvent RD.Click . fst) <$> (RD.elDynAttr' "label" (makeLabelAttrs tab ct) $ RD.text (tabName tab))
       tabEv tab ct = flexItem (tabInput tab >> tabLabelEv tab ct)
@@ -177,8 +178,8 @@ staticTabbedLayout' curTab tabs = RD.divClass "tabbed-area" $ do
 
 --dynamic 
 instance (RD.DomBuilder t m, RD.PostBuild t m)=>Tab t m (TabInfo t m a) where
-  tabIndicator (TabInfo tabId tabLabel _) boolDyn = do
-    let labelAttrs = M.fromList [("for",tabId)]
+  tabIndicator (TabInfo tabId tabLabel _ _) boolDyn = do
+    let labelAttrs = M.fromList [("for",tabId)] --TODO : add dynamic attributes here
         radioAttrs = M.fromList [("id",tabId),("type","radio"),("style","display: none")]
         selectorAttrsDyn = addActiveClass boolDyn (RD.constDyn M.empty) 
     RD.elDynAttr "li" selectorAttrsDyn $ do    
@@ -196,7 +197,7 @@ dynamicTabbedLayout cur allDyn = RD.divClass "tabbed-area" $ do
   allSampled <- R.sample $ R.current allDyn
   bar <- RD.divClass "dyn-tab-bar" $ RD.elAttr "ul" ("class" RD.=: "tab-pane") $ tabBar (TabBarConfig cur  allSampled (R.updated allDyn) R.never)
   let paneAttrs = M.empty
-      setTabWidget t@(TabInfo _ _ w) = tabPane paneAttrs (_tabBar_curTab bar) t w -- m a 
+      setTabWidget t@(TabInfo _ _ _ w) = tabPane paneAttrs (_tabBar_curTab bar) t w -- m a 
       setTabWidgets = mapM setTabWidget -- m [a]
       widgetDyn = setTabWidgets <$> allDyn -- m (Dynamic t (m [a])) 
   RD.widgetHold (setTabWidgets allSampled) (R.updated widgetDyn)
