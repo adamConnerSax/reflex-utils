@@ -51,13 +51,31 @@ flexFillStyles = do
     ".fill-content" <? do
       Flexbox.flex 1 0 auto
       ("-webkit-flex" -: "1 0 auto")
+    ".flex-fill-content-right" ? do
+      marginRight nil
+      marginLeft auto
+    ".flex-fill-content-left" ? do
+      marginLeft nil
+      marginRight auto
+    ".flex-fill-content-top" ? do
+      marginTop nil
+      marginBottom auto
+    ".flex-fill-content-bottom" ? do
+      marginTop auto
+      marginBottom nil
   ".flexFillH" ? do
     flexDirection row
     ("-webkit-flex-direction" -: "row")
+    ".flex-fill-content-center" ? do
+      marginLeft auto
+      marginRight auto    
   ".flexFillV" ? do
     flexDirection column
     ("-webkit-flex-direction" -: "column")    
-
+    ".flex-fill-content-center" ? do
+      marginTop auto
+      marginBottom auto            
+  
 numberFlexGrowOptions :: Int
 numberFlexGrowOptions = 12
 
@@ -125,45 +143,15 @@ wrapWidget::RD.DomBuilder t m=>m a->m a
 wrapWidget = RD.divClass "fill-content" 
 
 
-flexFill::(RD.DomBuilder t m)=>LayoutDirection->m a->m a
-flexFill LayoutRight w =
-  RD.divClass "flexFillH" $ do
-    x <- wrapWidget w
-    RD.divClass "fill-space" RD.blank
-    return x
+flexFill :: RD.DomBuilder t m => LayoutDirection -> m a -> m a
+flexFill LayoutRight = RD.divClass "flexFillH" . RD.divClass "flex-fill-content-left" 
+flexFill LayoutLeft = RD.divClass "flexFillH" . RD.divClass "flex-fill-content-right"
+flexFill LayoutBottom  = RD.divClass "flexFillV" . RD.divClass "flex-fill-content-top"    
+flexFill LayoutTop  = RD.divClass "flexFillV" . RD.divClass "flex-fill-content-bottom"
 
-flexFill LayoutLeft w =
-  RD.divClass "flexFillH" $ do  
-    RD.divClass "fill-space" RD.blank
-    wrapWidget w
-
-
-flexFill LayoutBottom w = 
-  RD.divClass "flexFillV" $ do
-    x <- wrapWidget w
-    RD.divClass "fill-space" RD.blank
-    return x
-    
-flexFill LayoutTop w = 
-  RD.divClass "flexFillV" $ do  
-    RD.divClass "fill-space" RD.blank
-    wrapWidget w
-
-flexCenter::(RD.DomBuilder t m)=>LayoutOrientation->m a->m a
-flexCenter LayoutHorizontal w = 
-  RD.divClass "flexFillH" $ do
-    RD.divClass "fill-space" RD.blank
-    x <- wrapWidget w
-    RD.divClass "fill-space" RD.blank
-    return x
-    
-flexCenter LayoutVertical w = 
-  RD.divClass "flexFillV" $ do
-    RD.divClass "fill-space" RD.blank
-    x <- wrapWidget w
-    RD.divClass "fill-space" RD.blank
-    return x
-
+flexCenter :: RD.DomBuilder t m => LayoutOrientation -> m a -> m a
+flexCenter LayoutHorizontal = RD.divClass "flexFillH" . RD.divClass "flex-fill-content-center"     
+flexCenter LayoutVertical  = RD.divClass "flexFillV" . RD.divClass "flex-fill-content-center"
 
 infixl 2 ##
 (##)::(RD.DomBuilder t m)=>(m a->m a)->m a->m a
