@@ -185,7 +185,7 @@ simpleFlexWidget = do
   flexFill LayoutLeft w
 
 sfTab::(SupportsLayoutM t m)=>TabInfo t m ()
-sfTab = TabInfo "sf" "Simple Flex" simpleFlexWidget
+sfTab = TabInfo "sf" (constDyn ("Simple Flex", M.empty)) simpleFlexWidget
 
 
 optFlexWidget::(SupportsLayoutM t m, PostBuild t m,HasWebView m,{- MonadAsyncException m, -}MonadIO (PushM t),
@@ -219,7 +219,7 @@ optFlexWidget = do
 -}
 
 optFlexTab::(SupportsLayoutM t m,MonadJSM (Performable m),MonadJSM m,HasJSContext m,PostBuild t m{-, MonadAsyncException m -})=>TabInfo t m ()
-optFlexTab = TabInfo "optFlex" "optFlex" optFlexWidget
+optFlexTab = TabInfo "optFlex" (constDyn ("optFlex", M.empty)) optFlexWidget
 
 
 boxesWidget::(SupportsLayoutM t m,PostBuild t m,HasWebView m, {- MonadAsyncException m, -}
@@ -238,7 +238,7 @@ boxesWidget = do
     return ()
 
 boxesTab::(SupportsLayoutM t m, PostBuild t m,HasJSContext m,MonadJSM (Performable m),{- MonadAsyncException m,-} MonadJSM (LayoutM t m))=>TabInfo t m ()
-boxesTab = TabInfo "boxes" "Dynamic/Events" $ runLayoutMain (LayoutConfig emptyClassMap emptyDynamicCssMap) boxesWidget
+boxesTab = TabInfo "boxes" (constDyn ("Dynamics/Events", M.empty)) $ runLayoutMain (LayoutConfig emptyClassMap emptyDynamicCssMap) boxesWidget
 {-
 laidOut::(MonadWidget t m, MonadIO (PushM t))=>LayoutM t m () -> IO ()
 laidOut w = mainWidgetWithCss allCss $

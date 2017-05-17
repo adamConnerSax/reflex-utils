@@ -146,7 +146,7 @@ printUser::User->T.Text
 printUser (User (Name n) (EmailAddress ea) (Age a)) = "User with name " <> n <> " email " <> ea <> " and age " <> (T.pack $ show a)
 
 userFormTab::FormInstanceC t m=>FormConfiguration t m -> TabInfo t m ()
-userFormTab cfg = TabInfo "userFormTab" "Classic Form" $ testUserForm cfg
+userFormTab cfg = TabInfo "userFormTab" (constDyn ("Classic Form", M.empty)) $ testUserForm cfg
 
 buttonNoSubmit'::DomBuilder t m=>T.Text -> m (Event t ())
 buttonNoSubmit' t = (domEvent Click . fst) <$> elAttr' "button" ("type" =: "button") (text t)
@@ -268,7 +268,7 @@ testComplexForm cfg = do
   return ()
 
 complexFormTab::FormInstanceC t m=>FormConfiguration t m -> TabInfo t m ()
-complexFormTab cfg = TabInfo "complexFormTab" "Complex Example" $ testComplexForm cfg
+complexFormTab cfg = TabInfo "complexFormTab" (constDyn ("Cmplex Example", M.empty))  $ testComplexForm cfg
 
 
 flowTestWidget::(DomBuilder t m,MonadWidgetExtraC t m,MonadFix m,MonadHold t m,PostBuild t m)=>Int->m (Dynamic t String)
@@ -288,7 +288,7 @@ testFlow cfg = do
   return ()
 
 flowTestTab::FormInstanceC t m=>FormConfiguration t m -> TabInfo t m ()
-flowTestTab cfg = TabInfo "flowTestTab" "Flow Example" $ testFlow cfg
+flowTestTab cfg = TabInfo "flowTestTab" (constDyn ("Flow Example", M.empty)) $ testFlow cfg
 
 test::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m -> m ()
 test cfg = do
