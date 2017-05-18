@@ -144,7 +144,8 @@ staticTabbedLayout config curTab tabs = do
                                         <> curTabchecked tab) RD.blank 
       makeLabelAttrs tab ct =
         let selAttrs = attrsIf ("for" RD.=: tabID tab) (tabClass $ indicatorOnClass config) (tabClass $ indicatorOffClass config) ((==tab) <$> ct)
-        in R.zipDynWith M.union selAttrs (snd <$> tabLabel tab)
+            combineVals v1 v2 = v1 <> " " <> v2
+        in R.zipDynWith (M.unionWith combineVals) selAttrs (snd <$> tabLabel tab)
       makeTabAttrs tab ct = attrsIf (tabClass $ tabPaneClass config) ("style" RD.=: "display: block") ("style" RD.=: "display: none") ((==tab) <$> ct)
       tabLabelEv tab ct = fmap (const tab) . (RD.domEvent RD.Click . fst) <$> (RD.elDynAttr' "label" (makeLabelAttrs tab ct) $ RD.dynText (fst <$> tabLabel tab))
       tabEv tab ct = flexItem (tabInput tab >> tabLabelEv tab ct)
