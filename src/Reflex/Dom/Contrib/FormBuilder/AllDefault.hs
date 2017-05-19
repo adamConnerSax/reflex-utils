@@ -142,9 +142,9 @@ safeHead::[a]->Maybe a
 safeHead = safeIndex 0
 
 -- FIXME: write a version that uses all the widgets at once, hiding the unused ones.  THat will be more efficient in the case when switching is expected
-defSumF::DefaultConfigurationC t m=>[(B.ConName,R.Event t (),FRW t m a)]->FRW t m a
+defSumF :: DefaultConfigurationC t m => [(B.ConName,R.Event t (),FRW t m a)]->FRW t m a
 defSumF conWidgets = fRow $ do
-  let (names,events,widgets) = unzip3 conWidgets
+  let (names, events, widgets) = unzip3 conWidgets
       indexedNames = zip [0..] (T.pack <$> names)
       inputIndexEv = whichFired events
   validClasses <- validDataClasses

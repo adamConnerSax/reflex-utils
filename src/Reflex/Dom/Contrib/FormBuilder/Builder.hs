@@ -309,9 +309,10 @@ instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m)=> B.Buildable (F
     failF $ T.pack msg
 
   bSum mwWidgets = B.FGV . fmap unDynValidation $ do
+    postbuild <- RD.getPostBuild
     let mapHasDefault = R.fmapMaybe (\x -> if x then Just () else Nothing)
         mapValue      = fmap DynValidation . B.unFGV
-        f (MDWrapped isConDyn (conName,mFN) fgvWidget) = (conName, mapHasDefault (R.updated isConDyn), mapValue fgvWidget)
+        f (MDWrapped isConDyn (conName,mFN) fgvWidget) = (conName, mapHasDefault (R.leftmost [R.updated isConDyn, R.tag (R.current isConDyn) postbuild]), mapValue fgvWidget)
         constrList = f <$> mwWidgets
     sF <- sumF . _builderFunctions <$> ask
     sF constrList
