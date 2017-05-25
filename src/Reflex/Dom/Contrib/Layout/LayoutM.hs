@@ -236,6 +236,9 @@ instance R.MonadAdjust t m => R.MonadAdjust t (LayoutM t m) where
   traverseDMapWithKeyWithAdjust f dm0 dm' = LayoutM $ R.traverseDMapWithKeyWithAdjust (coerce . f) dm0 dm'
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = LayoutM $ R.traverseDMapWithKeyWithAdjustWithMove (coerce . f) dm0 dm'
 
+instance RD.HasDocument m => RD.HasDocument (LayoutM t m) where
+  askDocument = lift RD.askDocument
+
 {-
 instance RD.HasWebView m => RD.HasWebView (LayoutM t m) where
   type WebViewPhantom (LayoutM t m) = RD.WebViewPhantom m

@@ -73,7 +73,7 @@ showText :: Show a => a -> T.Text
 showText = T.pack . show
 
 type WidgetC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
-type FormInstanceC t m = (WidgetC t m, MonadWidgetExtraC t m, RD.PostBuild t m)
+type FormInstanceC t m = (RD.HasDocument m, WidgetC t m, MonadWidgetExtraC t m, RD.PostBuild t m)
 --type VBuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
 
 instance {-# OVERLAPPABLE #-} B.Validatable (FValidation) a where

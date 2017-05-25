@@ -271,7 +271,7 @@ complexFormTab::FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 complexFormTab cfg = TabInfo "complexFormTab" (constDyn ("Cmplex Example", M.empty))  $ testComplexForm cfg
 
 
-flowTestWidget::(DomBuilder t m, MonadWidgetExtraC t m, MonadFix m, MonadHold t m, PostBuild t m)=>Int->m (Dynamic t String)
+flowTestWidget::(DomBuilder t m, HasDocument m, MonadWidgetExtraC t m, MonadFix m, MonadHold t m, PostBuild t m)=>Int->m (Dynamic t String)
 flowTestWidget n = do
   text "Are all these checked?"
   boolDyns <- sequence $ take n $ Prelude.repeat (RDC._hwidget_value <$> RDC.htmlCheckbox (RDC.WidgetConfig never True (constDyn mempty)))
