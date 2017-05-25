@@ -64,12 +64,12 @@ import           Prelude                                        hiding (div,
 instance Default (FormIncludedCss) where
   def = FormIncludedCss defaultCss (CssLinks [])
 
-defaultCss::ByteString
+defaultCss :: ByteString
 defaultCss = cssToBS formDefaultCss <> cssToBS observerDefaultCss
 
 type DefaultConfigurationC t m = FormInstanceC t m
 
-byFormType::FormType->a->a->a
+byFormType :: FormType -> a -> a -> a
 byFormType ft ifInteractive ifReadOnly = case ft of
   Interactive -> ifInteractive
   ObserveOnly -> ifReadOnly
@@ -86,36 +86,36 @@ instance Default (CssConfiguration) where
 instance Default (InputElementConfig t) where
   def = InputElementConfig Nothing Nothing Nothing
 
-defLayoutWrapper::RD.DomBuilder t m=>FormType->FLayoutF t m
+defLayoutWrapper :: RD.DomBuilder t m => FormType -> FLayoutF t m
 defLayoutWrapper _ w = do
   classes <- wrapperClasses
   RD.divClass (toCssString classes) w
 
-defLayoutItem::RD.DomBuilder t m=>FormType->FLayoutF t m
+defLayoutItem :: RD.DomBuilder t m => FormType -> FLayoutF t m
 defLayoutItem _ w = do
   classes <- itemClasses
   liftLF (flexItem' classes) w
 
-defLayoutOriented::RD.DomBuilder t m=>FormType->LayoutOrientation->FLayoutF t m
+defLayoutOriented :: RD.DomBuilder t m => FormType -> LayoutOrientation -> FLayoutF t m
 defLayoutOriented _ LayoutHorizontal = liftLF flexRow
-defLayoutOriented _ LayoutVertical = liftLF flexCol
+defLayoutOriented _ LayoutVertical   = liftLF flexCol
 
-defLayoutFill::RD.DomBuilder t m=>FormType->LayoutDirection->FLayoutF t m
+defLayoutFill :: RD.DomBuilder t m => FormType -> LayoutDirection -> FLayoutF t m
 defLayoutFill _ d = liftLF (flexFill d)
 
-defLayoutCentered::RD.DomBuilder t m=>FormType->LayoutOrientation->FLayoutF t m
+defLayoutCentered :: RD.DomBuilder t m => FormType -> LayoutOrientation -> FLayoutF t m
 defLayoutCentered _ o = liftLF (flexCenter o)
 
-defLayoutCollapsible::RD.DomBuilder t m=>FormType->T.Text->CollapsibleInitialState->FLayoutF t m
+defLayoutCollapsible :: RD.DomBuilder t m => FormType -> T.Text -> CollapsibleInitialState -> FLayoutF t m
 defLayoutCollapsible _ t is = liftLF (collapsibleWidget t is)
 
-instance RD.DomBuilder t m=>Default (LayoutConfiguration t m) where
+instance RD.DomBuilder t m => Default (LayoutConfiguration t m) where
   def = LayoutConfiguration defLayoutWrapper defLayoutItem defLayoutOriented defLayoutFill defLayoutCentered defLayoutCollapsible
 
-instance DefaultConfigurationC t m=> Default (FormConfiguration t m) where
+instance DefaultConfigurationC t m => Default (FormConfiguration t m) where
   def = FormConfiguration Interactive def def def def
 
-collapsibleWidget::RD.DomBuilder t m=>T.Text->CollapsibleInitialState->m a->m a
+collapsibleWidget :: RD.DomBuilder t m => T.Text -> CollapsibleInitialState -> m a -> m a
 collapsibleWidget summary cis w =
   RD.elAttr "details" (if cis == CollapsibleStartsOpen then "open" RD.=: "" else mempty) $ do
     RD.el "summary" $ RD.text summary
@@ -124,21 +124,21 @@ collapsibleWidget summary cis w =
 instance DefaultConfigurationC t m => Default (BuilderFunctions t m) where
   def = BuilderFunctions defFailureF defSumF defDynamicDiv
 
-defDynamicDiv::(RD.DomBuilder t m, RD.PostBuild t m)=>DynAttrs t -> FLayoutF t m
+defDynamicDiv :: (RD.DomBuilder t m, RD.PostBuild t m) => DynAttrs t -> FLayoutF t m
 defDynamicDiv dynAttrs = liftLF $ RD.elDynAttr "div" dynAttrs
 
-defFailureF::RD.DomBuilder t m=>T.Text->FRW t m a
+defFailureF :: RD.DomBuilder t m => T.Text -> FRW t m a
 defFailureF msg = do
   RD.text msg
   return dynValidationNothing
 
-whichFired::R.Reflex t=>[R.Event t a]->R.Event t Int
+whichFired :: R.Reflex t => [R.Event t a] -> R.Event t Int
 whichFired = R.leftmost . zipWith (<$) [0..]
 
-safeIndex::Int->[a]->Maybe a
+safeIndex :: Int -> [a] -> Maybe a
 safeIndex n l = let ln = take (n+1) l in if length ln == (n+1) then Just (last ln) else Nothing
 
-safeHead::[a]->Maybe a
+safeHead :: [a] -> Maybe a
 safeHead = safeIndex 0
 
 -- FIXME: write a version that uses all the widgets at once, hiding the unused ones.  THat will be more efficient in the case when switching is expected
@@ -192,19 +192,19 @@ formBoxes = do
   ".sf-black-on-gray" ? cssSolidTextBox 0.1 gray black
   ".sf-white-on-gray" ? cssSolidTextBox 0.1 gray white
 
-isFormContainer::Selector
+isFormContainer :: Selector
 isFormContainer = ".sf-container"
 
-isFormItem::Selector
+isFormItem :: Selector
 isFormItem = div # ".sf-item"
 
-isValidData::Selector
+isValidData :: Selector
 isValidData = div # ".sf-valid"
 
-isInvalidData::Selector
+isInvalidData :: Selector
 isInvalidData = div # ".sf-invalid"
 
-isObservedConstructor::Selector
+isObservedConstructor :: Selector
 isObservedConstructor = div # ".sf-observed-constructor"
 
 
@@ -248,10 +248,10 @@ formDefaultCss = do
   formBoxes
   formElements
 
-isObserver::Selector
+isObserver :: Selector
 isObserver = C.div # ".sf-observer"
 
-isObserverItem::Selector
+isObserverItem :: Selector
 isObserverItem = C.div # ".sf-observer-item"
 
 

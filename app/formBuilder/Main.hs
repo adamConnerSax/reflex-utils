@@ -85,7 +85,7 @@ import qualified System.Process                                      as SP
 --It's easy to add validation (via newtype wrapper)
 newtype Age = Age { unAge::Int } deriving (Show)
 
-liftValidation::(a->Bool)->(a->T.Text)->FormValidator a
+liftValidation :: (a->Bool)->(a->T.Text)->FormValidator a
 liftValidation test msg = (\a -> if test a then AccSuccess a else AccFailure [FInvalid (msg a)])
 
 instance B.Validatable FValidation Age where
@@ -133,7 +133,7 @@ instance HasDatatypeInfo User
 instance FormInstanceC t m=>FormBuilder t m User where
   buildForm va mFN = liftF fCol . gBuildFormValidated va mFN
 
-testUserForm::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m->m ()
+testUserForm :: FormInstanceC t m =>FormConfiguration t m->m ()
 testUserForm cfg = do
   let user = User (Name "Adam") (EmailAddress "adam@adam") (Age 45)
   el "p" $ text ""
@@ -255,7 +255,7 @@ testMap = M.fromList [("A",1),("B",2)]
 testMap2::M.Map T.Text (M.Map T.Text T.Text)
 testMap2 = M.fromList [("MapA",M.fromList [("A","a"),("B","b")]),("MapB",M.fromList [("C","c"),("E","e")])]
 
-testComplexForm::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m -> m ()
+testComplexForm :: FormInstanceC t m=>FormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
@@ -267,11 +267,11 @@ testComplexForm cfg = do
   _ <- flexFill LayoutRight $ observeDynamic cfg (avToMaybe <$> unDynValidation cDynM)
   return ()
 
-complexFormTab::FormInstanceC t m=>FormConfiguration t m -> TabInfo t m ()
+complexFormTab::FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 complexFormTab cfg = TabInfo "complexFormTab" (constDyn ("Cmplex Example", M.empty))  $ testComplexForm cfg
 
 
-flowTestWidget::(DomBuilder t m,MonadWidgetExtraC t m,MonadFix m,MonadHold t m,PostBuild t m)=>Int->m (Dynamic t String)
+flowTestWidget::(DomBuilder t m, MonadWidgetExtraC t m, MonadFix m, MonadHold t m, PostBuild t m)=>Int->m (Dynamic t String)
 flowTestWidget n = do
   text "Are all these checked?"
   boolDyns <- sequence $ take n $ Prelude.repeat (RDC._hwidget_value <$> RDC.htmlCheckbox (RDC.WidgetConfig never True (constDyn mempty)))
@@ -279,7 +279,7 @@ flowTestWidget n = do
   forDyn allTrueDyn $ \b -> if b then "All Checked!" else "Some Unchecked."
 
 
-testFlow::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m->m ()
+testFlow :: FormInstanceC t m => FormConfiguration t m->m ()
 testFlow cfg = do
   el "p" $ text ""
   el "h2" $ text "Observe a \"flow\", that is directly see input and output of a function of type WidgetMonad m=>a -> m b"
@@ -287,10 +287,10 @@ testFlow cfg = do
   _ <- observeFlow cfg flowTestWidget 2
   return ()
 
-flowTestTab::FormInstanceC t m=>FormConfiguration t m -> TabInfo t m ()
+flowTestTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 flowTestTab cfg = TabInfo "flowTestTab" (constDyn ("Flow Example", M.empty)) $ testFlow cfg
 
-test::(FormInstanceC t m, MonadIO (PushM t))=>FormConfiguration t m -> m ()
+test :: FormInstanceC t m => FormConfiguration t m -> m ()
 test cfg = do
   el "p" (text "")
   el "br" blank

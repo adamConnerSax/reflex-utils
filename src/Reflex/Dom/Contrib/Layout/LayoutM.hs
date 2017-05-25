@@ -63,27 +63,27 @@ instance IsCssClass LayoutNodeCss where
   toCssString (LayoutNodeCss s d) = toCssString s <> " " <> toCssString d
 
 -- for left fold.  needs to be flipped for foldDyn.
-addCssUpdate::CssClasses->CssUpdate->CssClasses
+addCssUpdate :: CssClasses -> CssUpdate -> CssClasses
 addCssUpdate _ (UpdateDynamic d) = d
 addCssUpdate d (AddToDynamic d') = d <> d'
 
 -- biased to 2nd arg.
-mergeCssUpdates::CssUpdate->CssUpdate->CssUpdate
+mergeCssUpdates :: CssUpdate -> CssUpdate -> CssUpdate
 mergeCssUpdates _ (UpdateDynamic d)                 = UpdateDynamic d
 mergeCssUpdates (UpdateDynamic d) (AddToDynamic d') = UpdateDynamic (d <> d')
 mergeCssUpdates (AddToDynamic d1) (AddToDynamic d2) = AddToDynamic (d1 <> d2)
 
-emptyClassMap::LayoutClassMap
+emptyClassMap :: LayoutClassMap
 emptyClassMap = M.empty
 
-emptyDynamicCssMap::R.Reflex t=>LayoutClassDynamicMap t
+emptyDynamicCssMap :: R.Reflex t => LayoutClassDynamicMap t
 emptyDynamicCssMap = M.empty
 
-newInfo::R.Reflex t=>LayoutDescription t->LayoutInfo t
+newInfo :: R.Reflex t => LayoutDescription t -> LayoutInfo t
 newInfo ld = LayoutInfo ld (CssClasses []) Nothing
 
 --TODO: Figure out how to use "pull" here to make "sample" okay
-dynamicCss::(R.Reflex t, R.MonadHold t m, MonadFix m)=>LayoutDescription t->LayoutClassDynamicMap t->m (Maybe (R.Dynamic t CssClasses))
+dynamicCss :: (R.Reflex t, R.MonadHold t m, MonadFix m) => LayoutDescription t -> LayoutClassDynamicMap t -> m (Maybe (R.Dynamic t CssClasses))
 dynamicCss desc dynMap = do
   let classKeys = (desc ^. ldLayoutClassKeys)
       makeDyn::(R.Reflex t, MonadFix m, R.MonadHold t m)=>LayoutClassDynamic t->m (R.Dynamic t CssClasses)
@@ -95,7 +95,7 @@ dynamicCss desc dynMap = do
   if null classKeys || null getLMaybeDyn then return Nothing else Just <$> return (mconcat getLMaybeDyn)
 
 
-addNewLayoutNode::(SupportsLayoutM t m,RD.PostBuild t m, R.MonadHold t m,MonadFix m)=>LayoutDescription t->LayoutM t m a->LayoutM t m a
+addNewLayoutNode :: (SupportsLayoutM t m, RD.PostBuild t m, R.MonadHold t m, MonadFix m) => LayoutDescription t -> LayoutM t m a -> LayoutM t m a
 addNewLayoutNode desc child = LayoutM $ do
   lc <- ask
   ls <- get
@@ -108,47 +108,47 @@ addNewLayoutNode desc child = LayoutM $ do
     mDynClasses <- dynamicCss desc dynamicCssMap
     RD.elDynAttr "div" (classesToAttributesDyn' staticClasses mDynClasses) child'
 
-cssToAttr::IsCssClass c=>c->RD.AttributeMap
+cssToAttr :: IsCssClass c => c -> RD.AttributeMap
 cssToAttr cssClass = "class" RD.=: (toCssString cssClass)
 
-updateCss::LayoutNodeCss->CssUpdate->LayoutNodeCss
+updateCss :: LayoutNodeCss -> CssUpdate -> LayoutNodeCss
 updateCss (LayoutNodeCss s _) (UpdateDynamic d) = LayoutNodeCss s d
 updateCss (LayoutNodeCss s d) (AddToDynamic d') = LayoutNodeCss s (d <> d')
 
-updateCssNE::NE.NonEmpty CssUpdate->LayoutNodeCss->LayoutNodeCss
+updateCssNE :: NE.NonEmpty CssUpdate -> LayoutNodeCss -> LayoutNodeCss
 updateCssNE cssUpdates nodeCss = foldl' updateCss nodeCss (NE.toList cssUpdates)
 
-classesToAttributesDyn::R.Reflex t=>CssClasses->R.Dynamic t CssClasses->R.Dynamic t (M.Map T.Text T.Text)
+classesToAttributesDyn :: R.Reflex t => CssClasses -> R.Dynamic t CssClasses -> R.Dynamic t (M.Map T.Text T.Text)
 classesToAttributesDyn staticCss dynamicCssDyn = (cssToAttr . LayoutNodeCss staticCss) <$> dynamicCssDyn
 
-classesToAttributesDyn'::R.Reflex t=>CssClasses->Maybe (R.Dynamic t CssClasses)->R.Dynamic t (M.Map T.Text T.Text)
+classesToAttributesDyn' :: R.Reflex t => CssClasses -> Maybe (R.Dynamic t CssClasses) -> R.Dynamic t (M.Map T.Text T.Text)
 classesToAttributesDyn' staticCss mDynamicCssDyn =
   let x = fromMaybe (R.constDyn emptyCss) mDynamicCssDyn in classesToAttributesDyn staticCss x
 
 -- utilities for map merging
 -- biased to 2nd argument for initial conditons
-mergeLayoutClassDynamic::(R.Reflex t, R.MonadHold t m,MonadFix m)=>LayoutClassDynamic t->LayoutClassDynamic t->m (LayoutClassDynamic t)
+mergeLayoutClassDynamic :: (R.Reflex t, R.MonadHold t m,MonadFix m) => LayoutClassDynamic t -> LayoutClassDynamic t -> m (LayoutClassDynamic t)
 mergeLayoutClassDynamic (LayoutClassDynamic _ evA) (LayoutClassDynamic initialBDyn evB) = do
   let newEv = R.mergeWith mergeCssUpdates [evA,evB]
   initialValue <- R.sample $ R.current initialBDyn
   newInitialDyn <- R.foldDyn (flip addCssUpdate) initialValue newEv
   return $ LayoutClassDynamic newInitialDyn newEv
 
-unionM::(Monad m,Ord k)=>(a->a->m a)->M.Map k a->M.Map k a->m (M.Map k a)
+unionM :: (Monad m, Ord k) => (a->a->m a) -> M.Map k a -> M.Map k a -> m (M.Map k a)
 unionM f m1 m2 = sequenceA $ M.mergeWithKey (\_ a b -> Just $ f a b) (fmap return) (fmap return) m1 m2
 
 
-runLayoutMain::(SupportsLayoutM t m, RD.PostBuild t m)=>LayoutConfig t->LayoutM t m a->m a
+runLayoutMain :: (SupportsLayoutM t m, RD.PostBuild t m) => LayoutConfig t -> LayoutM t m a -> m a
 runLayoutMain lc lma = runLayoutM lma (LayoutS emptyClassMap emptyDynamicCssMap) lc
 
 -- Class Instances
-liftLM::Monad m=>m a->LayoutM t m a
+liftLM :: Monad m => m a -> LayoutM t m a
 liftLM = LayoutM . lift . lift
 
-instance RD.MonadSample t m=>RD.MonadSample t (LayoutM t m) where
+instance RD.MonadSample t m => RD.MonadSample t (LayoutM t m) where
   sample = liftLM . RD.sample
 
-instance RD.MonadHold t m=>RD.MonadHold t (LayoutM t m) where
+instance RD.MonadHold t m => RD.MonadHold t (LayoutM t m) where
   hold a0 = liftLM . RD.hold a0
   holdDyn a0 = liftLM . RD.holdDyn a0
   holdIncremental a0 = liftLM . RD.holdIncremental a0
@@ -156,7 +156,7 @@ instance RD.MonadHold t m=>RD.MonadHold t (LayoutM t m) where
 instance MonadTrans (LayoutM t) where
   lift = liftLM
 
-runLayoutM::Functor m=>LayoutM t m a->LayoutS t->LayoutConfig t->m a
+runLayoutM :: Functor m => LayoutM t m a -> LayoutS t -> LayoutConfig t -> m a
 runLayoutM lma ls lc = fst <$> runReaderT (runStateT (unLayoutM lma) ls) lc
 
 

@@ -26,35 +26,35 @@ import Control.Monad (foldM)
 import Control.Monad.Fix (MonadFix)
 
 
-addKeyedClassBelow::(R.Reflex t,Monad m)=>(LayoutClassKey,CssClasses)->LayoutM t m ()
+addKeyedClassBelow :: (R.Reflex t, Monad m)=>(LayoutClassKey,CssClasses)->LayoutM t m ()
 addKeyedClassBelow kc = addKeyedClassesBelow [kc]
 
-addKeyedClassesBelow::(R.Reflex t,Monad m)=>[(LayoutClassKey,CssClasses)]->LayoutM t m ()
+addKeyedClassesBelow :: (R.Reflex t, Monad m)=>[(LayoutClassKey,CssClasses)]->LayoutM t m ()
 addKeyedClassesBelow keyedCss = LayoutM $ do
   let f m (key,css)  = M.insertWith mappend key css m
   lsClassMap %= (\m->foldl f m keyedCss)
 
 
-getKeyedCssUpdateEvent::(R.Reflex t, MonadFix m, RD.MonadHold t m)=>LayoutClassKey->LayoutM t m (Maybe (R.Event t CssUpdate))
+getKeyedCssUpdateEvent :: (R.Reflex t, MonadFix m, RD.MonadHold t m)=>LayoutClassKey->LayoutM t m (Maybe (R.Event t CssUpdate))
 getKeyedCssUpdateEvent key = LayoutM $ do
   dynamicCssMap <- use lsDynamicCssMap
   return $ _lcdEvent <$> M.lookup key dynamicCssMap
 
-addKeyedCssUpdateEventBelow::(R.Reflex t, MonadFix m,RD.MonadHold t m)=>LayoutClassKey->CssClasses->R.Event t CssUpdate->LayoutM t m ()
+addKeyedCssUpdateEventBelow :: (R.Reflex t, MonadFix m, RD.MonadHold t m) => LayoutClassKey->CssClasses->R.Event t CssUpdate->LayoutM t m ()
 addKeyedCssUpdateEventBelow key initialCss ev = addKeyedCssUpdateEventsBelow (key,initialCss,[ev])
 
-addKeyedCssUpdateEventBelow'::(R.Reflex t, MonadFix m,RD.MonadHold t m)=>LayoutClassKey->CssClasses->R.Event t CssUpdate->LayoutM t m (R.Event t CssUpdate)
+addKeyedCssUpdateEventBelow' :: (R.Reflex t, MonadFix m, RD.MonadHold t m) => LayoutClassKey->CssClasses->R.Event t CssUpdate->LayoutM t m (R.Event t CssUpdate)
 addKeyedCssUpdateEventBelow' key initialCss ev = addKeyedCssUpdateEventsBelow' (key,initialCss,[ev])
 
-addKeyedCssUpdateEventsBelow::(R.Reflex t, MonadFix m,RD.MonadHold t m)=>(LayoutClassKey,CssClasses,[R.Event t CssUpdate])->LayoutM t m ()
+addKeyedCssUpdateEventsBelow :: (R.Reflex t, MonadFix m, RD.MonadHold t m) => (LayoutClassKey,CssClasses,[R.Event t CssUpdate])->LayoutM t m ()
 addKeyedCssUpdateEventsBelow kEv = addMultipleKeyedCssUpdateEventsBelow [kEv]
 
-addKeyedCssUpdateEventsBelow'::(R.Reflex t, MonadFix m,RD.MonadHold t m)=>(LayoutClassKey,CssClasses,[R.Event t CssUpdate])->LayoutM t m (R.Event t CssUpdate)
+addKeyedCssUpdateEventsBelow' :: (R.Reflex t, MonadFix m, RD.MonadHold t m) => (LayoutClassKey,CssClasses,[R.Event t CssUpdate])->LayoutM t m (R.Event t CssUpdate)
 addKeyedCssUpdateEventsBelow' kEv@(key,_,_) = do
   addMultipleKeyedCssUpdateEventsBelow [kEv]
   fromJust <$> getKeyedCssUpdateEvent key
 
-addMultipleKeyedCssUpdateEventsBelow::(R.Reflex t, MonadFix m,RD.MonadHold t m)=>[(LayoutClassKey,CssClasses,[R.Event t CssUpdate])]->LayoutM t m ()
+addMultipleKeyedCssUpdateEventsBelow :: (R.Reflex t, MonadFix m,RD.MonadHold t m) => [(LayoutClassKey,CssClasses,[R.Event t CssUpdate])]->LayoutM t m ()
 addMultipleKeyedCssUpdateEventsBelow kEvs = do
   newMap <- do
     let createDyn initialCss cssUpdEv = R.foldDyn (flip addCssUpdate) initialCss cssUpdEv

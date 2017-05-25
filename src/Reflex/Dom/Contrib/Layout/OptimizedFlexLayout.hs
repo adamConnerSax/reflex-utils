@@ -27,7 +27,6 @@ import Reflex.Dom.Contrib.Layout.FlexLayout (flexCssBS,numberFlexGrowOptions) --
 import qualified Reflex as R 
 import qualified Reflex.Dom as RD 
 
-import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.State (State,gets,modify,execState)
 import Data.Sequence ((><),(|>),Seq,empty,singleton)
 import Data.Foldable (foldl')
@@ -45,7 +44,7 @@ instance RD.DomBuilder t m=>AddLayout (m a) where
   addLayout = performLayouts
 -}
 
-type OFLC t m = (RD.DomBuilder t m, MonadIO (R.PushM t))
+type OFLC t m = (RD.DomBuilder t m)
 
 flexSimple::LNodeConstraint->T.Text->LISeq
 flexSimple lc css = singleton $ LayoutInstruction lc (OpenLNode LDiv (CssClasses [CssClass css]))

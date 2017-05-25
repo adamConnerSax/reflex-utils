@@ -114,34 +114,32 @@ flexCss = do
 flexCssBS::B.ByteString
 flexCssBS = B.concat . BL.toChunks . encodeUtf8  $ renderWith pretty []  flexCss
 
-flexRow'::(RD.DomBuilder t m)=>CssClasses->m a->m a
+flexRow' :: RD.DomBuilder t m => CssClasses -> m a -> m a
 flexRow' classes = RD.divClass ("gl-flex-row " <> toCssString classes) 
 
-flexCol'::(RD.DomBuilder t m)=>CssClasses->m a->m a
+flexCol' :: RD.DomBuilder t m => CssClasses -> m a -> m a
 flexCol' classes = RD.divClass ("gl-flex-col "  <> toCssString classes)
 
-flexItem'::(RD.DomBuilder t m)=>CssClasses->m a->m a
+flexItem' :: RD.DomBuilder t m => CssClasses -> m a -> m a
 flexItem' classes = RD.divClass ("gl-flex-item-1 " <> toCssString classes)
 
-flexSizedItem'::(RD.DomBuilder t m)=>CssClasses->Int->m a->m a
+flexSizedItem' :: RD.DomBuilder t m => CssClasses -> Int -> m a -> m a
 flexSizedItem' classes n = let n' = Prelude.min n numberFlexGrowOptions in RD.divClass $ T.pack ("gl-flex-item-" ++ show n')  <> toCssString classes
 
-flexRow::(RD.DomBuilder t m)=>m a->m a
+flexRow :: RD.DomBuilder t m => m a -> m a
 flexRow = flexRow' emptyCss 
 
-flexCol::(RD.DomBuilder t m)=>m a->m a
+flexCol :: RD.DomBuilder t m => m a -> m a
 flexCol = flexCol' emptyCss
 
-flexItem::(RD.DomBuilder t m)=>m a->m a
+flexItem :: RD.DomBuilder t m => m a -> m a
 flexItem = flexItem' emptyCss
 
-flexSizedItem::(RD.DomBuilder t m)=>Int->m a->m a
+flexSizedItem :: RD.DomBuilder t m => Int -> m a -> m a
 flexSizedItem = flexSizedItem' emptyCss
 
-
-wrapWidget::RD.DomBuilder t m=>m a->m a
+wrapWidget :: RD.DomBuilder t m => m a -> m a
 wrapWidget = RD.divClass "fill-content" 
-
 
 flexFill :: RD.DomBuilder t m => LayoutDirection -> m a -> m a
 flexFill LayoutRight = RD.divClass "flexFillH" . RD.divClass "flex-fill-content-left" 

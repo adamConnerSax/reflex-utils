@@ -57,7 +57,7 @@ instance Reflex t => Default (SafeDropdownConfig t k) where
 -- 4. Disappears from DOM (via widgetHold) if map of options is empty.  Reappears when there are options.
 -- 5. value and change are both Maybe to account for the possibility of an empty set of options.
 -- Change could still be k but then not fire when options become empty?
-safeDropdown :: forall k t m . (RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)
+safeDropdown :: forall k t m. (RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)
   => Maybe k -> Dynamic t (M.Map k T.Text) -> SafeDropdownConfig t k ->m (SafeDropdown t k)
 safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   postbuild <- RD.getPostBuild
@@ -96,12 +96,12 @@ safeDropdownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
   SafeDropdown valDyn changeEv <- safeDropdown l0m sdOptionsDyn cfg -- SafeDropdown t l
   return $ SafeDropdown (mapDynamic valDyn) (mapEvent changeEv)
 
-boolToEither::Bool -> Either () ()
+boolToEither :: Bool -> Either () ()
 boolToEither True = Right ()
 boolToEither False = Left ()
 
 -- NB: right event fires if true, left if false--(FalseEv,TrueEv)--which fits Either but is not intuitive, at least to me
-fanBool::Reflex t=>Event t Bool->(Event t (), Event t ())
+fanBool :: Reflex t => Event t Bool -> (Event t (), Event t ())
 fanBool = R.fanEither . fmap boolToEither  
 
 concat <$> mapM makeLenses

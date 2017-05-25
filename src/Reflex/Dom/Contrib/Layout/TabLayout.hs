@@ -108,7 +108,7 @@ tabCssBS = cssToBS tabCss
 
 data TabInfo t m a = TabInfo { tabID :: T.Text
                              , tabLabel :: R.Dynamic t (T.Text, M.Map T.Text T.Text) 
-                             , tabWidget :: (RD.DomBuilder t m, MonadIO (R.PushM t)) => m a }
+                             , tabWidget :: m a }
 
 instance Eq (TabInfo t m a) where
   (TabInfo x _ _) == (TabInfo y _ _) = x == y
@@ -133,7 +133,7 @@ data StaticTabConfig = StaticTabConfig
 instance Default StaticTabConfig where
   def = StaticTabConfig (CssClass "") (CssClass "tabbed-area") (CssClass "tab-pane") (CssClass "tab-row") (CssClass "selected") (CssClass "unselected")
                        
-staticTabbedLayout::(MonadIO (R.PushM t),RD.DomBuilder t m, RD.PostBuild t m, MonadFix m,
+staticTabbedLayout::({- MonadIO (R.PushM t), -}RD.DomBuilder t m, RD.PostBuild t m, MonadFix m,
                       RD.MonadHold t m,Traversable f)=>StaticTabConfig->TabInfo t m a->f (TabInfo t m a)->m (f a)
 staticTabbedLayout config curTab tabs = do
   let curTabchecked tab = if tab==curTab then "checked" RD.=: "" else M.empty
@@ -197,7 +197,7 @@ instance (RD.DomBuilder t m, RD.PostBuild t m)=>Tab t m (TabInfo t m a) where
 --    RD.el "span" $ RD.text label 
 
 -- this use of MonadWIdget should be fixed but it's tricky when calling into Reflex.Dom.Contrib functions that use MOnadWidget
-dynamicTabbedLayout::(MonadIO (R.PushM t), R.MonadSample t m, RD.MonadWidget t m)=>
+dynamicTabbedLayout::({- MonadIO (R.PushM t),-} R.MonadSample t m, RD.MonadWidget t m)=>
                      TabInfo t m a->R.Dynamic t [TabInfo t m a]->m (R.Dynamic t [a])
 dynamicTabbedLayout cur allDyn = RD.divClass "tabbed-area" $ do
   allSampled <- R.sample $ R.current allDyn

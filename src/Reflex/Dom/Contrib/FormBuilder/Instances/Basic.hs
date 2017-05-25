@@ -69,7 +69,7 @@ import           Reflex.Dom.Contrib.ReflexConstraints
 -- instances
 
 --some helpers
-showText::Show a=>a->T.Text
+showText :: Show a => a -> T.Text
 showText = T.pack . show
 
 type WidgetC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
@@ -79,22 +79,22 @@ type FormInstanceC t m = (WidgetC t m, MonadWidgetExtraC t m, RD.PostBuild t m)
 instance {-# OVERLAPPABLE #-} B.Validatable (FValidation) a where
   validator a = AccSuccess a
 
-readOnlyW::(RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m)=>(a->T.Text)->WidgetConfig t a->m (R.Dynamic t a)
+readOnlyW :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => (a -> T.Text) -> WidgetConfig t a -> m (R.Dynamic t a)
 readOnlyW f wc = do
   da <- R.holdDyn (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
   let ds = f <$> da
   RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
   return da
 
-formWidget::forall t m a b.(R.Reflex t,RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m,MonadFix m)
-  =>(a->b) -- map in/out type to widget type (int to text, e.g.,)
-  ->(a->T.Text) -- show in/out type
-  ->Maybe FieldName -- field name ?
-  ->WidgetConfig t a
-  ->(WidgetConfig t a->m (R.Dynamic t a)) -- underlying reflex-dom-contrib widget
-  ->FR t m (R.Dynamic t b)
+formWidget :: forall t m a b. (R.Reflex t, RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m, MonadFix m)
+  => (a -> b) -- map in/out type to widget type (int to text, e.g.,)
+  -> (a -> T.Text) -- show in/out type
+  -> Maybe FieldName -- field name ?
+  -> WidgetConfig t a
+  -> (WidgetConfig t a -> m (R.Dynamic t a)) -- underlying reflex-dom-contrib widget
+  -> FR t m (R.Dynamic t b)
 formWidget f fString mFN wc widget = do
-  let addToAttrs::R.Reflex t=>T.Text->Maybe T.Text->RD.Dynamic t (M.Map T.Text T.Text)->RD.Dynamic t (M.Map T.Text T.Text)
+  let addToAttrs :: R.Reflex t => T.Text -> Maybe T.Text -> RD.Dynamic t (M.Map T.Text T.Text) -> RD.Dynamic t (M.Map T.Text T.Text)
       addToAttrs attr mVal attrsDyn = case mVal of
         Nothing  -> attrsDyn
         Just val -> M.union (attr RD.=: val) <$> attrsDyn
@@ -113,16 +113,16 @@ formWidget f fString mFN wc widget = do
         Just (LabelConfig t attrs) -> RD.elAttr "label" attrs  $ (RD.el "span" $ RD.text t) >> iw
   lift . labeledWidget $ (fmap f <$> (if isObserver then readOnlyW fString wcAll else widget wcInput))
 
-formWidget'::(RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m,MonadFix m)
-  =>R.Event t a -- update value events
-  ->b -- initial value to display in b-widget
-  ->(a->b) -- map in/out type to widget type
-  ->(b->FValidation a) --validate and map back
-  ->(b->T.Text) -- showText for widget type
-  ->Maybe FieldName -- field name ?
-  ->Maybe T.Text -- type name ?
-  ->(WidgetConfig t b->m (R.Dynamic t b)) -- underlying reflex-dom-contrib widget
-  ->FR t m (DynValidation t a)
+formWidget' :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m, MonadFix m)
+  => R.Event t a -- update value events
+  -> b -- initial value to display in b-widget
+  -> (a -> b) -- map in/out type to widget type
+  -> (b -> FValidation a) --validate and map back
+  -> (b -> T.Text) -- showText for widget type
+  -> Maybe FieldName -- field name ?
+  -> Maybe T.Text -- type name ?
+  -> (WidgetConfig t b -> m (R.Dynamic t b)) -- underlying reflex-dom-contrib widget
+  -> FR t m (DynValidation t a)
 formWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = mdo
   attrsDyn <- fAttrs dva mFN mTypeName
   let wc = WidgetConfig (toWT <$> updateEv) initialWV attrsDyn
@@ -130,21 +130,21 @@ formWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = mdo
   return dva
 
 
-item::Monad m=>FLayoutF t m
+item :: Monad m => FLayoutF t m
 item = fItem
 
-instance R.Reflex t=>Functor (HtmlWidget t) where
+instance R.Reflex t => Functor (HtmlWidget t) where
   fmap f (HtmlWidget v c kp kd ku hf) = HtmlWidget (f <$> v) (f <$> c) kp kd ku hf
 
-textWidgetValue::FormInstanceC t m=>Maybe FieldName->WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
+textWidgetValue :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
 textWidgetValue mFN c = _hwidget_value <$> restrictWidget' blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
 
-textWidgetValue'::FormInstanceC t m=>Maybe FieldName->WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
+textWidgetValue' :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
 textWidgetValue' mFN c = _hwidget_value <$> htmlTextInput (maybe "" T.pack mFN) c
 
 -- this does what restrictWidget does but allows the set event to change the "authoritative value"
-restrictWidget'::(RD.DomBuilder t m, R.MonadHold t m)
-  =>(HtmlWidget t a -> R.Event t a)
+restrictWidget' :: (RD.DomBuilder t m, R.MonadHold t m)
+  => (HtmlWidget t a -> R.Event t a)
   -> GWidget t m a
   -> GWidget t m a
 restrictWidget' restrictFunc wFunc cfg = do
@@ -155,48 +155,48 @@ restrictWidget' restrictFunc wFunc cfg = do
              , _hwidget_change = e
              }
 
-parseError::Maybe FieldName->T.Text->T.Text
+parseError :: Maybe FieldName -> T.Text -> T.Text
 parseError mFN x = T.pack (fromMaybe "N/A" mFN) <> ": " <> x
 
-parseAndValidate::Maybe FieldName->(T.Text -> Maybe a)->FormValidator a->T.Text->FValidation a
+parseAndValidate :: Maybe FieldName -> (T.Text -> Maybe a) -> FormValidator a -> T.Text -> FValidation a
 parseAndValidate mFN parse va t =
   case parse t of
     Nothing -> AccFailure [FNoParse $ parseError mFN t]
     Just y  -> va y
 
 
-buildDynReadable::(FormInstanceC t m, Readable a, Show a)
-  =>FormValidator a
-  ->Maybe FieldName
-  ->DynMaybe t a
-  ->Form t m a
+buildDynReadable :: (FormInstanceC t m, Readable a, Show a)
+  => FormValidator a
+  -> Maybe FieldName
+  -> DynMaybe t a
+  -> Form t m a
 buildDynReadable va mFN dma = makeForm $ do
   let vfwt = parseAndValidate mFN fromText va
   inputEv <- dynMaybeAsEv dma
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
-buildDynReadMaybe::(FormInstanceC t m, Read a, Show a)
-  =>FormValidator a
-  ->Maybe FieldName
-  ->DynMaybe t a
-  ->Form t m a
+buildDynReadMaybe :: (FormInstanceC t m, Read a, Show a)
+  => FormValidator a
+  -> Maybe FieldName
+  -> DynMaybe t a
+  -> Form t m a
 buildDynReadMaybe va mFN dma = makeForm $ do
   let vfwt = parseAndValidate mFN (readMaybe . T.unpack) va
   inputEv <- dynMaybeAsEv dma
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
 
 -- NB this will handle Dynamic t (Dynamic t a)) inputs
-instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (R.Dynamic t a) where
+instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (R.Dynamic t a) where
   buildForm va mFN = validateForm va . fmap R.constDyn . buildForm' mFN . Compose . join . fmap sequenceA . getCompose
 
 -- | String and Text
-instance FormInstanceC t m=>FormBuilder t m T.Text where
+instance FormInstanceC t m => FormBuilder t m T.Text where
   buildForm va mFN initialMDyn = makeForm $ do
     inputEv <- dynamicMaybeAsEv (getCompose initialMDyn) -- traceDynMAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")") (getCompose initialMDyn) -- FIXTrace
 --    inputEv <- maybe (return R.never) (traceDynAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")")) mInitialDyn  -- mDynAsEv mInitialDyn
     formWidget' inputEv "" id va id mFN Nothing $ textWidgetValue mFN
 
-instance {-# OVERLAPPING #-} FormInstanceC t m=>FormBuilder t m String where
+instance {-# OVERLAPPING #-} FormInstanceC t m => FormBuilder t m String where
   buildForm va mFN initialMDyn =
     let va' = (\t -> T.pack <$> va (T.unpack t))
     in T.unpack <$> buildForm va' mFN (T.pack <$> initialMDyn)
@@ -212,12 +212,12 @@ instance FormC e t m=>B.Builder (RFormWidget e t m) Char where
 
 
 -- We don't need this.  If we leave it out, the Enum instance will work and we get a dropdown instead of a checkbox.  Which might be better...
-instance FormInstanceC t m=>FormBuilder t m Bool where
+instance FormInstanceC t m => FormBuilder t m Bool where
   buildForm va mFN initialMDyn = makeForm $ do
     inputEv <- dynMaybeAsEv initialMDyn
     formWidget' inputEv False id va showText mFN Nothing $ (\c -> _hwidget_value <$> htmlCheckbox c)
 
-instance FormInstanceC t m=>FormBuilder t m Double where
+instance FormInstanceC t m => FormBuilder t m Double where
   buildForm = buildDynReadable
 
 instance FormInstanceC t m=>FormBuilder t m Float where

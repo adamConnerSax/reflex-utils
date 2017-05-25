@@ -104,6 +104,7 @@ updaterLabel (UpdateDynamic x) = T.pack $ L.drop (L.length ("demo-box-"::String)
 updaterLabel (AddToDynamic x) = undefined
 
 innerBoxDfltUpdater = innerBoxUpdaters !! 1
+
 innerBoxClassDDEvent::(DomBuilder t m,DomBuilderSpace m ~ GhcjsDomSpace,
                        PostBuild t m,HasWebView m,{- MonadAsyncException m, -}
                        Ref m ~ Ref IO, Ref (Performable m) ~ Ref IO,
@@ -125,7 +126,7 @@ row = lmFlexLayoutRow
 col::(PostBuild t m ,SupportsLayoutM t m)=>Int->LayoutM t m a->LayoutM t m a
 col = lmFlexCol
 
-subWidgetSimple::(PostBuild t m,SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
+subWidgetSimple::(PostBuild t m,SupportsLayoutM t m {-, MonadIO (PushM t) -})=>LayoutM t m ()
 subWidgetSimple = do
   row $ do
     col 1 $ demoDiv "C"
@@ -133,20 +134,20 @@ subWidgetSimple = do
   subWidget1
 
 
-subWidget1::(PostBuild t m,SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
+subWidget1::(PostBuild t m,SupportsLayoutM t m {-,MonadIO (PushM t)-})=>LayoutM t m ()
 subWidget1 = do
   row $ demoDiv "D"
   row $ demoDiv "E"
   row $ demoDiv "F"
 
-subWidget2::(PostBuild t m,SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
+subWidget2::(PostBuild t m,SupportsLayoutM t m {-,MonadIO (PushM t)-})=>LayoutM t m ()
 subWidget2 = do
   row $ do
     col 1 $ demoDiv "D"
     col 1 $ demoDiv "E"
     col 1 $ demoDiv "F"
 
-subWidgetToggle::(PostBuild t m, SupportsLayoutM t m,MonadIO (PushM t))=>LayoutM t m ()
+subWidgetToggle::(PostBuild t m, SupportsLayoutM t m {-,MonadIO (PushM t)-})=>LayoutM t m ()
 subWidgetToggle = do
   switchToEv <- row $ do
     col 1 $ demoDiv "C"
@@ -157,7 +158,7 @@ subWidgetToggle = do
   return ()
 
 testControl::(SupportsLayoutM t m, PostBuild t m, {- MonadAsyncException m, -}
-              HasWebView m, MonadIO (PushM t),MonadJSM (Performable m),
+              HasWebView m{-, MonadIO (PushM t) -},MonadJSM (Performable m),
               MonadJSM (LayoutM t m))=>Event t CssUpdate->LayoutM t m (Event t CssUpdate)
 testControl setEv  = mdo
   (evSelf,evChildren) <- row $ do
@@ -174,7 +175,7 @@ testControl setEv  = mdo
     return (evSelf,evChildren)
   return evChildren
 
-simpleFlexWidget::(SupportsLayoutM t m,MonadIO (PushM t))=>m ()
+simpleFlexWidget :: SupportsLayoutM t m => m ()
 simpleFlexWidget = do
   let w = flexRow $ do
         flexSizedItem 2 $ divClass "demo-box-black" $ text  "A"
@@ -184,11 +185,11 @@ simpleFlexWidget = do
   flexCenter LayoutHorizontal w
   flexFill LayoutLeft w
 
-sfTab::(SupportsLayoutM t m)=>TabInfo t m ()
+sfTab :: SupportsLayoutM t m => TabInfo t m ()
 sfTab = TabInfo "sf" (constDyn ("Simple Flex", M.empty)) simpleFlexWidget
 
 
-optFlexWidget::(SupportsLayoutM t m, PostBuild t m,HasWebView m,{- MonadAsyncException m, -}MonadIO (PushM t),
+optFlexWidget::(SupportsLayoutM t m, PostBuild t m,HasWebView m,{- MonadAsyncException m, MonadIO (PushM t), -}
                 MonadJSM m, MonadJSM (Performable m))=>m ()
 optFlexWidget = do
   let w = OF.flexRow #$ do
@@ -199,31 +200,13 @@ optFlexWidget = do
   OF.flexItem #$ OF.flexCenter LayoutHorizontal w
   OF.flexItem #$ OF.flexFill LayoutLeft w
 
-{-
-optFlexWidget::(MonadWidget t m, MonadIO (PushM t))=>m ()
-optFlexWidget = do
-  let dc::MonadWidget t m=>String->String->m ()
-      dc cs s =  (divClass (cs ++ "_1") $ text s) >> (divClass (cs ++ "_2") $ text s)
-      c::MonadWidget t m=>String->m ()
-      c s = optFlexCol #$ dc "col" s
-      r::MonadWidget t m=>String->m ()
-      r s = optFlexRow #$ dc "row" s
-  optFlexRow #$ do
-    c "Col 1"
-    c "Col 2"
-    c "Col 3"
-    optFlexItem ## optFlexCol #$ do
-      r "Row 1"
-      r "Row 2"
-      r "Row 3"
--}
 
-optFlexTab::(SupportsLayoutM t m,MonadJSM (Performable m),MonadJSM m,HasJSContext m,PostBuild t m{-, MonadAsyncException m -})=>TabInfo t m ()
+optFlexTab::(SupportsLayoutM t m, MonadJSM (Performable m), MonadJSM m, HasJSContext m, PostBuild t m {-, MonadAsyncException m -}) => TabInfo t m ()
 optFlexTab = TabInfo "optFlex" (constDyn ("optFlex", M.empty)) optFlexWidget
 
 
 boxesWidget::(SupportsLayoutM t m,PostBuild t m,HasWebView m, {- MonadAsyncException m, -}
-              MonadIO (PushM t),MonadJSM (Performable m),MonadJSM (LayoutM t m))=>LayoutM t m ()
+              {- MonadIO (PushM t), -}MonadJSM (Performable m),MonadJSM (LayoutM t m))=>LayoutM t m ()
 boxesWidget = do
   ev1 <- testControl never
   setter <- addKeyedCssUpdateEventBelow' "row" innerBoxInitialCss ev1
@@ -237,7 +220,13 @@ boxesWidget = do
       return ()
     return ()
 
-boxesTab::(SupportsLayoutM t m, PostBuild t m,HasJSContext m,MonadJSM (Performable m),{- MonadAsyncException m,-} MonadJSM (LayoutM t m))=>TabInfo t m ()
+boxesTab :: ( SupportsLayoutM t m
+            , PostBuild t m
+            , HasJSContext m
+            , MonadJSM (Performable m)
+            {-, MonadAsyncException m-}
+            , MonadJSM (LayoutM t m)
+            ) => TabInfo t m ()
 boxesTab = TabInfo "boxes" (constDyn ("Dynamics/Events", M.empty)) $ runLayoutMain (LayoutConfig emptyClassMap emptyDynamicCssMap) boxesWidget
 {-
 laidOut::(MonadWidget t m, MonadIO (PushM t))=>LayoutM t m () -> IO ()
