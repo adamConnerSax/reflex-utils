@@ -205,8 +205,7 @@ instance FormInstanceC t m=>FormBuilder t m B where
 --instance Generic MyMap
 --instance HasDatatypeInfo MyMap
 instance FormInstanceC t m=>FormBuilder t m MyMap where
-  buildForm va mFN = MyMap <$> buildMapWithSelect (fmap map_String_B . va . MyMap) mFN . fmap map_String_B
-
+  buildForm va mFN = fmap MyMap . buildMapWithSelect (fmap map_String_B . va . MyMap) mFN . fmap map_String_B
 
 instance Generic C
 instance HasDatatypeInfo C
