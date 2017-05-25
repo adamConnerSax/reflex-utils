@@ -435,8 +435,8 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   return . DynValidation $ fmap from . sequenceA <$> mapDyn
 
 
-newItemWidget::ContainerForm t m g k v
-  =>(R.Dynamic t (g (FValidation v)) -> R.Event t (k,v)->R.Event t (g v)->FRW t m (k,v))
+newItemWidget :: ContainerForm t m g k v
+  => (R.Dynamic t (g (FValidation v)) -> R.Event t (k,v) -> R.Event t (g v) -> FRW t m (k,v))
   -> R.Dynamic t (g (FValidation v))
   -> R.Event t (g v)
   -> FR t m (R.Event t (g (Maybe v)))
@@ -448,6 +448,21 @@ newItemWidget editPairW mapDyn newInputMapEv = mdo
       addDiffEv = fmap Just . uncurry lhfMapSingleton <$> newPairEv  
   return addDiffEv
 
+{-
+-- TODO: Make modal for add
+newItemWidget :: ContainerForm t m g k v
+  => (R.Dynamic t (g (FValidation v)) -> R.Event t (k,v) -> R.Event t (g v) -> FRW t m (k,v))
+  -> R.Dynamic t (g (FValidation v))
+  -> R.Event t (g v)
+  -> FR t m (R.Event t (g (Maybe v)))
+newItemWidget editPairW mapDyn newInputMapEv = mdo
+  addPairDV <- fRow $ editPairW mapDyn newPairEv newInputMapEv
+  let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
+  addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
+  let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
+      addDiffEv = fmap Just . uncurry lhfMapSingleton <$> newPairEv  
+  return addDiffEv
+-}
 
 dynValidationToDynamicMaybe::R.Reflex t=>DynValidation t a -> R.Dynamic t (Maybe a)
 dynValidationToDynamicMaybe = fmap avToMaybe . unDynValidation 
