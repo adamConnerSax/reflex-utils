@@ -76,7 +76,8 @@ import           DataBuilder                                         as B
 import           Reflex.Dom.Contrib.FormBuilder
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.Instances            (FormInstanceC)
-import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (buildList, buildListWithSelect)
+import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (buildList, buildListWithSelect,
+                                                                      buildMapWithSelect)
 
 import           Css
 
@@ -190,7 +191,7 @@ instance FormInstanceC t m=>FormBuilder t m A where
   buildForm va mFN = liftF fRow . gBuildFormValidated va mFN
 
 convertValidator::FormValidator ListOfA -> FormValidator [A]
-convertValidator vLA lA = fmap (\(ListOfA x) -> x) $ vLA (ListOfA lA)
+convertValidator vLA = fmap (\(ListOfA x) -> x) . vLA . ListOfA
 
 instance (FormInstanceC t m, VFormBuilderC t m A)=>FormBuilder t m ListOfA where
   buildForm va mFN = fmap ListOfA . buildListWithSelect (convertValidator va) mFN . fmap (\(ListOfA x)->x)
@@ -201,9 +202,10 @@ instance FormInstanceC t m=>FormBuilder t m B where
   buildForm va mFN = liftF (fieldSet "B" . fRow) . gBuildFormValidated va mFN
 
 
-instance Generic MyMap
-instance HasDatatypeInfo MyMap
-instance FormInstanceC t m=>FormBuilder t m MyMap
+--instance Generic MyMap
+--instance HasDatatypeInfo MyMap
+instance FormInstanceC t m=>FormBuilder t m MyMap where
+  buildForm va mFN = MyMap <$> buildMapWithSelect (fmap map_String_B . va . MyMap) mFN . fmap map_String_B
 
 
 instance Generic C

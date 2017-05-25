@@ -22,6 +22,7 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
   , buildList
   , buildEqList
   , buildMap
+  , buildMapWithSelect
   , buildMapEditOnly
   , buildEqMap
   , buildEqMapEditOnly
@@ -188,6 +189,9 @@ mapWidgets = MapElemWidgets showKeyEditVal mapEditWidget
 
 buildMap::(FormInstanceC t m,Ord k, VFormBuilderBoth t m k v)=>BuildForm t m (M.Map k v)
 buildMap = buildAdjustableContainer mapML mapWidgets
+
+buildMapWithSelect :: (FormInstanceC t m, Ord k, Show k, VFormBuilderBoth t m k v) => BuildForm t m (M.Map k v)
+buildMapWithSelect = buildAdjustableContainerWithSelect (LabelKeys (T.pack . show)) mapML mapWidgets
 
 buildMapEditOnly :: (FormInstanceC t m,Ord k, VFormBuilderBoth t m k v)=>BuildForm t m (M.Map k v)
 buildMapEditOnly = buildContainerEditOnly mapML mapWidgets
@@ -505,15 +509,16 @@ buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
   return $ DynValidation $ AccSuccess <$> dgv
 
 
-selectWidget::(FormInstanceC t m
-              , Traversable g
-              , LHFMap g
-              , LHFMapKey g ~ k
-              , VFormBuilderBoth t m k v)
-  =>LabelStrategy k v
-  ->ElemWidget t m k v
-  ->R.Dynamic t (g v)
-  ->FR t m (R.Dynamic t (Maybe k), R.Event t (g v))
+selectWidget :: ( FormInstanceC t m
+                , Traversable g
+                , LHFMap g
+                , LHFMapKey g ~ k
+                , VFormBuilderBoth t m k v
+                )
+  => LabelStrategy k v
+  -> ElemWidget t m k v
+  -> R.Dynamic t (g v)
+  -> FR t m (R.Dynamic t (Maybe k), R.Event t (g v))
 selectWidget labelStrategy eW dgv = do
   -- we need to deal differently with the null and non-null container case
   -- and we only want to know when we've changed from one to the other
@@ -545,7 +550,7 @@ selectWidgetWithDefault labelStrategy eW k0 dgv = mdo
   let keyLabelMap = labelLHFMap labelStrategy <$> dgv -- dynamic map for the dropdown/chooser.  dgvForDD will change on input change or new element add. Not edits. Deletes?
       newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m  -- compute new default key           
       newk0Ev = R.attachWithMaybe newK0 (R.current k0Dyn) (R.updated keyLabelMap) -- has to be old k0, otherwise causality loop
-      ddConfig = RD.DropdownConfig newk0Ev (R.constDyn ("size" =: "1"))
+      ddConfig = RD.DropdownConfig newk0Ev (R.constDyn ("size" =: "1")) -- TODO: figure out how to build a multi-chooser.
       dropdownWidget k =  RD._dropdown_value <$> RD.dropdown k keyLabelMap ddConfig 
   k0Dyn <- R.holdDyn k0 newk0Ev 
   selDyn <- dropdownWidget k0
