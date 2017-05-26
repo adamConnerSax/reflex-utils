@@ -16,7 +16,7 @@ type MWExtrasC t m = (RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, Ref m ~ IORef,Ref
                      , RD.TriggerEvent t m, MonadRef m,MonadRef (RD.Performable m))
 
 #ifdef USE_JSADDLE
-type MonadWidgetExtraC t m = (MWExtrasC t m, MonadJSM m, MonadJSM (RD.Performable m), RD.HasJSContext m, RD.HasJSContext (RD.Performable m))
+type MonadWidgetExtraC t m = (MWExtrasC t m, RD.HasDocument m, MonadJSM m, MonadJSM (RD.Performable m), RD.HasJSContext m, RD.HasJSContext (RD.Performable m))
 #else
 type MonadWidgetExtraC t m = MWExtras t m
 #endif

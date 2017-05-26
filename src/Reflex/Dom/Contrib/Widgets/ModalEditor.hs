@@ -1,100 +1,135 @@
-{-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE QuasiQuotes       #-}
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE ConstraintKinds   #-}
-{-# LANGUAGE RecursiveDo       #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE QuasiQuotes           #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE RecursiveDo           #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 module Reflex.Dom.Contrib.Widgets.ModalEditor
   (
 
   ) where
 
-import Reflex.Dom.Contrib.DynamicUtils (dynAsEv)
+import           Reflex.Dom.Contrib.DynamicUtils      (dynAsEv)
 
-import Reflex (Dynamic, Event, Reflex, never, attachWithMaybe, leftmost)
-import Reflex.Dynamic (updated,constDyn,current,tagPromptlyDyn)
-import Reflex.Dom (widgetHold,dropdown,DropdownConfig(..))
-import qualified Reflex.Dom as RD
-import qualified Reflex as R
-import qualified Reflex.Dom.Contrib.Widgets.Modal as RDC
+import           Reflex                               (Dynamic, Event, Reflex,
+                                                       attachWithMaybe,
+                                                       leftmost, never)
+import qualified Reflex                               as R
+import           Reflex.Dom                           (DropdownConfig (..),
+                                                       dropdown, widgetHold)
+import qualified Reflex.Dom                           as RD
+import qualified Reflex.Dom.Contrib.Widgets.Modal     as RDC
+import           Reflex.Dynamic                       (constDyn, current,
+                                                       tagPromptlyDyn, updated)
 
 import qualified Reflex.Dom.Contrib.Layout.FlexLayout as L
+import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
 
-import Control.Lens (makeLenses)
-import Control.Monad (join)
-import Control.Monad.Fix (MonadFix)
-import Data.Default
-import Safe (headMay)
-import qualified Data.Map as M
-import qualified Data.Text as T
+import           Control.Lens                         (makeLenses, view, (^.))
+import           Control.Monad                        (join)
+import           Control.Monad.Fix                    (MonadFix)
+import           Data.Default
+import qualified Data.Map                             as M
+import qualified Data.Text                            as T
+import           Safe                                 (headMay)
 
 
-data ModalEditor a = ModalEditor { _modalEditor_value :: Dynamic t (Maybe a)
-                                 , _modalEditor_change :: Event t a -- only fire when there is a valid value
-                                 }
+data ModalEditor t a = ModalEditor { _modalEditor_value  :: Dynamic t (Maybe a)
+                                   , _modalEditor_change :: Event t a -- only fire when there is a valid value
+                                   }
 
 -- update function can place a default in on Nothing
-data OnExternalChange a = Close | Update (Maybe a -> Maybe a) 
-data ButtonConfig = ButtonConfig { _button_label :: T.Text
+data OnExternalChange a = Close | Update (Maybe a -> Maybe a)
+
+data ButtonConfig = ButtonConfig { _button_label      :: T.Text
                                  , _button_attributes :: M.Map T.Text T.Text
+                                 , _button_iconClass  :: Maybe T.Text
                                  }
 
 makeLenses ''ButtonConfig
 
 -- widget could go in here but has no sensible default except "return"
-data ModalEditorConfig t a = { _modalEditor_attributes :: Dynamic t (M.Map T.Text T.Text)
-                             , _modalEditor_onChange :: OnExternalChange a
-                             , _modalEditor_openButton :: Maybe a -> ButtonConfig
-                             , _modalEditor_XButton :: Maybe (Maybe a -> ButtonConfig)
-                             , _modalEditor_OkButton :: Maybe a -> ButtonConfig
-                             , _modalEditor_CancelButton :: Maybe a -> ButtonConfig
-                             }
+data ModalEditorConfig t a = ModalEditorConfig { _modalEditor_attributes :: Dynamic t (M.Map T.Text T.Text)
+                                               , _modalEditor_onChange :: OnExternalChange a
+                                               , _modalEditor_closeOnOk :: Bool
+                                               , _modalEditor_openButton :: Maybe a -> ButtonConfig
+                                               , _modalEditor_XButton :: Maybe (Maybe a -> ButtonConfig)
+                                               , _modalEditor_OkButton :: Maybe a -> ButtonConfig
+                                               , _modalEditor_CancelButton :: Maybe a -> ButtonConfig
+                                               }
 
-makeLenses ''ModalEditorConfig                           
+makeLenses ''ModalEditorConfig
 
-dynamicButton :: RD.DomBuilder t m=> Dynamic t ButtonConfig -> m (RD.Event t ())
-dynamicButton cfg attrsDyn =
-  let attrs = R.zipDynWith union (constDyn ("type" RD.=: "button")) (view button_attributes <$> cfg)
-  in (RD.domEvent RD.Click . fst) <$> RD.elDynAttr' "button" attrs (RD.dynText $ view button_label <$> cfg)
+dynamicButton :: (RD.DomBuilder t m, RD.PostBuild t m) => Dynamic t ButtonConfig -> m (RD.Event t ())
+dynamicButton cfg = do
+  let attrs = R.zipDynWith M.union (constDyn ("type" RD.=: "button")) (view button_attributes <$> cfg)
+  fmap (RD.domEvent RD.Click . fst) $ RD.elDynAttr' "button" attrs $ do
+    let iconAttrs = maybe M.empty (M.singleton "class")
+    _ <- RD.elDynAttr "i" (iconAttrs . view button_iconClass <$> cfg) RD.blank
+    RD.dynText $ view button_label <$> cfg
 
 
-instance Reflex t => Default (ModalEditorConfig a) where
+instance Reflex t => Default (ModalEditorConfig t a) where
   def = ModalEditorConfig
-        (constDyn M.empty) 
-        (Left ()) -- close on external change to input dynamic
-        (<$ ButtonConfig "Edit" M.empty) -- default to Edit button which is disbled when input is Nothing
+        (constDyn M.empty)
+        Close -- close on external change to input dynamic
+        True -- close on OK
+        (const $ ButtonConfig "Edit" M.empty Nothing) -- default to Edit button which is disbled when input is Nothing
         Nothing -- default to no "x" button in the header
-        (<$ ButtonConfig "OK" M.empty) -- simple OK button in footer
-        (<$ ButtonConfig "Cancel" M.empty) -- simple Cancel button in footer
+        (const $ ButtonConfig "OK" M.empty Nothing) -- simple OK button in footer
+        (const $ ButtonConfig "Cancel" M.empty Nothing) -- simple Cancel button in footer
 
 -- | Modal Editor for a Dynamic a
-modalEditor :: forall t m a. (RD.DomBuilder t m, RD.PostBuild t m)
+modalEditor :: forall t m a. ( RD.DomBuilder t m
+                             , MonadWidgetExtraC t m
+                             , RD.PostBuild t m
+                             , MonadFix m
+                             , RD.MonadHold t m
+                             )
   => (Dynamic t (Maybe a) -> m (Dynamic t (Maybe a))) -- a widget for editing an a.  Blank on Nothing, returns Nothing on invalid value
-  -> Dynamic t a
+  -> Dynamic t (Maybe a)
   -> ModalEditorConfig t a
-  -> m Dynamic t (Maybe a)
+  -> m (ModalEditor t a)
 modalEditor editW aMDyn config = L.flexCol $ mdo
   let (widgetInputDyn, closeOnChangeEv) = case config ^. modalEditor_onChange of
-        Close -> (aMDyn, () <$ R.updated aMDyn)
-        Update f -> (f <$> aMDyn, R.never) 
-      openButton = dynamicButton (config ^. modalEditor_openButton <$> aMDyn) 
-      header = maybe return (\f -> dynamicButton $ f <$> newAMDyn) $ config ^. modalEditor_XButton 
-      footer = L.flexRow $ do
-        okEv <- dynamicButton (config ^. modalEditor_OKButton <$> newAMDyn)
-        cancelEv' <- dynamicButton (config ^. modalEditor_CancelButton <$> newAMDyn)
+        Close    -> (aMDyn, () <$ R.updated aMDyn)
+        Update f -> (f <$> aMDyn, R.never)
+      e2m = either (const Nothing) Just
+      m2e = maybe (Left ()) Right
+      header = maybe (return R.never) (\f -> dynamicButton $ f <$> newAMDyn) $ (config ^. modalEditor_XButton)
+      footer eaDyn = L.flexRow $ do
+        okEv <- dynamicButton ((config ^. modalEditor_OkButton) . e2m <$> eaDyn)
+        cancelEv' <- dynamicButton ((config ^. modalEditor_CancelButton) . e2m <$> eaDyn)
         return (cancelEv', okEv)
-      maEv = mdo
-        let body = L.flexRow $ editW wigetInputDyn
-            attrsDyn = R.zipDynWith union visAttrs (config ^. modalEditor_attributes)
-        visAttrs <- R.holdDyn visibleCss (hiddenCss <$ R.leftmost [cancelEv, closeOnChangeEv])
-        (newAMEv', cancelEv) <- R.elDynAttr "div" attrsDyn $ RDC.mkModalBody header footer body
-        return newAMEv'
+      showAttrs hideEv showEv = R.holdDyn visibleCSS $ R.leftmost [hiddenCSS <$ hideEv, visibleCSS <$ showEv]
+      maAndCloseEv = mdo
+        let body = fmap m2e <$> (L.flexRow $ editW widgetInputDyn)
+            modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
+            closeOnOkEv okEv = if (config ^. modalEditor_closeOnOk) then () <$ okEv else R.never
+            closeEv = R.leftmost [cancelEv, closeOnChangeEv, closeOnOkEv newAMEv']
+        modalVisAttrs <- showAttrs closeEv R.never
+        (newAMEv', cancelEv) <- RD.elDynAttr "div" modalAttrsDyn $ RDC.mkModalBody header footer body
+        return $ (e2m <$> newAMEv', closeEv)
+  let openButtonConfigOrig = (config ^. modalEditor_openButton) <$> aMDyn
+      openButtonConfig = R.zipDynWith (\(ButtonConfig l attrs1 icm) attrs2 -> ButtonConfig l (M.union attrs2 attrs1) icm) openButtonConfigOrig
   postbuild <- RD.getPostBuild
-  newAMEv <- R.switch . R.current <$> RD.widgetHold (return R.never) (maEv <$ openButton)
-  newAMDyn <- R.holdDyn Nothing $ R.leftmost [tag (R.current aMDyn) postbuild, newMAEv]
-  return $ ModalEditor newAMDyn newAMEv 
+  openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
+  openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
+  evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (maAndCloseEv <$ openButtonEv)
+  let newAMEv = R.switch (fst <$> evOfEvs)
+      modalCloseEv = R.switch (snd <$> evOfEvs)
+  newAMDyn <- R.holdDyn Nothing $ R.leftmost [R.tag (R.current aMDyn) postbuild, newAMEv]
+  return $ ModalEditor newAMDyn $ R.fmapMaybe id newAMEv
+
+-- NB:  This is only in (Maybe a) rather than a because of the holdDyn, which needs a starting point.
+
+hiddenCSS :: M.Map T.Text T.Text
+hiddenCSS  = "style" RD.=: "display: none !important"
+
+visibleCSS :: M.Map T.Text T.Text
+visibleCSS = "style" RD.=: "display: inline"

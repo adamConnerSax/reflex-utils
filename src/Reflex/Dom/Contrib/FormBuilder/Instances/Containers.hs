@@ -449,7 +449,7 @@ newItemWidget editPairW mapDyn newInputMapEv = mdo
       addDiffEv = fmap Just . uncurry lhfMapSingleton <$> newPairEv  
   return addDiffEv
 
-
+{-
 -- first arg (new pair widget) does not need newInputMapEv since it will just close one new map
 -- but this way the signature matches newItemWidget
 newItemWidgetModal :: ContainerForm t m g k v
@@ -475,7 +475,7 @@ newItemWidgetModal editPairW mapDyn newInputMapEv = mdo
         (eEv, doneEv) <- RD.elDynAttr "div" attrsDyn $ RDC.mkModalBody header footer body
         return $ pairToDiff <$> fmapMaybe e2m $ eEv
   R.switch . R.current <$> RD.widgetHold (return R.never) (diffEv <$ addButton)
-
+-}
 
 dynValidationToDynamicMaybe::R.Reflex t=>DynValidation t a -> R.Dynamic t (Maybe a)
 dynValidationToDynamicMaybe = fmap avToMaybe . unDynValidation 
