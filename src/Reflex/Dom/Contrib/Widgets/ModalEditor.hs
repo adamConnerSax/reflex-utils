@@ -11,7 +11,21 @@
 {-# LANGUAGE TypeFamilies          #-}
 module Reflex.Dom.Contrib.Widgets.ModalEditor
   (
-
+    ModalEditor (..)
+  , OnExternalChange (..)
+  , ButtonConfig (..)
+  , button_label
+  , button_attributes
+  , button_iconClass
+  , ModalEditorConfig (..)
+  , modalEditor_attributes
+  , modalEditor_onChange
+  , modalEditor_closeOnOk
+  , modalEditor_openButton
+  , modalEditor_XButton
+  , modalEditor_OkButton
+  , modalEditor_CancelButton
+  , modalEditor
   ) where
 
 import           Reflex.Dom.Contrib.DynamicUtils      (dynAsEv)
