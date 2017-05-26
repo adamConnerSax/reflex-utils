@@ -61,6 +61,7 @@ import           Reflex.Dom.Contrib.ListHoldFunctions.Maps (LHFMap(..))
 import qualified Reflex as R 
 import qualified Reflex.Dom as RD
 import           Reflex.Dom ((=:))
+import qualified Reflex.Dom.Contrib.Widgets.Modal as RDC
 
 import           Control.Monad (join)
 import           Control.Monad.Fix (MonadFix)
@@ -448,21 +449,33 @@ newItemWidget editPairW mapDyn newInputMapEv = mdo
       addDiffEv = fmap Just . uncurry lhfMapSingleton <$> newPairEv  
   return addDiffEv
 
-{-
--- TODO: Make modal for add
-newItemWidget :: ContainerForm t m g k v
+
+-- first arg (new pair widget) does not need newInputMapEv since it will just close one new map
+-- but this way the signature matches newItemWidget
+newItemWidgetModal :: ContainerForm t m g k v
   => (R.Dynamic t (g (FValidation v)) -> R.Event t (k,v) -> R.Event t (g v) -> FRW t m (k,v))
   -> R.Dynamic t (g (FValidation v))
   -> R.Event t (g v)
   -> FR t m (R.Event t (g (Maybe v)))
-newItemWidget editPairW mapDyn newInputMapEv = mdo
-  addPairDV <- fRow $ editPairW mapDyn newPairEv newInputMapEv
-  let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
-  addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
-  let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
-      addDiffEv = fmap Just . uncurry lhfMapSingleton <$> newPairEv  
-  return addDiffEv
--}
+newItemWidgetModal editPairW mapDyn newInputMapEv = mdo
+  let addButton = fItem $ buttonNoSubmit' "Add"
+      header = return R.never
+      footer = fRow $ do
+        addEv <- fItem $ buttonNoSubmit' "Add"
+        cancelEv' <- fItem $ buttonNoSubmit' "Cancel"
+        let cancelEv = R.leftmost [cancelEv', () <$ newInputMapEv]
+        return (cancelEv, addEv)
+      av2Either (AccSuccess a) = Right a
+      av2Either (AccFailure e) = Left e
+      pairToDiff = fmap Just . uncurry lhfMapSingleton 
+      diffEv = mdo 
+        let body = fmap av2Either . unDynValidation <$> (fRow $ editPairW mapDyn R.never R.never)
+            e2m = either (const Nothing) Just
+        attrsDyn <- R.holdDyn visibleCSS (hiddenCSS <$ R.leftmost [doneEv, () <$ eEv])    
+        (eEv, doneEv) <- RD.elDynAttr "div" attrsDyn $ RDC.mkModalBody header footer body
+        return $ pairToDiff <$> fmapMaybe e2m $ eEv
+  R.switch . R.current <$> RD.widgetHold (return R.never) (diffEv <$ addButton)
+
 
 dynValidationToDynamicMaybe::R.Reflex t=>DynValidation t a -> R.Dynamic t (Maybe a)
 dynValidationToDynamicMaybe = fmap avToMaybe . unDynValidation 
@@ -643,7 +656,7 @@ editAndDeleteElemWidget eW visibleDyn k vDyn = mdo
 
 
 hiddenCSS::M.Map T.Text T.Text
-hiddenCSS  = "style" =: "display: none"
+hiddenCSS  = "style" =: "display: none !important"
 visibleCSS::M.Map T.Text T.Text
 visibleCSS = "style" =: "display: inline"
 
