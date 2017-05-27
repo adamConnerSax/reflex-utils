@@ -12,6 +12,8 @@
 module Reflex.Dom.Contrib.Widgets.ModalEditor
   (
     ModalEditor (..)
+  , modalEditor_value
+  , modalEditor_change
   , OnExternalChange (..)
   , ButtonConfig (..)
   , button_label
@@ -41,10 +43,12 @@ import qualified Reflex.Dom.Contrib.Widgets.Modal     as RDC
 import           Reflex.Dynamic                       (constDyn, current,
                                                        tagPromptlyDyn, updated)
 
+import           Reflex.Dom.Contrib.DynamicUtils      (dynAsEv)
 import qualified Reflex.Dom.Contrib.Layout.FlexLayout as L
 import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
 
-import           Control.Lens                         (makeLenses, view, (^.))
+import           Control.Lens                         (makeLenses, view, (%~),
+                                                       (&), (^.))
 import           Control.Monad                        (join)
 import           Control.Monad.Fix                    (MonadFix)
 import           Data.Default
@@ -57,6 +61,8 @@ data ModalEditor t a = ModalEditor { _modalEditor_value  :: Dynamic t (Maybe a)
                                    , _modalEditor_change :: Event t a -- only fire when there is a valid value
                                    }
 
+makeLenses ''ModalEditor
+
 -- update function can place a default in on Nothing
 data OnExternalChange a = Close | Update (Maybe a -> Maybe a)
 
@@ -68,12 +74,12 @@ data ButtonConfig = ButtonConfig { _button_label      :: T.Text
 makeLenses ''ButtonConfig
 
 -- widget could go in here but has no sensible default except "return"
-data ModalEditorConfig t a = ModalEditorConfig { _modalEditor_attributes :: Dynamic t (M.Map T.Text T.Text)
-                                               , _modalEditor_onChange :: OnExternalChange a
-                                               , _modalEditor_closeOnOk :: Bool
-                                               , _modalEditor_openButton :: Maybe a -> ButtonConfig
-                                               , _modalEditor_XButton :: Maybe (Maybe a -> ButtonConfig)
-                                               , _modalEditor_OkButton :: Maybe a -> ButtonConfig
+data ModalEditorConfig t a = ModalEditorConfig { _modalEditor_attributes   :: Dynamic t (M.Map T.Text T.Text)
+                                               , _modalEditor_onChange     :: OnExternalChange a
+                                               , _modalEditor_closeOnOk    :: Bool
+                                               , _modalEditor_openButton   :: Maybe a -> ButtonConfig
+                                               , _modalEditor_XButton      :: Maybe (Maybe a -> ButtonConfig)
+                                               , _modalEditor_OkButton     :: Maybe a -> ButtonConfig
                                                , _modalEditor_CancelButton :: Maybe a -> ButtonConfig
                                                }
 
@@ -130,15 +136,16 @@ modalEditor editW aMDyn config = L.flexCol $ mdo
         (newAMEv', cancelEv) <- RD.elDynAttr "div" modalAttrsDyn $ RDC.mkModalBody header footer body
         return $ (e2m <$> newAMEv', closeEv)
   let openButtonConfigOrig = (config ^. modalEditor_openButton) <$> aMDyn
-      openButtonConfig = R.zipDynWith (\(ButtonConfig l attrs1 icm) attrs2 -> ButtonConfig l (M.union attrs2 attrs1) icm) openButtonConfigOrig
-  postbuild <- RD.getPostBuild
+      openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
+--  postbuild <- RD.getPostBuild
+  aMEv <- dynAsEv aMDyn
   openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
   openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
   evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (maAndCloseEv <$ openButtonEv)
-  let newAMEv = R.switch (fst <$> evOfEvs)
+  let newAEv = R.fmapMaybe id $ R.switch (fst <$> evOfEvs)
       modalCloseEv = R.switch (snd <$> evOfEvs)
-  newAMDyn <- R.holdDyn Nothing $ R.leftmost [R.tag (R.current aMDyn) postbuild, newAMEv]
-  return $ ModalEditor newAMDyn $ R.fmapMaybe id newAMEv
+  newAMDyn <- R.holdDyn Nothing $ R.leftmost [aMEv, Just <$> newAEv]
+  return $ ModalEditor newAMDyn newAEv
 
 -- NB:  This is only in (Maybe a) rather than a because of the holdDyn, which needs a starting point.
 
