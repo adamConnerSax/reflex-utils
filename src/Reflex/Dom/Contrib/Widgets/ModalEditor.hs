@@ -97,7 +97,7 @@ dynamicButton cfg = do
 instance Reflex t => Default (ModalEditorConfig t a) where
   def = ModalEditorConfig
         (constDyn M.empty)
-        Close -- close on external change to input dynamic
+        Close -- close on change to input dynamic
         True -- close on OK
         (const $ ButtonConfig "Edit" M.empty Nothing) -- default to Edit button which is disbled when input is Nothing
         Nothing -- default to no "x" button in the header

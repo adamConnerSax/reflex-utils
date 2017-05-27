@@ -56,6 +56,7 @@ import           Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
 import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv)
 import qualified Reflex.Dom.Contrib.ListHoldFunctions.Maps as LHF
 import           Reflex.Dom.Contrib.ListHoldFunctions.Maps (LHFMap(..))
+import qualified Reflex.Dom.Contrib.Widgets.ModalEditor as MW 
 
 -- reflex imports
 import qualified Reflex as R 
@@ -221,8 +222,11 @@ listEditWidget::(FormInstanceC t m, VFormBuilderC t m a)
   -> R.Event t (Int, a)
   -> R.Event t (IM.IntMap a)
   -> FRW t m (Int,a)
-listEditWidget _ newPairEv newMapEv = do
-  let newKeyEv = R.leftmost [(+1) . fst <$>  newPairEv, maybe 0 (+1) . safeMaximum . IM.keys <$> newMapEv]
+listEditWidget mapDyn newPairEv newMapEv = do
+  inMapEv <- dynAsEv mapDyn
+  let newKeyEv = R.leftmost [(+1) . fst <$>  newPairEv
+                            , maybe 0 (+1) . safeMaximum . IM.keys <$> inMapEv
+                            , maybe 0 (+1) . safeMaximum . IM.keys <$> newMapEv]
       widget newKey = fRow $ do
         newElem <- fItem . unF $ buildForm' Nothing (constDynMaybe Nothing)
         return $ (,) <$> constDynValidation newKey <*> newElem
@@ -436,18 +440,39 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   return . DynValidation $ fmap from . sequenceA <$> mapDyn
 
 
-newItemWidget :: ContainerForm t m g k v
+newItemWidget' :: ContainerForm t m g k v
   => (R.Dynamic t (g (FValidation v)) -> R.Event t (k,v) -> R.Event t (g v) -> FRW t m (k,v))
   -> R.Dynamic t (g (FValidation v))
   -> R.Event t (g v)
   -> FR t m (R.Event t (g (Maybe v)))
-newItemWidget editPairW mapDyn newInputMapEv = mdo
+newItemWidget' editPairW mapDyn newInputMapEv = mdo
   addPairDV <- fRow $ editPairW mapDyn newPairEv newInputMapEv
   let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
   addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
   let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
       addDiffEv = fmap Just . uncurry lhfMapSingleton <$> newPairEv  
   return addDiffEv
+
+newItemEditorConfig :: R.Reflex t => MW.ModalEditorConfig t a
+newItemEditorConfig = RD.def
+                      & MW.modalEditor_closeOnOk .~ True
+                      & MW.modalEditor_openButton .~ (const $ MW.ButtonConfig "Add" M.empty (Just "fa fa-plus"))
+                      & MW.modalEditor_XButton .~ Nothing 
+                      & MW.modalEditor_OkButton .~ (const $ MW.ButtonConfig "OK" M.empty (Just "fa fa-check"))
+                      & MW.modalEditor_CancelButton .~ (const $ MW.ButtonConfig "Cancel" M.empty (Just "fa fa-window-close"))
+
+
+newItemWidget :: ContainerForm t m g k v
+  => (R.Dynamic t (g (FValidation v)) -> R.Event t (k,v) -> R.Event t (g v) -> FRW t m (k,v))
+  -> R.Dynamic t (g (FValidation v))
+  -> R.Event t (g v)
+  -> FR t m (R.Event t (g (Maybe v)))
+newItemWidget editPairW mapDyn newInputMapEv = mdo
+  let modalEditW = const $ fmap avToMaybe . unDynValidation <$> editPairW mapDyn newPairEv newInputMapEv
+      pairEvToDiffEv pairEv = fmap Just . uncurry lhfMapSingleton <$> pairEv 
+  newPairEv <- view MW.modalEditor_change <$> MW.modalEditor modalEditW (R.constDyn Nothing) newItemEditorConfig 
+  return $ pairEvToDiffEv newPairEv
+  
 
 {-
 -- first arg (new pair widget) does not need newInputMapEv since it will just close one new map
