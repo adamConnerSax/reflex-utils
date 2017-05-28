@@ -66,6 +66,9 @@ makeDynValidation::Dynamic t (AccValidation a) -> DynValidation t a
 makeDynValidation = Compose
 -}
 
+dynMaybeToDynValidation :: Reflex t => DynMaybe t a -> DynValidation t a
+dynMaybeToDynValidation = DynValidation . fmap maybeToAV . getCompose
+
 dynValidationNothing :: Reflex t => DynValidation t a
 dynValidationNothing = DynValidation $ constDyn (AccFailure [FNothing])
 

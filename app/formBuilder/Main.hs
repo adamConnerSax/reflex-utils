@@ -124,7 +124,7 @@ instance FormInstanceC t m => FormBuilder t m Name where
   buildForm va mFn dma =
     let labelCfg = LabelConfig "Name" M.empty
         inputCfg = InputElementConfig (Just "John Doe") (Just "Name") (Just labelCfg)
-    in validateForm va $ liftF (setInputConfig inputCfg) $ Name <$> buildForm' mFn (unName <$> dma)
+    in validateForm va $ liftF (setInputConfig inputCfg) $ Name <$> buildVForm mFn (unName <$> dma)
 
 -- a simple structure
 data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Generic,Show)
@@ -217,9 +217,9 @@ instance FormInstanceC t m=>FormBuilder t m C where
 -- handwritten single constructor instance
 instance FormInstanceC t m=>FormBuilder t m BRec where
   buildForm va mFN mBRecDyn = validateForm va . makeForm $ do
-    let b1 = buildForm' Nothing (oneB <$> mBRecDyn)
-        b2 = liftF (fCenter LayoutHorizontal) $ buildForm' Nothing (seqOfA <$> mBRecDyn)
-        b3 = liftF (fCenter LayoutHorizontal) $ buildForm' Nothing (hashSetOfString <$> mBRecDyn)
+    let b1 = buildVForm Nothing (oneB <$> mBRecDyn)
+        b2 = liftF (fCenter LayoutHorizontal) $ buildVForm Nothing (seqOfA <$> mBRecDyn)
+        b3 = liftF (fCenter LayoutHorizontal) $ buildVForm Nothing (hashSetOfString <$> mBRecDyn)
     fRow . unF $ (BRec <$> b1 <*> b2 <*> b3)
 
 

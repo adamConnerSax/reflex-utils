@@ -187,7 +187,7 @@ buildDynReadMaybe va mFN dma = makeForm $ do
 
 -- NB this will handle Dynamic t (Dynamic t a)) inputs
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (R.Dynamic t a) where
-  buildForm va mFN = validateForm va . fmap R.constDyn . buildForm' mFN . Compose . join . fmap sequenceA . getCompose
+  buildForm va mFN = validateForm va . fmap R.constDyn . buildVForm mFN . Compose . join . fmap sequenceA . getCompose
 
 -- | String and Text
 instance FormInstanceC t m => FormBuilder t m T.Text where

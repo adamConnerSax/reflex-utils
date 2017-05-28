@@ -13,6 +13,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
          module Reflex.Dom.Contrib.FormBuilder.DynValidation
        , module Reflex.Dom.Contrib.FormBuilder.Configuration
        , dynamicForm
+       , dynamicFormOfDynamic
        , formWithSubmitAction
        , observeDynamic
        , observeWidget
@@ -27,7 +28,10 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , buildFMDWrappedList
        , actOnDBWidget
        , FMDWrapped
-       , buildForm'
+       , buildVForm
+       , formField
+       , readOnlyFormField
+       , noFormField
        , makeForm
        , unF
        , toReadOnly
@@ -126,23 +130,6 @@ dynMaybeToGBuildInput :: R.Reflex t => DynMaybe t a -> B.GV (R.Dynamic t) FValid
 dynMaybeToGBuildInput = B.GV . fmap maybeToAV . getCompose
 
 
-{-
-class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
-  buildForm::FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
-  default buildForm::(B.GBuilder (FR t m) (R.Dynamic t) FValidation a)
-                   =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
-  buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . B.gBuildValidated va mFN . dynMaybeToGBuildInput
-
-
--- helper function for using the genericBuilder in an instance rather than as the instance.  Useful for additional layout, etc.
-gBuildFormValidated::(RD.DomBuilder t m
-                     , RD.MonadHold t m
-                     , RD.PostBuild t m
-                     , B.GBuilder (FR t m) (R.Dynamic t) FValidation a)
-  =>FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
-gBuildFormValidated va mFN = fgvToForm  . B.gBuildValidated va mFN . dynMaybeToGBuildInput
--}
-
 class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
   buildForm :: FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
   default buildForm::(B.GBuilderCS (FR t m) (R.Dynamic t) FValidation a)
@@ -161,9 +148,17 @@ gBuildFormValidated va mFN = fgvToForm  . B.gBuildValidatedCS (npSequenceViaDMap
 
 type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable FValidation a)
 
-buildForm' :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m a
-buildForm' = buildForm B.validator
+buildVForm :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m a
+buildVForm = buildForm B.validator
 
+formField :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m a
+formField = buildVForm
+
+noFormField :: Applicative m => R.Reflex t => DynMaybe t a -> Form t m a
+noFormField = makeForm . pure . dynMaybeToDynValidation
+
+readOnlyFormField :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m a
+readOnlyFormField mFN =  toReadOnly . buildVForm mFN
 
 -- utilities to use the sum-split facilities from dataBuilder
 buildFMDWrappedList::( RD.DomBuilder t m
@@ -196,9 +191,12 @@ switchingForm widgetGetter widgetHolder0 newWidgetHolderEv = makeForm $ do
   let f = runForm cfg . widgetGetter
   lift $ joinDynOfDynValidation <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)
 
-
 dynamicForm :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> Maybe a -> m (DynValidation t a)
-dynamicForm cfg ma = runForm cfg $ buildForm' Nothing (constDynMaybe ma)
+dynamicForm cfg ma = runForm cfg $ buildVForm Nothing (constDynMaybe ma)
+
+dynamicFormOfDynamic :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> DynMaybe t a -> m (DynValidation t a)
+dynamicFormOfDynamic cfg dma = runForm cfg $ buildVForm Nothing dma
+
 
 
 --TODO: is attachPromptlyDynWithMaybe the right thing here?
@@ -211,19 +209,19 @@ formWithSubmitAction cfg ma submitWidget = do
   let f dva = do
         submitEv <- submitWidget
         return $ RD.attachPromptlyDynWithMaybe const (avToMaybe <$> (unDynValidation dva)) submitEv -- fires when control does but only if form entries are valid
-  runForm' cfg (buildForm' Nothing (constDynMaybe ma)) f
+  runForm' cfg (buildVForm Nothing (constDynMaybe ma)) f
 
 
 observeDynamic :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> R.Dynamic t a -> m (DynValidation t a)
 observeDynamic cfg aDyn = do
   aEv <- dynAsEv aDyn
   aDyn' <- R.holdDyn Nothing (Just <$> aEv)
-  runForm (setToObserve cfg) $ buildForm' Nothing (Compose aDyn')
+  runForm (setToObserve cfg) $ buildVForm Nothing (Compose aDyn')
 
 
 observeWidget :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> m a -> m (DynValidation t a)
 observeWidget cfg wa =
-  runForm (setToObserve cfg) . makeForm $ lift wa >>= unF . buildForm' Nothing . constDynMaybe . Just
+  runForm (setToObserve cfg) . makeForm $ lift wa >>= unF . buildVForm Nothing . constDynMaybe . Just
 
 
 observeFlow::( RD.DomBuilder t m
@@ -236,7 +234,7 @@ observeFlow cfg flow initialA =
   runForm cfg . makeForm  $ do
     let initialWidget = flow initialA
         obF = observeWidget cfg
-    dva <- (unF $ buildForm' Nothing (constDynMaybe $ Just initialA)) -- DynValidation t a
+    dva <- (unF $ buildVForm Nothing (constDynMaybe $ Just initialA)) -- DynValidation t a
     dwb <- lift $ R.foldDynMaybe (\ma _ -> flow <$> ma) initialWidget (avToMaybe <$> R.updated (unDynValidation dva)) -- Dynamic t (m b)
     lift $ joinDynOfDynValidation <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
 

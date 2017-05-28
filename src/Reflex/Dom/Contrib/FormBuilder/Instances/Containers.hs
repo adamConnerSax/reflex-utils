@@ -46,7 +46,7 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
 import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.FormBuilder.Builder (DynMaybe(..), Form(..), FR, FRW, unF, FieldName, VFormBuilderC
-                                                        , FormBuilder(buildForm), makeForm, buildForm', getFormType, toReadOnly
+                                                        , FormBuilder(buildForm), makeForm, buildVForm, getFormType, toReadOnly
                                                         , FValidation, validateForm
                                                         , constDynMaybe, FormType(..), FormValidator
                                                         , fItem, fItemR, fRow, fCol, fCenter, avToMaybe)
@@ -182,7 +182,7 @@ mapEQML = mapML { diffMap = LHF.lhfMapDiff }
 mapEditWidget::(FormInstanceC t m, VFormBuilderBoth t m k v)
   =>R.Dynamic t (M.Map k (FValidation v)) -> R.Event t (k,v) -> R.Event t (M.Map k v) -> FRW t m (k,v)
 mapEditWidget _ newPair newMap = do
-  let pairWidget = unF $ buildForm' Nothing (constDynMaybe Nothing)
+  let pairWidget = unF $ buildVForm Nothing (constDynMaybe Nothing)
       pairWidgetEv = pairWidget <$ R.leftmost [() <$ newPair, () <$ newMap]
   joinDynOfDynValidation <$> RD.widgetHold pairWidget pairWidgetEv -- DynValidation (k,v)
 
@@ -228,7 +228,7 @@ listEditWidget mapDyn newPairEv newMapEv = do
                             , maybe 0 (+1) . safeMaximum . IM.keys <$> inMapEv
                             , maybe 0 (+1) . safeMaximum . IM.keys <$> newMapEv]
       widget newKey = fRow $ do
-        newElem <- fItem . unF $ buildForm' Nothing (constDynMaybe Nothing)
+        newElem <- fItem . unF $ buildVForm Nothing (constDynMaybe Nothing)
         return $ (,) <$> constDynValidation newKey <*> newElem
   joinDynOfDynValidation <$> RD.widgetHold (widget 0) (widget <$> newKeyEv) -- DynValidation (k,v)
 
@@ -236,7 +236,7 @@ listEditWidgetNoDup::(FormInstanceC t m, VFormBuilderC t m a, Eq a)=>R.Dynamic t
 listEditWidgetNoDup mapVDyn newPairEv newMapEv = do
   let newKeyEv = R.leftmost [(+1) . fst <$>  newPairEv, maybe 0 (+1) . safeMaximum . IM.keys <$> newMapEv]
       widget newKey = fRow $ do
-        newElem <- fItem . unF $ buildForm' Nothing (constDynMaybe Nothing)
+        newElem <- fItem . unF $ buildVForm Nothing (constDynMaybe Nothing)
         return $ (,) <$> constDynValidation newKey <*> newElem
       dupF (intKey,val) curMap = let isDup = L.elem val (IM.elems curMap) in if isDup then AccFailure [FNothing] else AccSuccess (intKey,val)
   newPair <- joinDynOfDynValidation <$> RD.widgetHold (widget 0) (widget <$> newKeyEv) -- DynValidation (k,v)
@@ -273,7 +273,7 @@ instance (FormInstanceC t m, VFormBuilderC t m a, Ord a)=>FormBuilder t m (S.Set
 intMapEditWidget::(FormInstanceC t m, VFormBuilderBoth t m Int v)
   =>R.Dynamic t (IM.IntMap (FValidation v)) -> R.Event t (Int,v) -> R.Event t (IM.IntMap v) -> FRW t m (Int,v)
 intMapEditWidget _ newPair newMap = do
-  let pairWidget = unF $ buildForm' Nothing (constDynMaybe Nothing)
+  let pairWidget = unF $ buildVForm Nothing (constDynMaybe Nothing)
       pairWidgetEv = pairWidget <$ R.leftmost [() <$ newPair, () <$ newMap]
   joinDynOfDynValidation <$> RD.widgetHold pairWidget pairWidgetEv -- DynValidation (Int,v)
 
@@ -316,7 +316,7 @@ hashMapEditWidget::(FormInstanceC t m, VFormBuilderBoth t m k v)
   -> R.Event t (HML.HashMap k v)
   -> FRW t m (k,v)
 hashMapEditWidget _ newPair newMap = do
-  let pairWidget = unF $ buildForm' Nothing (constDynMaybe Nothing)
+  let pairWidget = unF $ buildVForm Nothing (constDynMaybe Nothing)
       pairWidgetEv = pairWidget <$ R.leftmost [() <$ newPair, () <$ newMap]
   joinDynOfDynValidation <$> RD.widgetHold pairWidget pairWidgetEv -- DynValidation (k,v)
 
@@ -643,17 +643,17 @@ showKeyEditVal::(FormInstanceC t m, VFormBuilderBoth t m k v)=>ElemWidget t m k 
 showKeyEditVal k vDyn = do
   vEv <- dynAsEv vDyn -- traceDynAsEv (const "showKeyEditVal") vDyn
   mvDyn <- R.holdDyn Nothing (Just <$> vEv)
-  let showKey k = toReadOnly $ buildForm' Nothing (constDynMaybe (Just k))
+  let showKey k = toReadOnly $ buildVForm Nothing (constDynMaybe (Just k))
   fRow $ do
     fItem . unF $ showKey k
-    fItem . unF $ buildForm' Nothing (Compose mvDyn)
+    fItem . unF $ buildVForm Nothing (Compose mvDyn)
 
 
 hideKeyEditVal::(FormInstanceC t m, VFormBuilderC t m v)=>ElemWidget t m k v
 hideKeyEditVal _ vDyn = do
   vEv <- dynAsEv vDyn -- traceDynAsEv (const "hideKeyEditVal") vDyn
   mvDyn <- R.holdDyn Nothing (Just <$> vEv)
-  fRow . fItem . unF $ buildForm' Nothing (Compose mvDyn)
+  fRow . fItem . unF $ buildVForm Nothing (Compose mvDyn)
 
 
 editAndDeleteElemWidget::(FormInstanceC t m, VFormBuilderBoth t m k v)
@@ -697,7 +697,7 @@ buildLBEMapWithAdd lbbf mFN mapDyn0 = fCol $ mdo
   initialMapEv <- dynAsEv mapDyn0
   editedMapDyn <- fItem $ lbbf mFN mapDyn -- Dynamic t (M.Map k v)
   addEv <- fRow $ mdo -- Event t (k,v)
-    let newOneWidget = fmap avToMaybe . unDynValidation <$> (fRow . unF $ buildForm' Nothing (constDynMaybe Nothing)) -- m (Dynamic t (Maybe (k,v))
+    let newOneWidget = fmap avToMaybe . unDynValidation <$> (fRow . unF $ buildVForm Nothing (constDynMaybe Nothing)) -- m (Dynamic t (Maybe (k,v))
         addWidget = join <$> RD.widgetHold newOneWidget (newOneWidget <$ addButtonEv) 
     newOneDyn <- fItem addWidget -- Dynamic t (Maybe (k,v))
     addButtonEv <- fCenter LayoutVertical . fItemR . lift $ containerActionButton "+" -- Event t ()
@@ -717,7 +717,7 @@ buildLBEMapLWK mFN map0Dyn = do
 editOne::(FormInstanceC t m, VFormBuilderC t m v, Show k)=>k->R.Dynamic t v->FR t m (R.Dynamic t (Maybe v))
 editOne k valDyn = do
   fItem $ RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k)
-  fItem $ fmap avToMaybe . unDynValidation <$> (unF $ buildForm' Nothing (Compose $ Just <$> valDyn))
+  fItem $ fmap avToMaybe . unDynValidation <$> (unF $ buildVForm Nothing (Compose $ Just <$> valDyn))
 
 -- now do with ListViewWithKey so we can put in delete events
 -- NB: ListViewWithKey returns an Event t (M.Map k v) but it contains only the keys for which things have changed

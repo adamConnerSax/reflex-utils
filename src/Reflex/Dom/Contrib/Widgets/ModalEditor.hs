@@ -115,29 +115,31 @@ modalEditor :: forall t m a. ( RD.DomBuilder t m
   -> Dynamic t (Maybe a)
   -> ModalEditorConfig t a
   -> m (ModalEditor t a)
-modalEditor editW aMDyn config = L.flexCol $ mdo
+modalEditor editW aMDyn config = mdo
   let (widgetInputDyn, closeOnChangeEv) = case config ^. modalEditor_onChange of
         Close    -> (aMDyn, () <$ R.updated aMDyn)
         Update f -> (f <$> aMDyn, R.never)
       e2m = either (const Nothing) Just
       m2e = maybe (Left ()) Right
-      header = maybe (return R.never) (\f -> dynamicButton $ f <$> newAMDyn) $ (config ^. modalEditor_XButton)
+      header = maybe (return R.never) (\f -> L.flexRow $ dynamicButton $ f <$> newAMDyn) $ (config ^. modalEditor_XButton)
       footer eaDyn = L.flexRow $ do
-        okEv <- dynamicButton ((config ^. modalEditor_OkButton) . e2m <$> eaDyn)
-        cancelEv' <- dynamicButton ((config ^. modalEditor_CancelButton) . e2m <$> eaDyn)
+        okEv <- L.flexItem $ dynamicButton ((config ^. modalEditor_OkButton) . e2m <$> eaDyn)
+        cancelEv' <- L.flexItem $ dynamicButton ((config ^. modalEditor_CancelButton) . e2m <$> eaDyn)
         return (cancelEv', okEv)
       showAttrs hideEv showEv = R.holdDyn visibleCSS $ R.leftmost [hiddenCSS <$ hideEv, visibleCSS <$ showEv]
-      maAndCloseEv = mdo
+      maAndCloseEv = mdo -- returns m (Event t (Maybe a), Event t ())
         let body = fmap m2e <$> (L.flexRow $ editW widgetInputDyn)
             modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
             closeOnOkEv okEv = if (config ^. modalEditor_closeOnOk) then () <$ okEv else R.never
-            closeEv = R.leftmost [cancelEv, closeOnChangeEv, closeOnOkEv newAMEv']
+            closeEv = R.leftmost [ cancelEv
+                                 , closeOnChangeEv
+                                 , closeOnOkEv newAMEv'
+                                 ]
         modalVisAttrs <- showAttrs closeEv R.never
-        (newAMEv', cancelEv) <- RD.elDynAttr "div" modalAttrsDyn $ RDC.mkModalBody header footer body
+        (newAMEv', cancelEv) <- L.flexCol $ RD.elDynAttr "div" modalAttrsDyn $ RDC.mkModalBody header footer body
         return $ (e2m <$> newAMEv', closeEv)
   let openButtonConfigOrig = (config ^. modalEditor_openButton) <$> aMDyn
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
---  postbuild <- RD.getPostBuild
   aMEv <- dynAsEv aMDyn
   openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
   openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
