@@ -140,7 +140,6 @@ type Validator a = a -> Either Text a
 data BuilderConfiguration t m a = BuilderConfiguration { formConfig::FormConfiguration t m, validationF::Validator a}
 -}
 
---makeLenses ''LayoutConfiguration
 makeClassy ''CssConfiguration
 makeClassy ''InputElementConfig
 makeClassy ''FormConfiguration

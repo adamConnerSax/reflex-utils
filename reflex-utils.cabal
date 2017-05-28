@@ -57,6 +57,7 @@ library
                   Reflex.Dom.Contrib.FormBuilder.AllDefault
                   Reflex.Dom.Contrib.FormBuilder.Instances.Containers
                   Reflex.Dom.Contrib.FormBuilder.Instances.Basic
+                  Reflex.Dom.Contrib.FormBuilder.Instances.ModalForm
   other-modules:
 
   if flag(wkwebview) || flag(warp)

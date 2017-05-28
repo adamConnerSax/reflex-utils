@@ -135,7 +135,7 @@ modalEditor editW aMDyn config = mdo
                                  , closeOnChangeEv
                                  , closeOnOkEv newAMEv'
                                  ]
-        modalVisAttrs <- showAttrs closeEv R.never
+        modalVisAttrs <- showAttrs closeEv R.never -- we don't need to reshow because we build the widget anew each time the button is pressed.
         (newAMEv', cancelEv) <- L.flexCol $ RD.elDynAttr "div" modalAttrsDyn $ RDC.mkModalBody header footer body
         return $ (e2m <$> newAMEv', closeEv)
   let openButtonConfigOrig = (config ^. modalEditor_openButton) <$> aMDyn
