@@ -76,8 +76,8 @@ type WidgetC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
 type FormInstanceC t m = (RD.HasDocument m, WidgetC t m, MonadWidgetExtraC t m, RD.PostBuild t m)
 --type VBuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
 
-instance {-# OVERLAPPABLE #-} B.Validatable (FValidation) a where
-  validator a = AccSuccess a
+instance {-# OVERLAPPABLE #-} B.Validatable FValidation a where
+  validator = AccSuccess
 
 readOnlyW :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => (a -> T.Text) -> WidgetConfig t a -> m (R.Dynamic t a)
 readOnlyW f wc = do
@@ -110,7 +110,7 @@ formWidget f fString mFN wc widget = do
       wcInput = over widgetConfig_attributes (addPlaceHolder . addInputClass) wcAll
       labeledWidget iw = case _inputLabelConfig inputCfg of
         Nothing -> iw
-        Just (LabelConfig t attrs) -> RD.elAttr "label" attrs  $ (RD.el "span" $ RD.text t) >> iw
+        Just (LabelConfig t attrs) -> RD.elAttr "label" attrs  $ RD.el "span" (RD.text t) >> iw
   lift . labeledWidget $ (fmap f <$> (if isObserver then readOnlyW fString wcAll else widget wcInput))
 
 formWidget' :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m, MonadFix m)
@@ -149,7 +149,7 @@ restrictWidget' :: (RD.DomBuilder t m, R.MonadHold t m)
   -> GWidget t m a
 restrictWidget' restrictFunc wFunc cfg = do
   w <- wFunc cfg
-  let e = R.leftmost [(_widgetConfig_setValue cfg), restrictFunc w]
+  let e = R.leftmost [_widgetConfig_setValue cfg, restrictFunc w]
   v <- R.holdDyn (_widgetConfig_initialValue cfg) e
   return $ w { _hwidget_value = v
              , _hwidget_change = e
@@ -198,7 +198,7 @@ instance FormInstanceC t m => FormBuilder t m T.Text where
 
 instance {-# OVERLAPPING #-} FormInstanceC t m => FormBuilder t m String where
   buildForm va mFN initialMDyn =
-    let va' = (\t -> T.pack <$> va (T.unpack t))
+    let va' t = T.pack <$> va (T.unpack t)
     in T.unpack <$> buildForm va' mFN (T.pack <$> initialMDyn)
 
 
@@ -215,7 +215,7 @@ instance FormC e t m=>B.Builder (RFormWidget e t m) Char where
 instance FormInstanceC t m => FormBuilder t m Bool where
   buildForm va mFN initialMDyn = makeForm $ do
     inputEv <- dynMaybeAsEv initialMDyn
-    formWidget' inputEv False id va showText mFN Nothing $ (\c -> _hwidget_value <$> htmlCheckbox c)
+    formWidget' inputEv False id va showText mFN Nothing (\c -> _hwidget_value <$> htmlCheckbox c)
 
 instance FormInstanceC t m => FormBuilder t m Double where
   buildForm = buildDynReadable
@@ -264,7 +264,7 @@ instance FormInstanceC t m=>FormBuilder t m UTCTime where
           Just y  -> va y
         initialDateTime = Just $ UTCTime (fromGregorian 1971 1 1) (secondsToDiffTime 0)
     inputEv <- dynMaybeAsEv initialMDyn
-    formWidget' inputEv initialDateTime Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
+    formWidget' inputEv initialDateTime Just vfwt (maybe "" showText) mFN Nothing (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
 
 
 instance FormInstanceC t m=>FormBuilder t m Day where
@@ -274,7 +274,7 @@ instance FormInstanceC t m=>FormBuilder t m Day where
           Just y  -> va y
         initialDay = Just $ fromGregorian 1971 1 1
     inputEv <- dynMaybeAsEv initialMDyn
-    formWidget' inputEv initialDay Just vfwt (maybe "" showText) mFN Nothing $  (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
+    formWidget' inputEv initialDay Just vfwt (maybe "" showText) mFN Nothing (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
 
 
 -- uses generics to build instances
@@ -308,7 +308,7 @@ instance {-# OVERLAPPABLE #-} (FormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=
     let values = [minBound..] :: [a]
         initial = head values
     inputEv <- dynMaybeAsEv initialMDyn
-    formWidget' inputEv initial id va showText mFN Nothing $ (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
+    formWidget' inputEv initial id va showText mFN Nothing (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
 
 
 -- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway

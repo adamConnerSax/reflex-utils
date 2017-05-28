@@ -53,13 +53,14 @@ import           Control.Monad.Reader                           (ask, asks,
 import           Data.ByteString                                (ByteString)
 import           Data.Default                                   (Default (..))
 import           Data.Functor.Compose                           (Compose (Compose, getCompose))
+import           Data.List                                      (unzip4)
 import qualified Data.Map                                       as M
 import           Data.Maybe                                     (fromMaybe)
 import           Data.Monoid                                    ((<>))
 import qualified Data.Text                                      as T
-
 import           Prelude                                        hiding (div,
                                                                  rem, span)
+
 
 instance Default (FormIncludedCss) where
   def = FormIncludedCss defaultCss (CssLinks [])
@@ -141,17 +142,18 @@ safeIndex n l = let ln = take (n+1) l in if length ln == (n+1) then Just (last l
 safeHead :: [a] -> Maybe a
 safeHead = safeIndex 0
 
--- FIXME: write a version that uses all the widgets at once, hiding the unused ones.  THat will be more efficient in the case when switching is expected
-defSumF :: DefaultConfigurationC t m => [(B.ConName,R.Event t (),FRW t m a)]->FRW t m a
+-- FIXME: write a version that uses all the widgets at once, hiding the unused ones.  That will be more efficient in the case when switching is expected
+defSumF :: DefaultConfigurationC t m => [(B.ConName, Maybe T.Text, R.Event t (), FRW t m a)]->FRW t m a
 defSumF conWidgets = fRow $ do
-  let (names, events, widgets) = unzip3 conWidgets
+  let (names, fieldNames, events, widgets) = unzip4 conWidgets
+      mFieldName = join $ safeHead fieldNames -- these are all the same.  Just packed per constructor for no good reason.
       indexedNames = zip [0..] (T.pack <$> names)
       inputIndexEv = whichFired events
   validClasses <- validDataClasses
   formType <- getFormType
   let selectionControl = case formType of
         Interactive ->
-          let ddAttrs = (titleAttr "Constructor") -- <> observeOnlyAttr)
+          let ddAttrs = titleAttr $ fromMaybe "Constructor" mFieldName
               ddConfig = RD.DropdownConfig inputIndexEv (R.constDyn ddAttrs)
           in RD._dropdown_change <$> RD.dropdown 0 (RD.constDyn $ M.fromList indexedNames) ddConfig
         ObserveOnly -> do

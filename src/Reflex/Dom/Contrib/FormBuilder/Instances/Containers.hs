@@ -4,12 +4,10 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE RankNTypes             #-}
-{-# LANGUAGE KindSignatures         #-}
 {-# LANGUAGE RecursiveDo            #-}
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE TupleSections          #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances   #-}
 -- | Module with machinery for building reflex-dom forms/dynamic editors from containers.
 --
@@ -93,7 +91,6 @@ import           Data.Monoid ((<>))
 -- my libs
 import qualified DataBuilder as B
 
-import           Text.Read                        (readMaybe)
 
 -- Container instances
 -- Editing/Appendability requires that the container be isomorphic to something traversable, but traversable in the (key,value) pairs for maps.
@@ -456,10 +453,10 @@ newItemWidget' editPairW mapDyn newInputMapEv = mdo
 newItemEditorConfig :: R.Reflex t => MW.ModalEditorConfig t a
 newItemEditorConfig = RD.def
                       & MW.modalEditor_closeOnOk .~ True
-                      & MW.modalEditor_openButton .~ (const $ MW.ButtonConfig "Add" M.empty (Just "fa fa-plus"))
+                      & MW.modalEditor_openButton .~ const (MW.ButtonConfig "Add" M.empty (Just "fa fa-plus"))
                       & MW.modalEditor_XButton .~ Nothing 
-                      & MW.modalEditor_OkButton .~ (const $ MW.ButtonConfig "OK" M.empty (Just "fa fa-check"))
-                      & MW.modalEditor_CancelButton .~ (const $ MW.ButtonConfig "Cancel" M.empty (Just "fa fa-window-close"))
+                      & MW.modalEditor_OkButton .~ const (MW.ButtonConfig "OK" M.empty (Just "fa fa-check"))
+                      & MW.modalEditor_CancelButton .~ const (MW.ButtonConfig "Cancel" M.empty (Just "fa fa-window-close"))
 
 
 newItemWidget :: ContainerForm t m g k v
@@ -474,34 +471,6 @@ newItemWidget editPairW mapDyn newInputMapEv = mdo
   return $ pairEvToDiffEv newPairEv
   
 
-{-
--- first arg (new pair widget) does not need newInputMapEv since it will just close one new map
--- but this way the signature matches newItemWidget
-newItemWidgetModal :: ContainerForm t m g k v
-  => (R.Dynamic t (g (FValidation v)) -> R.Event t (k,v) -> R.Event t (g v) -> FRW t m (k,v))
-  -> R.Dynamic t (g (FValidation v))
-  -> R.Event t (g v)
-  -> FR t m (R.Event t (g (Maybe v)))
-newItemWidgetModal editPairW mapDyn newInputMapEv = mdo
-  let addButton = fItem $ buttonNoSubmit' "Add"
-      header = return R.never
-      footer = fRow $ do
-        addEv <- fItem $ buttonNoSubmit' "Add"
-        cancelEv' <- fItem $ buttonNoSubmit' "Cancel"
-        let cancelEv = R.leftmost [cancelEv', () <$ newInputMapEv]
-        return (cancelEv, addEv)
-      av2Either (AccSuccess a) = Right a
-      av2Either (AccFailure e) = Left e
-      pairToDiff = fmap Just . uncurry lhfMapSingleton 
-      diffEv = mdo 
-        let body = fmap av2Either . unDynValidation <$> (fRow $ editPairW mapDyn R.never R.never)
-            e2m = either (const Nothing) Just
-        attrsDyn <- R.holdDyn visibleCSS (hiddenCSS <$ R.leftmost [doneEv, () <$ eEv])    
-        (eEv, doneEv) <- RD.elDynAttr "div" attrsDyn $ RDC.mkModalBody header footer body
-        return $ pairToDiff <$> fmapMaybe e2m $ eEv
-  R.switch . R.current <$> RD.widgetHold (return R.never) (diffEv <$ addButton)
--}
-
 dynValidationToDynamicMaybe::R.Reflex t=>DynValidation t a -> R.Dynamic t (Maybe a)
 dynValidationToDynamicMaybe = fmap avToMaybe . unDynValidation 
 
@@ -512,7 +481,7 @@ buildLBEMapLWK' editW _ mapDyn0 = do
   mapDynEv <- dynAsEv mapDyn0 
   mapDyn' <- R.holdDyn lhfEmptyMap mapDynEv
   mapOfDyn <- LHF.listWithKeyLHFMap mapDyn' editW -- Dynamic t (M.Map k (Dynamic t (Maybe (FValidation v)))
-  let mapFValDyn = lhfMapMaybe id <$> (join $ LHF.distributeLHFMapOverDynPure <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
+  let mapFValDyn = lhfMapMaybe id <$> join (LHF.distributeLHFMapOverDynPure <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
   return . DynValidation $ sequenceA <$> mapFValDyn
 
 boolToEither::Bool -> Either () ()
@@ -711,13 +680,13 @@ buildLBEMapWithAdd lbbf mFN mapDyn0 = fCol $ mdo
 buildLBEMapLWK::(FormInstanceC t m, VFormBuilderC t m v, Ord k, Show k)=>LBBuildF t m k v
 buildLBEMapLWK mFN map0Dyn = do
   mapOfDynMaybe <- LHF.listWithKeyLHFMap map0Dyn editOne
-  return $ M.mapMaybe id <$> (join $ R.distributeMapOverDynPure <$> mapOfDynMaybe)
+  return $ M.mapMaybe id <$> join (R.distributeMapOverDynPure <$> mapOfDynMaybe)
 
 
 editOne::(FormInstanceC t m, VFormBuilderC t m v, Show k)=>k->R.Dynamic t v->FR t m (R.Dynamic t (Maybe v))
 editOne k valDyn = do
   fItem $ RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k)
-  fItem $ fmap avToMaybe . unDynValidation <$> (unF $ buildVForm Nothing (Compose $ Just <$> valDyn))
+  fItem $ fmap avToMaybe . unDynValidation <$> unF (buildVForm Nothing (Compose $ Just <$> valDyn))
 
 -- now do with ListViewWithKey so we can put in delete events
 -- NB: ListViewWithKey returns an Event t (M.Map k v) but it contains only the keys for which things have changed

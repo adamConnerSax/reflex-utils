@@ -32,6 +32,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , formField
        , readOnlyFormField
        , noFormField
+       , labelForm
        , makeForm
        , unF
        , toReadOnly
@@ -55,52 +56,37 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        ) where
 
 
-import           Reflex.Dom.Contrib.Layout.Types              (CssClass,
-                                                               CssClasses (..),
+import           Reflex.Dom.Contrib.Layout.Types              (CssClasses (..),
                                                                IsCssClass (..),
-                                                               LayoutOrientation (..),
-                                                               emptyCss)
+                                                               LayoutOrientation (..))
 
-import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv,
-                                                               traceDynAsEv)
+import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv)
+
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation
 
-import qualified Data.Dependent.Map                           as DM
+--import qualified Data.Dependent.Map                           as DM
 import           DataBuilder                                  as BExport (Builder (..),
                                                                           FieldName,
                                                                           GBuilder (..),
                                                                           MDWrapped (..))
 import qualified DataBuilder                                  as B
-import           Generics.SOP                                 ((:.:) (..),
-                                                               NP (..), hmap,
-                                                               unComp, unI)
-import           Generics.SOP.DMapUtilities                   (dMapToNP,
-                                                               npReCompose,
-                                                               npSequenceViaDMap,
-                                                               npToDMap,
-                                                               npUnCompose)
+import           Generics.SOP.DMapUtilities                   (npSequenceViaDMap)
+
 import           Reflex                                       as ReflexExport (PushM)
 import qualified Reflex                                       as R
 import qualified Reflex.Dom                                   as RD
 
-import           Control.Arrow                                ((&&&))
-import           Control.Lens                                 (view)
-import           Control.Monad                                (join)
 import           Control.Monad.Fix                            (MonadFix)
-import           Control.Monad.Identity                       (runIdentity)
 import           Control.Monad.Morph
 import           Control.Monad.Reader                         (MonadReader (..),
                                                                runReaderT)
-import           Data.Align                                   (align)
 import           Data.Functor.Compose                         (Compose (..))
 import qualified Data.Map                                     as M
-import           Data.Maybe                                   (fromJust,
-                                                               fromMaybe,
+import           Data.Maybe                                   (fromMaybe,
                                                                isJust)
 import           Data.Monoid                                  ((<>))
 import qualified Data.Text                                    as T
-import           Data.These                                   (These (..))
 import           Data.Validation                              (AccValidation (..))
 --import           Language.Haskell.TH
 
@@ -121,7 +107,7 @@ fgvToForm = makeForm . fmap DynValidation . B.unFGV
 formToFGV :: Functor m => Form t m a -> B.FGV (FR t m) (R.Dynamic t) FValidation a
 formToFGV = B.FGV . fmap unDynValidation . unF
 
-type FormValidator a = B.Validator (FValidation) a
+type FormValidator a = B.Validator FValidation a
 
 validateForm :: (Functor m, R.Reflex t) => FormValidator a -> Form t m a -> Form t m a
 validateForm va = makeForm . fmap DynValidation . B.unFGV . B.validateFGV va . B.FGV . fmap unDynValidation . unF
@@ -160,13 +146,20 @@ noFormField = makeForm . pure . dynMaybeToDynValidation
 readOnlyFormField :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m a
 readOnlyFormField mFN =  toReadOnly . buildVForm mFN
 
+labelForm :: Monad m => T.Text -> T.Text -> T.Text -> CssClasses -> Form t m a -> Form t m a
+labelForm label title placeHolder classes =
+  let labelCfg = LabelConfig label ("class" RD.=: toCssString classes)
+      inputCfg = InputElementConfig (Just placeHolder) (Just title) (Just labelCfg)
+  in liftF (setInputConfig inputCfg)
+
+
 -- utilities to use the sum-split facilities from dataBuilder
 buildFMDWrappedList::( RD.DomBuilder t m
                      , RD.MonadHold t m
                      , RD.PostBuild t m
                      , B.Generic a
                      , B.HasDatatypeInfo a
-                     , B.All2 (B.And (Builder (FR t m) (R.Dynamic t) FValidation) (B.Validatable (FValidation))) (B.Code a))
+                     , B.All2 (B.And (Builder (FR t m) (R.Dynamic t) FValidation) (B.Validatable FValidation)) (B.Code a))
   => Maybe FieldName -> DynMaybe t a -> [FMDWrapped t m a]
 buildFMDWrappedList mFN = B.buildMDWrappedList mFN . B.GV . fmap maybeToAV . getCompose
 
@@ -176,7 +169,7 @@ actOnDBWidget f = B.FGV . fmap unDynValidation . f . fmap DynValidation . B.unFG
 toReadOnly :: Monad m => Form t m a -> Form t m a
 toReadOnly form = makeForm . local setToObserve $ unF form
 
-instance (RD.DomBuilder t m, FormBuilder t m a) => B.Builder (FR t m) (R.Dynamic t) (FValidation) a where
+instance (RD.DomBuilder t m, FormBuilder t m a) => B.Builder (FR t m) (R.Dynamic t) FValidation a where
   buildValidated va mFN = B.FGV . fmap unDynValidation . unF . buildForm va mFN . Compose . fmap avToMaybe . B.unGV
 
 runForm :: Monad m => FormConfiguration t m -> Form t m a -> m (DynValidation t a)
@@ -208,7 +201,7 @@ formWithSubmitAction :: (RD.DomBuilder t m, VFormBuilderC t m a)
 formWithSubmitAction cfg ma submitWidget = do
   let f dva = do
         submitEv <- submitWidget
-        return $ RD.attachPromptlyDynWithMaybe const (avToMaybe <$> (unDynValidation dva)) submitEv -- fires when control does but only if form entries are valid
+        return $ RD.attachPromptlyDynWithMaybe const (avToMaybe <$> unDynValidation dva) submitEv -- fires when control does but only if form entries are valid
   runForm' cfg (buildVForm Nothing (constDynMaybe ma)) f
 
 
@@ -234,7 +227,7 @@ observeFlow cfg flow initialA =
   runForm cfg . makeForm  $ do
     let initialWidget = flow initialA
         obF = observeWidget cfg
-    dva <- (unF $ buildVForm Nothing (constDynMaybe $ Just initialA)) -- DynValidation t a
+    dva <- unF $ buildVForm Nothing (constDynMaybe $ Just initialA) -- DynValidation t a
     dwb <- lift $ R.foldDynMaybe (\ma _ -> flow <$> ma) initialWidget (avToMaybe <$> R.updated (unDynValidation dva)) -- Dynamic t (m b)
     lift $ joinDynOfDynValidation <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
 
@@ -291,7 +284,7 @@ fAttrs' mDyn mFN mTypeS fixedCss = do
       invalidAttrs = titleAttr title <> cssClassAttr (invalidClasses <> fixedCss)
       f (AccSuccess _) = True
       f (AccFailure _) = False
-      validDyn = f <$> (unDynValidation mDyn)
+      validDyn = f <$> unDynValidation mDyn
   return . RD.ffor validDyn $ \x -> if x then validAttrs else invalidAttrs
 
 componentTitle :: Maybe FieldName -> Maybe T.Text -> T.Text
@@ -301,7 +294,7 @@ componentTitle mFN mType =
   in if isJust mFN && isJust mType then fnS <> "::" <> tnS else fnS <> tnS
 
 
-instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => B.Buildable (FR t m) (R.Dynamic t) (FValidation) where
+instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => B.Buildable (FR t m) (R.Dynamic t) FValidation where
   bFail msg = B.FGV . fmap unDynValidation $ do
     failF <- failureF . _builderFunctions <$> ask
     failF $ T.pack msg
@@ -310,13 +303,13 @@ instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => B.Buildable (
     postbuild <- RD.getPostBuild
     let mapHasDefault = R.fmapMaybe (\x -> if x then Just () else Nothing)
         mapValue      = fmap DynValidation . B.unFGV
-        f (MDWrapped isConDyn (conName,mFN) fgvWidget) = (conName, mapHasDefault (R.leftmost [R.updated isConDyn, R.tag (R.current isConDyn) postbuild]), mapValue fgvWidget)
+        f (MDWrapped isConDyn (conName, mFN) fgvWidget) = (conName, T.pack <$> mFN, mapHasDefault (R.leftmost [R.updated isConDyn, R.tag (R.current isConDyn) postbuild]), mapValue fgvWidget)
         constrList = f <$> mwWidgets
     sF <- sumF . _builderFunctions <$> ask
     sF constrList
 
 
-type FMDWrapped t m a = B.MDWrapped (FR t m) (R.Dynamic t) (FValidation) a
+type FMDWrapped t m a = B.MDWrapped (FR t m) (R.Dynamic t) FValidation a
 
 
 {-

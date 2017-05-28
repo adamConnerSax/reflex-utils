@@ -94,10 +94,9 @@ instance B.Validatable FValidation Age where
 
 instance FormInstanceC t m => FormBuilder t m Age where
   buildForm va mFn dma =
-    let labelCfg = LabelConfig "Age" M.empty
-        inputCfg = InputElementConfig (Just "35") (Just "Age") (Just labelCfg)
+    let labelF = labelForm "Age" "Age" "35" emptyCss
         vInt = liftValidation (>0) (const "Age must be > 0")
-    in validateForm va . (fmap Age) $ liftF (setInputConfig inputCfg) $ buildForm vInt mFn (unAge <$> dma)
+    in validateForm va . (fmap Age) $ labelF $ buildForm vInt mFn (unAge <$> dma)
 
 newtype EmailAddress = EmailAddress { unEmailAddress::T.Text } deriving (Show)
 
@@ -112,19 +111,16 @@ instance Validatable FValidation EmailAddress where
 
 instance FormInstanceC t m => FormBuilder t m EmailAddress where
   buildForm va mFn dma =
-    let labelCfg = LabelConfig "Email" M.empty
-        inputCfg = InputElementConfig (Just "yourname@emailprovider.com") (Just "Email") (Just labelCfg)
+    let labelF = labelForm "Email" "Email" "yourname@emailprovider.com" emptyCss
         vText = liftValidation validEmail (const "Email address must be of the form a@b")
-    in validateForm va . (fmap EmailAddress) $ liftF (setInputConfig inputCfg) $ buildForm vText mFn (unEmailAddress <$> dma)
+    in validateForm va . (fmap EmailAddress) $ labelF $ buildForm vText mFn (unEmailAddress <$> dma)
 
 newtype Name = Name { unName::T.Text } deriving (Show)
 instance B.Validatable FValidation Name -- uses default which is that everything is valid
 
 instance FormInstanceC t m => FormBuilder t m Name where
   buildForm va mFn dma =
-    let labelCfg = LabelConfig "Name" M.empty
-        inputCfg = InputElementConfig (Just "John Doe") (Just "Name") (Just labelCfg)
-    in validateForm va $ liftF (setInputConfig inputCfg) $ Name <$> buildVForm mFn (unName <$> dma)
+    validateForm va $ labelForm "Name" "Name" "John Doe" emptyCss $ Name <$> buildVForm mFn (unName <$> dma)
 
 -- a simple structure
 data User = User { name::Name, email::EmailAddress, age::Age } deriving (GHC.Generic,Show)

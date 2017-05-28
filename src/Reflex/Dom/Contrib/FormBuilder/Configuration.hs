@@ -72,7 +72,7 @@ type LabelText = Text
 data LabelPosition = LabelBefore | LabelAfter
 
 -- do the attributes below need to be dynamic?  That would complicate things...
-data LabelConfig = LabelConfig { labelText::LabelText, labelAttrs::Map Text Text }
+data LabelConfig = LabelConfig { labelText :: LabelText, labelAttrs :: Map Text Text }
 data FormType = Interactive | ObserveOnly deriving (Eq)
 
 data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)
@@ -116,7 +116,7 @@ data InputElementConfig t = InputElementConfig
 data BuilderFunctions t m = BuilderFunctions
   {
     failureF   :: forall a. Text -> FRW t m a
-  , sumF       :: forall a. [(B.ConName, Event t (), FRW t m a)] -> FRW t m a
+  , sumF       :: forall a. [(B.ConName, Maybe Text, Event t (), FRW t m a)] -> FRW t m a
 --  , chooserF::Dynamic t [B.ConName]->ConName->FR t m (Dynamic t B.ConName)
   , dynamicDiv :: DynAttrs t -> FLayoutF t m
   }
