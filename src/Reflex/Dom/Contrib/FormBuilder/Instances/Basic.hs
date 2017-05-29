@@ -311,8 +311,7 @@ instance {-# OVERLAPPABLE #-} (FormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=
     formWidget' inputEv initial id va showText mFN Nothing (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
 
 
--- |  Tuples. 2,3,4,5 tuples are here.  TODO: add more? Maybe write a TH function to do them to save space here?  Since I'm calling mkDyn anyway
--- generics for (,) since mkDyn is not an optimization here
+-- |  Tuples. 2,3,4,5 tuples are here.
 deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
 deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c)=>FormBuilder t m (a,b,c)
 deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d)=>FormBuilder t m (a,b,c,d)

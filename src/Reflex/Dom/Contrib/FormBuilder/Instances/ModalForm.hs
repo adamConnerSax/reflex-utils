@@ -35,7 +35,7 @@ newtype ModalForm a = ModalForm { unModalForm :: a } deriving (Functor)
 class HasModalFormConfig t a where
   modalConfig :: ModalEditorConfig t a
 
-instance (HasModalFormConfig t a
+instance ( HasModalFormConfig t a
          , FormInstanceC t m
          , FormBuilder t m a
          ) => FormBuilder t m (ModalForm a) where

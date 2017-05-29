@@ -436,7 +436,6 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
             ]
   return . DynValidation $ fmap from . sequenceA <$> mapDyn
 
-
 newItemWidget' :: ContainerForm t m g k v
   => (R.Dynamic t (g (FValidation v)) -> R.Event t (k,v) -> R.Event t (g v) -> FRW t m (k,v))
   -> R.Dynamic t (g (FValidation v))
