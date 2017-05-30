@@ -51,7 +51,7 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder (DynMaybe(..), Form(..),
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynValidation(..),constDynValidation,joinDynOfDynValidation
                                                               ,accValidation, mergeAccValidation, FormError(FNothing))
 import           Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
-import           Reflex.Dom.Contrib.DynamicUtils (dynAsEv,traceDynAsEv,mDynAsEv)
+import           Reflex.Dom.Contrib.DynamicUtils (dynBasedOn, dynAsEv, traceDynAsEv, mDynAsEv)
 import qualified Reflex.Dom.Contrib.ListHoldFunctions.Maps as LHF
 import           Reflex.Dom.Contrib.ListHoldFunctions.Maps (LHFMap(..))
 import qualified Reflex.Dom.Contrib.Widgets.ModalEditor as MW 
@@ -220,9 +220,13 @@ listEditWidget::(FormInstanceC t m, VFormBuilderC t m a)
   -> FRW t m (Int,a)
 listEditWidget mapDyn newPairEv newMapEv = do
   inMapEv <- dynAsEv mapDyn
-  let newKeyEv = R.leftmost [(+1) . fst <$>  newPairEv
-                            , maybe 0 (+1) . safeMaximum . IM.keys <$> inMapEv
-                            , maybe 0 (+1) . safeMaximum . IM.keys <$> newMapEv]
+  let keyFromOldKey = (+1)
+      keyFromIntMap :: forall b. IM.IntMap b -> Int
+      keyFromIntMap = maybe 0 keyFromOldKey . safeMaximum . IM.keys
+      newKeyEv = R.leftmost $ [ keyFromOldKey . fst <$>  newPairEv
+                              , keyFromIntMap <$> inMapEv
+                              , keyFromIntMap <$> newMapEv
+                              ]
       widget newKey = fRow $ do
         newElem <- fItem . unF $ buildVForm Nothing (constDynMaybe Nothing)
         return $ (,) <$> constDynValidation newKey <*> newElem
@@ -540,7 +544,7 @@ selectWidget :: ( FormInstanceC t m
 selectWidget labelStrategy eW dgv = do
   -- we need to deal differently with the null and non-null container case
   -- and we only want to know when we've changed from one to the other
-  inputNullEv <- dynAsEv (R.uniqDyn $ lhfMapNull <$> dgv)
+  inputNullEv <- R.holdUniqDyn (lhfMapNull <$> dgv) >>= dynAsEv --(R.uniqDyn $ lhfMapNull <$> dgv)
   let (nonNullEv,nullEv) = fanBool inputNullEv -- . R.updated . R.uniqDyn $ lhfMapNull <$> dgv
       nullWidget = RD.el "div" (RD.text "Empty Container") >> return (R.constDyn Nothing, R.never)
       nullWidgetEv = nullWidget <$ nullEv
@@ -598,47 +602,42 @@ buildLBWithSelectEditOnly::ContainerForm t m g k v
   ->Form t m (f v)
 buildLBWithSelectEditOnly labelStrategy (MapLike to from _) (MapElemWidgets eW _)  mFN dmfv =  makeForm $ do
   let dgv = fmap maybeMapToMap . getCompose $ to <$> dmfv
-  newInputContainerEv <- dynAsEv dgv -- generate events when the input changes and at postbuild
-  (_,editedMapEv) <- selectWidget labelStrategy eW dgv
-  res <- R.holdDyn lhfEmptyMap (R.leftmost [newInputContainerEv, editedMapEv])
+  (_, editedMapEv) <- selectWidget labelStrategy eW dgv
+  res <- R.buildDynamic (R.sample $ R.current dgv) $ R.leftmost [R.updated dgv, editedMapEv]
   return . DynValidation $ AccSuccess . from <$> res
 
     
 showKeyEditVal::(FormInstanceC t m, VFormBuilderBoth t m k v)=>ElemWidget t m k v
 showKeyEditVal k vDyn = do
-  vEv <- dynAsEv vDyn -- traceDynAsEv (const "showKeyEditVal") vDyn
-  mvDyn <- R.holdDyn Nothing (Just <$> vEv)
   let showKey k = toReadOnly $ buildVForm Nothing (constDynMaybe (Just k))
   fRow $ do
     fItem . unF $ showKey k
-    fItem . unF $ buildVForm Nothing (Compose mvDyn)
+    fItem . unF $ buildVForm Nothing (Compose $ Just <$> vDyn)
 
 
 hideKeyEditVal::(FormInstanceC t m, VFormBuilderC t m v)=>ElemWidget t m k v
 hideKeyEditVal _ vDyn = do
-  vEv <- dynAsEv vDyn -- traceDynAsEv (const "hideKeyEditVal") vDyn
-  mvDyn <- R.holdDyn Nothing (Just <$> vEv)
-  fRow . fItem . unF $ buildVForm Nothing (Compose mvDyn)
+  fItem . unF $ buildVForm Nothing (Compose $ Just <$> vDyn)
 
 
 editAndDeleteElemWidget::(FormInstanceC t m, VFormBuilderBoth t m k v)
   =>ElemWidget t m k v->R.Dynamic t Bool->LBWidget t m k v
 editAndDeleteElemWidget eW visibleDyn k vDyn = mdo
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
-  (visibleDyn',outDyn') <- RD.elDynAttr "div" widgetAttrs . fRow $ do
-    resDyn <- fItem $ eW k vDyn -- DynValidation t v
-    resEv <- dynAsEv $ unDynValidation resDyn -- Event t (FValidation v)  
+  (visibleDyn', outDyn') <- RD.elDynAttr "div" widgetAttrs . fRow $ do
+    resDyn <- unDynValidation <$> (fItem $ eW k vDyn) -- Dynamic t (FValidation v)
+--    resEv <- dynAsEv resDyn -- Event t (FValidation v)  
     delButtonEv <- fItem $ buttonNoSubmit' "-"
-    selEv <- dynAsEv visibleDyn
-    visDyn <-  R.holdDyn True $ R.leftmost
+--    selEv <- dynAsEv visibleDyn
+    visDyn <-  dynBasedOn visibleDyn $ R.leftmost
                [
-                 selEv
+                 R.updated visibleDyn
                , False <$ delButtonEv -- delete button pressed, so hide
-               , True <$ resEv -- value updated so make sure it's visible (in case of re-use of deleted key)
+               , True <$ R.updated resDyn --resEv -- value updated so make sure it's visible (in case of re-use of deleted key)
                ]
-    outDyn <- R.holdDyn Nothing $ R.leftmost
+    outDyn <- dynBasedOn (Just <$> resDyn) $ R.leftmost
               [
-                Just <$> resEv
+                Just <$> R.updated resDyn 
               , Nothing <$ delButtonEv
               ]
     return (visDyn,outDyn)
@@ -659,7 +658,6 @@ type LBBuildF t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FR t m (R.Dyna
 buildLBEMapWithAdd::(FormInstanceC t m, VFormBuilderBoth t m k v, Ord k)
   =>LBBuildF t m k v->LBBuildF t m k v
 buildLBEMapWithAdd lbbf mFN mapDyn0 = fCol $ mdo
-  initialMapEv <- dynAsEv mapDyn0
   editedMapDyn <- fItem $ lbbf mFN mapDyn -- Dynamic t (M.Map k v)
   addEv <- fRow $ mdo -- Event t (k,v)
     let newOneWidget = fmap avToMaybe . unDynValidation <$> (fRow . unF $ buildVForm Nothing (constDynMaybe Nothing)) -- m (Dynamic t (Maybe (k,v))
@@ -668,7 +666,7 @@ buildLBEMapWithAdd lbbf mFN mapDyn0 = fCol $ mdo
     addButtonEv <- fCenter LayoutVertical . fItemR . lift $ containerActionButton "+" -- Event t ()
     return $ R.attachWithMaybe const (R.current newOneDyn) addButtonEv -- fires only if newOneDyn is (Just x)
   let mapWithAdditionEv = R.attachWith (\m (k,v)->M.insert k v m) (R.current editedMapDyn) addEv
-  mapDyn <- R.holdDyn M.empty (R.leftmost [initialMapEv, mapWithAdditionEv])
+  mapDyn <- dynBasedOn mapDyn0 $ R.leftmost [R.updated mapDyn0, mapWithAdditionEv]
   return editedMapDyn
 
 
@@ -690,11 +688,10 @@ editOne k valDyn = do
 buildLBEMapLVWK::(FormInstanceC t m, VFormBuilderC t m v, Ord k , Show k)=> LBBuildF t m k v
 buildLBEMapLVWK mFN mapDyn0 = mdo
   let editF k valDyn = R.updated <$> editOne k valDyn -- editOneEv (R.constDyn True) k valDyn
-  newInputMapEv <- dynAsEv mapDyn0
   mapEditsEv  <- RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
   let editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv
-      mapEv = R.leftmost [newInputMapEv, editedMapEv]
-  mapDyn <- R.holdDyn M.empty mapEv
+      mapEv = R.leftmost [R.updated mapDyn0, editedMapEv]
+  mapDyn <- dynBasedOn mapDyn0 mapEv
   return mapDyn
 
 

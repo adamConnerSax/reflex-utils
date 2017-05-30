@@ -140,13 +140,11 @@ modalEditor editW aMDyn config = mdo
         return $ (e2m <$> newAMEv', closeEv)
   let openButtonConfigOrig = (config ^. modalEditor_openButton) <$> aMDyn
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
---  aMEv <- dynAsEv aMDyn
   openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
   openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
   evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (maAndCloseEv <$ openButtonEv)
   let newAEv = R.fmapMaybe id $ R.switch (fst <$> evOfEvs)
       modalCloseEv = R.switch (snd <$> evOfEvs)
---  newAMDyn <- R.holdDyn Nothing $ R.leftmost [aMEv, Just <$> newAEv]
   newAMDyn <- R.buildDynamic (R.sample (R.current aMDyn)) $ R.leftmost [R.updated aMDyn, Just <$> newAEv]
   return $ ModalEditor newAMDyn newAEv
 

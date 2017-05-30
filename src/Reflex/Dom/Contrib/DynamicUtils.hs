@@ -1,6 +1,7 @@
 module Reflex.Dom.Contrib.DynamicUtils
   (
-    dynAsEv
+    dynBasedOn
+  , dynAsEv
   , traceDynAsEv
   , mDynAsEv
   , dynamicMaybeAsEv
@@ -11,9 +12,12 @@ module Reflex.Dom.Contrib.DynamicUtils
 import qualified Reflex as R
 import qualified Reflex.Dom as RD
 
+
+dynBasedOn :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
+dynBasedOn d e = R.buildDynamic (R.sample $ R.current d) e
+
 -- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
 -- that's the value we want not the tagged current value.
-
 dynAsEv :: RD.PostBuild t m => R.Dynamic t a -> m (R.Event t a)
 dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD.getPostBuild
 
