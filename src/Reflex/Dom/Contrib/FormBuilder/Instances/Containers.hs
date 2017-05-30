@@ -47,10 +47,10 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder (DynMaybe(..), Form(..),
                                                         , FormBuilder(buildForm), makeForm, buildVForm, getFormType, toReadOnly
                                                         , FValidation, validateForm
                                                         , constDynMaybe, FormType(..), FormValidator
-                                                        , fItem, fItemR, fRow, fCol, fCenter, avToMaybe)
+                                                        , fItem, fItemR, fRow, fCol, fCenter, fFill, avToMaybe)
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynValidation(..),constDynValidation,joinDynOfDynValidation
                                                               ,accValidation, mergeAccValidation, FormError(FNothing))
-import           Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..))
+import           Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..), LayoutDirection (..))
 import           Reflex.Dom.Contrib.DynamicUtils (dynBasedOn, dynAsEv, traceDynAsEv, mDynAsEv)
 import qualified Reflex.Dom.Contrib.ListHoldFunctions.Maps as LHF
 import           Reflex.Dom.Contrib.ListHoldFunctions.Maps (LHFMap(..))
@@ -611,8 +611,8 @@ showKeyEditVal::(FormInstanceC t m, VFormBuilderBoth t m k v)=>ElemWidget t m k 
 showKeyEditVal k vDyn = do
   let showKey k = toReadOnly $ buildVForm Nothing (constDynMaybe (Just k))
   fRow $ do
-    fItem . unF $ showKey k
-    fItem . unF $ buildVForm Nothing (Compose $ Just <$> vDyn)
+    fItem . fFill LayoutRight . unF $ showKey k
+    fItem . fFill LayoutLeft . unF $ buildVForm Nothing (Compose $ Just <$> vDyn)
 
 
 hideKeyEditVal::(FormInstanceC t m, VFormBuilderC t m v)=>ElemWidget t m k v
@@ -627,7 +627,7 @@ editAndDeleteElemWidget eW visibleDyn k vDyn = mdo
   (visibleDyn', outDyn') <- RD.elDynAttr "div" widgetAttrs . fRow $ do
     resDyn <- unDynValidation <$> (fItem $ eW k vDyn) -- Dynamic t (FValidation v)
 --    resEv <- dynAsEv resDyn -- Event t (FValidation v)  
-    delButtonEv <- fItem $ buttonNoSubmit' "-"
+    delButtonEv <- fItem $ fFill LayoutLeft $ buttonNoSubmit' "-"
 --    selEv <- dynAsEv visibleDyn
     visDyn <-  dynBasedOn visibleDyn $ R.leftmost
                [
