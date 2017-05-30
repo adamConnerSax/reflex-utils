@@ -168,7 +168,6 @@ buildAdjustableContainerWithSelect labelStrategy ml mews va mFN dmfa  = validate
     case fType of
       Interactive ->  unF $ buildLBWithSelect labelStrategy ml mews mFN dmfa 
       ObserveOnly ->  unF $ buildLBWithSelectEditOnly labelStrategy ml mews mFN dmfa
-  
 
 mapML::Ord k=>MapLike (M.Map k) (M.Map k) v
 mapML = MapLike id id LHF.lhfMapDiffNoEq 
@@ -425,15 +424,13 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   
   insertDiffEv <- fRow $ newItemWidget nWF mapDyn newInputMapEv
 
-  let newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv -- Event t (Map k (Maybe v))
+  let newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv --newInputMapEv -- Event t (Map k (Maybe v))
       diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
       mapEditsFVEv = R.updated . join $ LHF.distributeLHFMapOverDynPure <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v)))
       editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
-  mapDyn <- R.holdDyn lhfEmptyMap $ R.leftmost
-            [
-              fmap AccSuccess <$> newInputMapEv
-            , editedMapEv
-            ]
+  mapDyn <- R.buildDynamic (fmap AccSuccess <$> R.sample (R.current mapDyn0)) $ R.leftmost [ fmap AccSuccess <$> (R.updated mapDyn0)
+                                                                                           , editedMapEv
+                                                                                           ]
   return . DynValidation $ fmap from . sequenceA <$> mapDyn
 
 newItemWidget' :: ContainerForm t m g k v

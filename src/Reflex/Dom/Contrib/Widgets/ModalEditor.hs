@@ -99,7 +99,7 @@ instance Reflex t => Default (ModalEditorConfig t a) where
         (constDyn M.empty)
         Close -- close on change to input dynamic
         True -- close on OK
-        (const $ ButtonConfig "Edit" M.empty Nothing) -- default to Edit button which is disbled when input is Nothing
+        (const $ ButtonConfig "Edit" M.empty Nothing) -- default to Edit button which is disabled when input is Nothing
         Nothing -- default to no "x" button in the header
         (const $ ButtonConfig "OK" M.empty Nothing) -- simple OK button in footer
         (const $ ButtonConfig "Cancel" M.empty Nothing) -- simple Cancel button in footer
@@ -140,13 +140,14 @@ modalEditor editW aMDyn config = mdo
         return $ (e2m <$> newAMEv', closeEv)
   let openButtonConfigOrig = (config ^. modalEditor_openButton) <$> aMDyn
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
-  aMEv <- dynAsEv aMDyn
+--  aMEv <- dynAsEv aMDyn
   openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
   openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
   evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (maAndCloseEv <$ openButtonEv)
   let newAEv = R.fmapMaybe id $ R.switch (fst <$> evOfEvs)
       modalCloseEv = R.switch (snd <$> evOfEvs)
-  newAMDyn <- R.holdDyn Nothing $ R.leftmost [aMEv, Just <$> newAEv]
+--  newAMDyn <- R.holdDyn Nothing $ R.leftmost [aMEv, Just <$> newAEv]
+  newAMDyn <- R.buildDynamic (R.sample (R.current aMDyn)) $ R.leftmost [R.updated aMDyn, Just <$> newAEv]
   return $ ModalEditor newAMDyn newAEv
 
 -- NB:  This is only in (Maybe a) rather than a because of the holdDyn, which needs a starting point.
