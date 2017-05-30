@@ -61,7 +61,7 @@ safeDropdown :: forall k t m. (RD.DomBuilder t m, MonadFix m, R.MonadHold t m, R
   => Maybe k -> Dynamic t (M.Map k T.Text) -> SafeDropdownConfig t k ->m (SafeDropdown t k)
 safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   postbuild <- RD.getPostBuild
-  optionsNullEv <- dynAsEv (R.uniqDyn $ M.null <$> optionsDyn)
+  optionsNullEv <- R.holdUniqDyn (M.null <$> optionsDyn) >>= dynAsEv
   let (someOptionsEv, noOptionsEv) = fanBool optionsNullEv
       (setToNothingEv, defaultKeySetEv) = R.fanEither $ maybe (Left ()) Right <$> leftmost [setEv, Just <$> R.fmapMaybe (const k0m) postbuild]
       noOptionsWidget ev = return $ SafeDropdown (constDyn Nothing) ev
@@ -74,7 +74,6 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
         let newK0 curK m = if M.member curK m then Nothing else headMay $ M.keys m
             newK0Ev = attachWithMaybe newK0 (current $ RD._dropdown_value dd) (updated optionsDyn)
             ddConfig = DropdownConfig (leftmost [newK0Ev, defaultKeySetSafeEv]) attrsDyn  
---        k0Dyn <- R.holdDyn k0 newK0Ev
         dd <- dropdown k0 optionsDyn ddConfig
         return $ SafeDropdown (Just <$> RD._dropdown_value dd) (Just <$> RD._dropdown_change dd)
       newWidgetEv = leftmost [noOptionsWidgetEv, dropdownWidget <$> defaultKeyNewOptionsEv]
