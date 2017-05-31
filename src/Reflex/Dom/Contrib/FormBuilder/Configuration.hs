@@ -36,6 +36,7 @@ module Reflex.Dom.Contrib.FormBuilder.Configuration
   , validDataClasses
   , invalidDataClasses
   , setToObserve
+  , getFC
   , getFormType
   , fItemL
   , fItemR
