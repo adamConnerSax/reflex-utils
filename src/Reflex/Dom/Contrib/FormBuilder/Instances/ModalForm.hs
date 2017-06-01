@@ -25,6 +25,7 @@ import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.ReflexConstraints           (MonadWidgetExtraC)
 import           Reflex.Dom.Contrib.Widgets.ModalEditor         (ModalEditorConfig,
                                                                  modalEditor,
+                                                                 modalEditorEither,
                                                                  modalEditor_value)
 
 import qualified Reflex                                         as R
@@ -36,29 +37,35 @@ import           Control.Monad.Fix                              (MonadFix)
 import           Data.Functor.Compose                           (Compose (Compose),
                                                                  getCompose)
 
-newtype ModalForm e a = ModalForm { unModalForm :: a  } deriving (Functor)
+newtype ModalForm a = ModalForm { unModalForm :: a } deriving (Functor)
 
-class HasModalFormConfig t e a where
-  modalConfig :: ModalEditorConfig t e a
+class HasModalFormConfig t a where
+  modalConfig :: ModalEditorConfig t a
 
-instance ( HasModalFormConfig t e a
+instance ( HasModalFormConfig t a
          , FormInstanceC t m
          , FormBuilder t m a
-         ) => FormBuilder t m (ModalForm e a) where
+         ) => FormBuilder t m (ModalForm a) where
   buildForm vMFA mFN dmMF  =
     let va = fmap unModalForm . vMFA . ModalForm
         modalWidget = fmap (fmap avToEither . unDynValidation) . unF . buildForm va mFN . Compose
-        aMDyn = getCompose $ unModalForm <$> dmMF
-    in makeForm $ fmap ModalForm . DynValidation . fmap eitherToAV . (view modalEditor_value) <$> modalEditorEither modalWidget aMDyn modalConfig
+        aEDyn = maybeToEitherFE <$> (getCompose $ unModalForm <$> dmMF)
+    in makeForm $ fmap ModalForm . DynValidation . fmap eitherToAV . (view modalEditor_value) <$> modalEditorEither modalWidget aEDyn modalConfig
+
 
 -- this just rearranges argument order and does the Dynamic t (Maybe a) <-> DynMaybe t a
+-- also commits to e ~ FormErrors
 modalizeWidget ::  ( RD.DomBuilder t m
                    , MonadWidgetExtraC t m
                    , RD.PostBuild t m
                    , MonadFix m
                    , RD.MonadHold t m
                    ) => ModalEditorConfig t a -> (DynMaybe t a -> m (DynValidation t a)) -> DynMaybe t a -> m (DynValidation t a)
-modalizeWidget cfg w dma = DynValidation . fmap eitherToAv . view modalEditor_value <$> modalEditorEither (fmap (fmap avToEither . getCompose) . w . Compose) (getCompose dma) cfg
+modalizeWidget cfg w dma =
+  let matchedWidget = fmap (fmap avToEither . unDynValidation) . w . Compose
+      matchedInput = maybeToEitherFE <$> getCompose dma
+      matchOutput = DynValidation . fmap eitherToAV . view modalEditor_value
+  in matchOutput <$> modalEditorEither matchedWidget matchedInput cfg
 
 modalizeForm ::  ( RD.DomBuilder t m
                  , MonadWidgetExtraC t m
@@ -71,6 +78,9 @@ modalizeForm cfg fw = makeForm . modalizeWidget cfg (unF . fw)
 
 modalizeFormField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t a -> DynMaybe t a -> Form t m a
 modalizeFormField cfg = modalizeForm cfg (buildVForm Nothing)
+
+maybeToEitherFE :: Maybe a -> Either FormErrors a
+maybeToEitherFE = maybe (Left [FNothing]) Right
 
 {-
 modalizeFormField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t a -> DynMaybe t a -> Form t m a

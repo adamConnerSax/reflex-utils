@@ -49,7 +49,7 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder (DynMaybe(..), Form(..),
                                                         , constDynMaybe, FormType(..), FormValidator
                                                         , fItem, fItemR, fRow, fCol, fCenter, fFill, avToMaybe)
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynValidation(..),constDynValidation,joinDynOfDynValidation
-                                                              ,accValidation, mergeAccValidation, FormError(FNothing))
+                                                              ,accValidation, mergeAccValidation, FormErrors, FormError(FNothing), avToEither)
 import           Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..), LayoutDirection (..))
 import           Reflex.Dom.Contrib.DynamicUtils (dynBasedOn, dynAsEv, traceDynAsEv, mDynAsEv)
 import qualified Reflex.Dom.Contrib.ListHoldFunctions.Maps as LHF
@@ -465,9 +465,10 @@ newItemWidget :: ContainerForm t m g k v
   -> R.Event t (g v)
   -> FR t m (R.Event t (g (Maybe v)))
 newItemWidget editPairW mapDyn newInputMapEv = mdo
-  let modalEditW = const $ fmap avToMaybe . unDynValidation <$> editPairW mapDyn newPairEv newInputMapEv
+  let modalEditW = const $ fmap avToEither . unDynValidation <$> editPairW mapDyn newPairEv newInputMapEv
+      blankInput = R.constDyn $ Left [FNothing]
       pairEvToDiffEv pairEv = fmap Just . uncurry lhfMapSingleton <$> pairEv 
-  newPairEv <- view MW.modalEditor_change <$> MW.modalEditor modalEditW (R.constDyn Nothing) newItemEditorConfig 
+  newPairEv <- view MW.modalEditor_change <$> MW.modalEditorEither modalEditW blankInput newItemEditorConfig
   return $ pairEvToDiffEv newPairEv
   
 

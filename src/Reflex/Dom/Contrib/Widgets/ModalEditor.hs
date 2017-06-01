@@ -20,6 +20,7 @@ module Reflex.Dom.Contrib.Widgets.ModalEditor
   , button_label
   , button_attributes
   , button_iconClass
+  , disableIfNothing
   , ModalEditorConfig (..)
   , modalEditor_attributes
   , modalEditor_onChange
@@ -76,7 +77,8 @@ modalEditor_mValue = fmap e2m . view modalEditor_value
 
 
 -- update function can place a default in on Nothing
-data OnExternalChange e a = Close | Update (Either e a -> Either e a)
+-- NB: This doesn't work yet because of a conflict with updating on close and reopen.  So control will always close on input change.
+data OnExternalChange a = Close | UpdateIfRight | UpdateOrDefault a
 
 data ButtonConfig = ButtonConfig { _button_label      :: T.Text
                                  , _button_attributes :: M.Map T.Text T.Text
@@ -86,16 +88,20 @@ data ButtonConfig = ButtonConfig { _button_label      :: T.Text
 makeLenses ''ButtonConfig
 
 -- widget could go in here but has no sensible default except "return"
-data ModalEditorConfig t e a = ModalEditorConfig { _modalEditor_attributes   :: Dynamic t (M.Map T.Text T.Text)
-                                                 , _modalEditor_onChange     :: OnExternalChange e a
-                                                 , _modalEditor_closeOnOk    :: Bool
-                                                 , _modalEditor_openButton   :: Maybe a -> ButtonConfig
-                                                 , _modalEditor_XButton      :: Maybe (Maybe a -> ButtonConfig)
-                                                 , _modalEditor_OkButton     :: Maybe a -> ButtonConfig
-                                                 , _modalEditor_CancelButton :: Maybe a -> ButtonConfig
-                                                 }
+data ModalEditorConfig t a = ModalEditorConfig { _modalEditor_attributes   :: Dynamic t (M.Map T.Text T.Text)
+                                               , _modalEditor_onChange     :: OnExternalChange a
+                                               , _modalEditor_closeOnOk    :: Bool
+                                               , _modalEditor_openButton   :: Maybe a -> ButtonConfig
+                                               , _modalEditor_XButton      :: Maybe (Maybe a -> ButtonConfig)
+                                               , _modalEditor_OkButton     :: Maybe a -> ButtonConfig
+                                               , _modalEditor_CancelButton :: Maybe a -> ButtonConfig
+                                               }
 
 makeLenses ''ModalEditorConfig
+
+disableIfNothing :: Maybe a -> ButtonConfig -> ButtonConfig
+disableIfNothing Nothing (ButtonConfig l attrs ic) = ButtonConfig l (M.union hiddenCSS attrs) ic
+disableIfNothing _ x = x
 
 dynamicButton :: (RD.DomBuilder t m, RD.PostBuild t m) => Dynamic t ButtonConfig -> m (RD.Event t ())
 dynamicButton cfg = do
@@ -106,7 +112,7 @@ dynamicButton cfg = do
     RD.dynText $ view button_label <$> cfg
 
 
-instance Reflex t => Default (ModalEditorConfig t e a) where
+instance Reflex t => Default (ModalEditorConfig t a) where
   def = ModalEditorConfig
         (constDyn M.empty)
         Close -- close on change to input dynamic
@@ -125,21 +131,22 @@ modalEditorEither :: forall t m e a. ( RD.DomBuilder t m
                                      )
   => (Dynamic t (Maybe a) -> m (Dynamic t (Either e a))) -- a widget for editing an a. returns Left on invalid value
   -> Dynamic t (Either e a)
-  -> ModalEditorConfig t e a
+  -> ModalEditorConfig t a
   -> m (ModalEditor t e a)
 modalEditorEither editW aEDyn config = mdo
-  let (widgetInputDyn, closeOnChangeEv) = case config ^. modalEditor_onChange of
-        Close    -> (aEDyn, () <$ R.updated aEDyn)
-        Update f -> (f <$> aEDyn, R.never)
-
+  let newInputEv = R.updated aEDyn
+      (widgetInputEv, closeOnChangeEv) = case config ^. modalEditor_onChange of
+        _ {- Close -}   -> (e2m <$> newInputEv, () <$ newInputEv)
+--        UpdateIfRight -> (e2m <$> newInputEv, R.fmapMaybe (either (const $ Just ()) (const Nothing)) newInputEv)
+--        UpdateOrDefault a -> (either (const $ Just a) Just <$> newInputEv, R.never)
       header = maybe (return R.never) (\f -> L.flexRow $ dynamicButton $ f . e2m <$> newAEDyn) $ (config ^. modalEditor_XButton)
       footer eaDyn = L.flexRow $ do
         okEv <- L.flexItem $ dynamicButton ((config ^. modalEditor_OkButton) . e2m <$> eaDyn)
         cancelEv' <- L.flexItem $ dynamicButton ((config ^. modalEditor_CancelButton) . e2m <$> eaDyn)
         return (cancelEv', okEv)
       showAttrs hideEv showEv = R.holdDyn visibleCSS $ R.leftmost [hiddenCSS <$ hideEv, visibleCSS <$ showEv]
-      eaAndCloseEv = mdo -- returns m (Event t (Either e a), Event t ())
-        let body = L.flexRow $ editW $ (e2m <$> widgetInputDyn)
+      eaAndCloseW input = mdo -- returns m (Event t (Either e a), Event t ())
+        let body = L.flexRow $ editW $ (R.constDyn $ e2m input)
             modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
             closeOnOkEv okEv = if (config ^. modalEditor_closeOnOk) then () <$ okEv else R.never
             closeEv = R.leftmost [ cancelEv
@@ -149,14 +156,15 @@ modalEditorEither editW aEDyn config = mdo
         modalVisAttrs <- showAttrs closeEv R.never -- we don't need to reshow because we build the widget anew each time the button is pressed.
         (newAEEv', cancelEv) <- L.flexCol $ RD.elDynAttr "div" modalAttrsDyn $ RDC.mkModalBody header footer body
         return $ (newAEEv', closeEv)
-  let openButtonConfigOrig = (config ^. modalEditor_openButton) . e2m <$> aEDyn
+  let openButtonConfigOrig = (config ^. modalEditor_openButton) . e2m <$> newAEDyn
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
   openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
   openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
-  evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (eaAndCloseEv <$ openButtonEv)
+  let openEv = R.tag (R.current newAEDyn) openButtonEv
+  evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (eaAndCloseW <$> openEv)
   let newEaEv = R.switch (fst <$> evOfEvs)
       modalCloseEv = R.switch (snd <$> evOfEvs)
-  newAEDyn <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [R.updated aEDyn, newEaEv]
+  newAEDyn <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [newInputEv, newEaEv]
   return $ ModalEditor newAEDyn (R.fmapMaybe e2m newEaEv)
 
 -- NB:  This is only in (Either e a) rather than a because of the holdDyn, which needs a starting point.
@@ -169,7 +177,7 @@ modalEditor :: forall t m e a. ( RD.DomBuilder t m
                                )
   => (Dynamic t (Maybe a) -> m (Dynamic t (Maybe a))) -- a widget for editing an a. returns Left on invalid value
   -> Dynamic t (Maybe a)
-  -> ModalEditorConfig t () a
+  -> ModalEditorConfig t a
   -> m (ModalEditor t () a)
 modalEditor editW aMDyn config = modalEditorEither (fmap (fmap m2e) . editW) (m2e <$> aMDyn) config
 
