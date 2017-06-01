@@ -49,6 +49,12 @@ maybeToAV :: Maybe a -> AccValidation FormErrors a
 maybeToAV Nothing = AccFailure [FNothing]
 maybeToAV (Just a) = AccSuccess a
 
+avToEither :: AccValidation e a -> Either e a
+avToEither = accValidation Left Right
+
+eitherToAV :: Either e a -> AccValidation e a
+eitherToAV = either AccFailure AccSuccess
+
 mergeAccValidation :: AccValidation e (AccValidation e a) -> AccValidation e a
 mergeAccValidation x = case x of
   AccSuccess y -> y

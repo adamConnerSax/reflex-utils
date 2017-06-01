@@ -290,6 +290,7 @@ buildFormIso isoAB vb mFN dmb = makeForm $ do
       b2a = view $ from isoAB
   unF $ a2b <$> buildForm (fmap b2a . vb . a2b) mFN (b2a <$> dmb)
 
+{-
 avToEither::AccValidation a b -> Either a b
 avToEither (AccSuccess x) = Right x
 avToEither (AccFailure x) = Left x
@@ -297,6 +298,7 @@ avToEither (AccFailure x) = Left x
 eitherToAV::Either a b->AccValidation a b
 eitherToAV (Left x)  = AccFailure x
 eitherToAV (Right x) = AccSuccess x
+-}
 
 -- NB: Here, AccSuccess will appear as Right and AccFailure as Left in the forms.  To Avoid this we need to build a specific instance.
 instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (AccValidation a b) where
