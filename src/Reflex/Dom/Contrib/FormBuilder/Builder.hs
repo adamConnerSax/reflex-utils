@@ -61,6 +61,9 @@ import           Reflex.Dom.Contrib.Layout.Types              (CssClasses (..),
                                                                LayoutOrientation (..))
 
 import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult, WrappedWidgetResult,
+                                                               buildWidgetResult,
+                                                               buildWrappedWidgetResult)
 
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation

@@ -51,8 +51,7 @@ import           Reflex.Dynamic                          (constDyn, current,
 import           Reflex.Dom.Contrib.DynamicUtils         (dynAsEv)
 import qualified Reflex.Dom.Contrib.Layout.FlexLayout    as L
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
-import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult,
-                                                          buildWidgetResult)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult (WrappedWidgetResult, unsafeBuildWrappedWidgetResult)
 
 import           Control.Lens                            (makeLenses, view,
                                                           (%~), (&), (^.))
@@ -86,8 +85,8 @@ modalEditor_change = _modalEditor_change
 modalEditor_mValue :: Reflex t => ModalEditor t e a -> Dynamic t (Maybe a)
 modalEditor_mValue = fmap e2m . modalEditor_value
 
-modalEditor_WidgetResult :: (Reflex t, R.MonadHold t m, Functor f) => ModalEditor t e a -> (Either e a -> f a) -> m (WidgetResult t f a)
-modalEditor_WidgetResult me h = buildWidgetResult (Compose $ h <$> modalEditor_value me) (Compose $ h . Right <$> modalEditor_change me)
+modalEditor_WidgetResult :: Reflex t => ModalEditor t e a -> WrappedWidgetResult t (Either e) a
+modalEditor_WidgetResult me = unsafeBuildWrappedWidgetResult (modalEditor_value me) (Right <$> modalEditor_change me)
 
 -- update function can place a default in on Nothing
 -- NB: This doesn't work yet because of a conflict with updating on close and reopen.  So control will always close on input change.

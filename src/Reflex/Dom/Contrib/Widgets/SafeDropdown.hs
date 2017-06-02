@@ -13,6 +13,7 @@ module Reflex.Dom.Contrib.Widgets.SafeDropdown
     SafeDropdown(..)
   , safeDropdown_value
   , safeDropdown_change
+  , safeDropdownWrappedWidgetResult
   , SafeDropdownConfig(..)
   , safeDropdownConfig_setValue
   , safeDropdownConfig_attributes
@@ -21,6 +22,7 @@ module Reflex.Dom.Contrib.Widgets.SafeDropdown
   ) where
 
 import Reflex.Dom.Contrib.DynamicUtils (dynAsEv)
+import Reflex.Dom.Contrib.Widgets.WidgetResult (WrappedWidgetResult, unsafeBuildWrappedWidgetResult)
 
 import Reflex (Dynamic,Event,Reflex,never,attachWithMaybe,leftmost)
 import Reflex.Dynamic (updated,constDyn,current,tagPromptlyDyn)
@@ -107,6 +109,10 @@ concat <$> mapM makeLenses
   [ ''SafeDropdown
   , ''SafeDropdownConfig
   ]
+
+-- this is okay because of how SafeDropDown is built. 
+safeDropdownWrappedWidgetResult :: Reflex t => SafeDropdown t k -> WrappedWidgetResult t Maybe k
+safeDropdownWrappedWidgetResult sdd = unsafeBuildWrappedWidgetResult (_safeDropdown_value sdd) (_safeDropdown_change sdd) 
 
 instance RD.HasAttributes (SafeDropdownConfig t k) where
   type Attrs (SafeDropdownConfig t k) = Dynamic t (M.Map T.Text T.Text)
