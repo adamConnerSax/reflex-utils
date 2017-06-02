@@ -63,7 +63,9 @@ import           Reflex.Dom.Contrib.Layout.Types              (CssClasses (..),
 import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult, WrappedWidgetResult,
                                                                buildWidgetResult,
-                                                               buildWrappedWidgetResult)
+                                                               buildWrappedWidgetResult,
+                                                               dynamicToWidgetResult,
+                                                               wrDyn)
 
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation
@@ -96,7 +98,7 @@ import           Data.Validation                              (AccValidation (..
 
 -- This is necessary because this functor and applicative are different from that of SFRW
 -- NB: Form is *not* a Monad. So we do all the monadic widget building in (FRW t m a) and then wrap with makeForm
-type Form t m a = Compose (FR t m) (DynValidation t) a
+type Form t m a = Compose (FR t m) (WrappedWidgetResult t FValidation) a
 
 makeForm :: FRW t m a -> Form t m a
 makeForm = Compose
@@ -104,35 +106,35 @@ makeForm = Compose
 unF :: Form t m a -> FRW t m a
 unF = getCompose
 
-fgvToForm :: Functor m => B.FGV (FR t m) (R.Dynamic t) FValidation a -> Form t m a
-fgvToForm = makeForm . fmap DynValidation . B.unFGV
+fgvToForm :: Functor m => B.FGV (FR t m) (WidgetResult t) FValidation a -> Form t m a
+fgvToForm = makeForm . fmap WrappedWidgetResult . B.unFGV
 
-formToFGV :: Functor m => Form t m a -> B.FGV (FR t m) (R.Dynamic t) FValidation a
-formToFGV = B.FGV . fmap unDynValidation . unF
+formToFGV :: Functor m => Form t m a -> B.FGV (FR t m) (WidgetResult t) FValidation a
+formToFGV = B.FGV . fmap unWrappedWidgetResult . unF
 
 type FormValidator a = B.Validator FValidation a
 
 validateForm :: (Functor m, R.Reflex t) => FormValidator a -> Form t m a -> Form t m a
-validateForm va = makeForm . fmap DynValidation . B.unFGV . B.validateFGV va . B.FGV . fmap unDynValidation . unF
+validateForm va = makeForm . fmap WrappedWidgetResult . B.unFGV . B.validateFGV va . B.FGV . fmap unWrappedWidgetResult . unF
 
-dynMaybeToGBuildInput :: R.Reflex t => DynMaybe t a -> B.GV (R.Dynamic t) FValidation a
-dynMaybeToGBuildInput = B.GV . fmap maybeToAV . getCompose
+dynMaybeToGBuildInput :: R.Reflex t => DynMaybe t a -> B.GV (WidgetResult t) FValidation a
+dynMaybeToGBuildInput = B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose
 
 
 class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
   buildForm :: FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
-  default buildForm::(B.GBuilderCS (FR t m) (R.Dynamic t) FValidation a)
+  default buildForm::(B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
                    => FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
-  buildForm va mFN = makeForm . fmap DynValidation . B.unFGV . B.gBuildValidatedCS (npSequenceViaDMap R.distributeDMapOverDynPure) va mFN . dynMaybeToGBuildInput
+  buildForm va mFN = makeForm . fmap WrappedWidgetResult . B.unFGV . B.gBuildValidatedCS (dynamicToWidgetResult . npSequenceViaDMap R.distributeDMapOverDynPure . fmap wrDyn) va mFN . dynMaybeToGBuildInput
 
 
 -- helper function for using the genericBuilder in an instance rather than as the instance.  Useful for additional layout, etc.
 gBuildFormValidated::( RD.DomBuilder t m
                      , RD.MonadHold t m
                      , RD.PostBuild t m
-                     , B.GBuilderCS (FR t m) (R.Dynamic t) FValidation a)
+                     , B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
   => FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
-gBuildFormValidated va mFN = fgvToForm  . B.gBuildValidatedCS (npSequenceViaDMap R.distributeDMapOverDynPure) va mFN . dynMaybeToGBuildInput
+gBuildFormValidated va mFN = fgvToForm  . B.gBuildValidatedCS (dynamicToWidgetResult . npSequenceViaDMap R.distributeDMapOverDynPure . fmap wrDyn) va mFN . dynMaybeToGBuildInput
 
 
 type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable FValidation a)
@@ -144,7 +146,7 @@ formField :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m 
 formField = buildVForm
 
 noFormField :: Applicative m => R.Reflex t => DynMaybe t a -> Form t m a
-noFormField = makeForm . pure . dynMaybeToDynValidation
+noFormField = makeForm . pure . dynamicToWrappedWidgetResult . fmap maybeToAV . getCompose
 
 readOnlyFormField :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m a
 readOnlyFormField mFN =  toReadOnly . buildVForm mFN
@@ -155,6 +157,7 @@ labelForm label title placeHolder classes =
       inputCfg = InputElementConfig (Just placeHolder) (Just title) (Just labelCfg)
   in liftF (setInputConfig inputCfg)
 
+-- HERE
 
 -- utilities to use the sum-split facilities from dataBuilder
 buildFMDWrappedList::( RD.DomBuilder t m

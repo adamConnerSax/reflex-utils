@@ -54,6 +54,7 @@ module Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation
 import           Reflex.Dom.Contrib.Layout.Types              (CssClasses, LayoutDirection (..),
                                                                LayoutOrientation (..))
+import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WrappedWidgetResult)
 
 import qualified DataBuilder                                  as B
 import           Reflex                                       (Dynamic, Event)
@@ -79,7 +80,7 @@ data FormType = Interactive | ObserveOnly deriving (Eq)
 data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)
 
 type FR t m = ReaderT (FormConfiguration t m) m
-type FRW t m a = FR t m (DynValidation t a)
+type FRW t m a = FR t m (WrappedWidgetResult t FValidation a)
 
 type FLayoutF t m = forall a.(FR t m a -> FR t m a)
 
