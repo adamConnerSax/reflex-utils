@@ -11,7 +11,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 module Reflex.Dom.Contrib.Widgets.ModalEditor
   (
-    ModalEditor (..)
+    ModalEditor
   , modalEditor_value
   , modalEditor_mValue
   , modalEditor_change
@@ -33,31 +33,37 @@ module Reflex.Dom.Contrib.Widgets.ModalEditor
   , modalEditorEither
   ) where
 
-import           Reflex.Dom.Contrib.DynamicUtils      (dynAsEv)
+import           Reflex.Dom.Contrib.DynamicUtils         (dynAsEv)
 
-import           Reflex                               (Dynamic, Event, Reflex,
-                                                       attachWithMaybe,
-                                                       leftmost, never)
-import qualified Reflex                               as R
-import           Reflex.Dom                           (DropdownConfig (..),
-                                                       dropdown, widgetHold)
-import qualified Reflex.Dom                           as RD
-import qualified Reflex.Dom.Contrib.Widgets.Modal     as RDC
-import           Reflex.Dynamic                       (constDyn, current,
-                                                       tagPromptlyDyn, updated)
+import           Reflex                                  (Dynamic, Event,
+                                                          Reflex,
+                                                          attachWithMaybe,
+                                                          leftmost, never)
+import qualified Reflex                                  as R
+import           Reflex.Dom                              (DropdownConfig (..),
+                                                          dropdown, widgetHold)
+import qualified Reflex.Dom                              as RD
+import qualified Reflex.Dom.Contrib.Widgets.Modal        as RDC
+import           Reflex.Dynamic                          (constDyn, current,
+                                                          tagPromptlyDyn,
+                                                          updated)
 
-import           Reflex.Dom.Contrib.DynamicUtils      (dynAsEv)
-import qualified Reflex.Dom.Contrib.Layout.FlexLayout as L
-import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
+import           Reflex.Dom.Contrib.DynamicUtils         (dynAsEv)
+import qualified Reflex.Dom.Contrib.Layout.FlexLayout    as L
+import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult,
+                                                          buildWidgetResult)
 
-import           Control.Lens                         (makeLenses, view, (%~),
-                                                       (&), (^.))
-import           Control.Monad                        (join)
-import           Control.Monad.Fix                    (MonadFix)
+import           Control.Lens                            (makeLenses, view,
+                                                          (%~), (&), (^.))
+import           Control.Monad                           (join)
+import           Control.Monad.Fix                       (MonadFix)
 import           Data.Default
-import qualified Data.Map                             as M
-import qualified Data.Text                            as T
-import           Safe                                 (headMay)
+import           Data.Functor.Compose                    (Compose (Compose),
+                                                          getCompose)
+import qualified Data.Map                                as M
+import qualified Data.Text                               as T
+import           Safe                                    (headMay)
 
 e2m :: Either e a -> Maybe a
 e2m = either (const Nothing) Just
@@ -70,11 +76,18 @@ data ModalEditor t e a = ModalEditor { _modalEditor_value  :: Dynamic t (Either 
                                      , _modalEditor_change :: Event t a -- only fire when there is a valid value
                                      }
 
-makeLenses ''ModalEditor
+--makeLenses ''ModalEditor
+modalEditor_value :: ModalEditor t e a -> Dynamic t (Either e a)
+modalEditor_value = _modalEditor_value
+
+modalEditor_change :: ModalEditor t e a -> Event t a
+modalEditor_change = _modalEditor_change
 
 modalEditor_mValue :: Reflex t => ModalEditor t e a -> Dynamic t (Maybe a)
-modalEditor_mValue = fmap e2m . view modalEditor_value
+modalEditor_mValue = fmap e2m . modalEditor_value
 
+modalEditor_WidgetResult :: (Reflex t, R.MonadHold t m, Functor f) => ModalEditor t e a -> (Either e a -> f a) -> m (WidgetResult t f a)
+modalEditor_WidgetResult me h = buildWidgetResult (Compose $ h <$> modalEditor_value me) (Compose $ h . Right <$> modalEditor_change me)
 
 -- update function can place a default in on Nothing
 -- NB: This doesn't work yet because of a conflict with updating on close and reopen.  So control will always close on input change.

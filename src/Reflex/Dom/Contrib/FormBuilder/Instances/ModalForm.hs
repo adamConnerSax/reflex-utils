@@ -50,7 +50,7 @@ instance ( HasModalFormConfig t a
     let va = fmap unModalForm . vMFA . ModalForm
         modalWidget = fmap (fmap avToEither . unDynValidation) . unF . buildForm va mFN . Compose
         aEDyn = maybeToEitherFE <$> (getCompose $ unModalForm <$> dmMF)
-    in makeForm $ fmap ModalForm . DynValidation . fmap eitherToAV . (view modalEditor_value) <$> modalEditorEither modalWidget aEDyn modalConfig
+    in makeForm $ fmap ModalForm . DynValidation . fmap eitherToAV . modalEditor_value <$> modalEditorEither modalWidget aEDyn modalConfig
 
 
 -- this just rearranges argument order and does the Dynamic t (Maybe a) <-> DynMaybe t a
@@ -64,7 +64,7 @@ modalizeWidget ::  ( RD.DomBuilder t m
 modalizeWidget cfg w dma =
   let matchedWidget = fmap (fmap avToEither . unDynValidation) . w . Compose
       matchedInput = maybeToEitherFE <$> getCompose dma
-      matchOutput = DynValidation . fmap eitherToAV . view modalEditor_value
+      matchOutput = DynValidation . fmap eitherToAV . modalEditor_value
   in matchOutput <$> modalEditorEither matchedWidget matchedInput cfg
 
 modalizeForm ::  ( RD.DomBuilder t m

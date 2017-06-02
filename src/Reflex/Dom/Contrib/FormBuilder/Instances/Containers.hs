@@ -468,7 +468,7 @@ newItemWidget editPairW mapDyn newInputMapEv = mdo
   let modalEditW = const $ fmap avToEither . unDynValidation <$> editPairW mapDyn newPairEv newInputMapEv
       blankInput = R.constDyn $ Left [FNothing]
       pairEvToDiffEv pairEv = fmap Just . uncurry lhfMapSingleton <$> pairEv 
-  newPairEv <- view MW.modalEditor_change <$> MW.modalEditorEither modalEditW blankInput newItemEditorConfig
+  newPairEv <- MW.modalEditor_change <$> MW.modalEditorEither modalEditW blankInput newItemEditorConfig
   return $ pairEvToDiffEv newPairEv
   
 
