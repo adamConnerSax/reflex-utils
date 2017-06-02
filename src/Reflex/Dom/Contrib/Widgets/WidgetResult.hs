@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Reflex.Dom.Contrib.Widgets.WidgetResult
   (
     WidgetResult,
@@ -9,41 +10,54 @@ module Reflex.Dom.Contrib.Widgets.WidgetResult
 where
 
 import           Reflex (Dynamic, Event, MonadHold, Reflex, buildDynamic,
-                         constDyn, current, never, sample, leftmost, updated, tagPromptlyDyn, switch)
+                         constDyn, current, never, sample, leftmost, updated, tagPromptlyDyn, switch, fmapMaybe)
 
+import Data.Functor.Compose (Compose (Compose), getCompose)
 import Control.Monad (join)
+import Data.Functor.Identity (Identity (runIdentity))
 
-data WidgetResult t a = WidgetResult { _wrDyn :: Dynamic t a, _wrInternalEv :: Event t () }
+data WidgetResult t f a = WidgetResult { _wrDyn :: Compose (Dynamic t) f a, _wrInternalEv :: Event t () }
 
-buildWidgetResult :: (Reflex t, MonadHold t m) => Dynamic t a -> Event t a -> m (WidgetResult t a)
-buildWidgetResult d0 updateEv = do
-  d <- buildDynamic (sample $ current d0) $ leftmost [updated d0, updateEv]
-  return $ WidgetResult d (() <$ updateEv)
+{-
+actOutside :: (g a -> q b) -> Compose f g a -> Compose f q b
+actOutside h = Compose . h . getCompose
 
-wrDyn :: WidgetResult t a -> Dynamic t a
+actInside :: (a -> b) -> Compose f g a -> Compose f g b
+actInside h = Compose . fmap h . getCompose
+-}
+
+buildWidgetResult :: (Reflex t, Functor f, MonadHold t m) => Compose (Dynamic t) f a -> Compose (Event t) f a -> m (WidgetResult t f a)
+buildWidgetResult dfa0 updateFaEv = do
+  let ucDfa0 = getCompose dfa0
+      ucUpdEv = getCompose updateFaEv
+  d <- buildDynamic (sample $ current ucDfa0) $ leftmost [updated ucDfa0, ucUpdEv]
+  return $ WidgetResult (Compose d) (() <$ ucUpdEv)
+
+wrDyn :: Functor f => WidgetResult t f a -> Compose (Dynamic t) f a
 wrDyn = _wrDyn
 
-wrInternalEv :: WidgetResult t a -> Event t ()
+wrInternalEv :: WidgetResult t f a -> Event t ()
 wrInternalEv = _wrInternalEv
 
-wrUpdateEv :: Reflex t => WidgetResult t a -> Event t a
-wrUpdateEv (WidgetResult d e) = tagPromptlyDyn d e
+wrUpdateEv :: (Functor f, Reflex t) => WidgetResult t f a -> Compose (Event t) f a
+wrUpdateEv (WidgetResult d e) = Compose $ tagPromptlyDyn (getCompose d) e
 
-instance Reflex t => Functor (WidgetResult t) where
-  fmap f (WidgetResult d e) = WidgetResult (f <$> d) e
+instance (Functor f, Reflex t) => Functor (WidgetResult t f) where
+  fmap h (WidgetResult d e) = WidgetResult (h <$> d) e
 
-instance Reflex t => Applicative (WidgetResult t) where
-  pure a = WidgetResult (constDyn a) never
+instance (Applicative f, Reflex t) => Applicative (WidgetResult t f) where
+  pure a = WidgetResult (Compose $ pure $ pure a) never
   (WidgetResult dFAB e1) <*> (WidgetResult dA e2) = WidgetResult (dFAB <*> dA) (leftmost [e1, e2])
 
-instance Reflex t => Monad (WidgetResult t) where
+{-
+instance Reflex t => Monad (WidgetResult t Identity) where
   return = pure
   (WidgetResult d e) >>= f = 
     let dwr = f <$> d
         dda = wrDyn <$> dwr
-        de = wrInternalEv <$> dwr
-    in WidgetResult (join dda) (leftmost [e,switch $ current de])
-
+        de = switch $ current $ fmap runIdentity $ getCompose $ wrInternalEv <$> dwr
+    in WidgetResult (join dda) (leftmost [e, de])
+-}
 
 {-
 Applicative is lawful, essentially because Dynamic is lawful and a leftmost of Events that only return one value, (), doesn't depend on order.
