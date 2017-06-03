@@ -16,6 +16,9 @@ module Reflex.Dom.Contrib.FormBuilder.Configuration
   , CollapsibleInitialState(..)
   , FR
   , FormResult
+  , formResultErrors
+  , formResultError
+  , formResultNothing
   , FRW
   , FLayoutF
   , liftLF
@@ -55,19 +58,23 @@ module Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation
 import           Reflex.Dom.Contrib.Layout.Types              (CssClasses, LayoutDirection (..),
                                                                LayoutOrientation (..))
-import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WrappedWidgetResult)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WrappedWidgetResult,
+                                                               constWidgetResult)
 
 import qualified DataBuilder                                  as B
-import           Reflex                                       (Dynamic, Event)
+import           Reflex                                       (Dynamic, Event,
+                                                               Reflex)
 
 import           Control.Lens.TH
 import           Control.Monad.Morph                          (hoist)
 import           Control.Monad.Reader                         (ReaderT, ask,
                                                                local)
 import           Data.ByteString                              (ByteString)
+import           Data.Functor.Compose                         (Compose (Compose))
 import           Data.Map                                     (Map)
 import           Data.Text                                    (Text)
 import           Reflex.Dom.Contrib.CssUtils                  (CssLinks)
+
 
 type Placeholder = Text
 type Title = Text
@@ -82,6 +89,18 @@ data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed d
 
 type FR t m = ReaderT (FormConfiguration t m) m
 type FormResult t = WrappedWidgetResult t FValidation
+
+formResultErrors :: Reflex t => FormErrors -> FormResult t a
+formResultErrors = Compose . constWidgetResult . AccFailure
+
+formResultError :: Reflex t => FormError -> FormResult t a
+formResultError = formResultErrors . pure
+
+formResultNothing :: Reflex t => FormResult t a
+formResultNothing = formResultError FNothing
+
+
+
 type FRW t m a = FR t m (FormResult t a)
 
 type FLayoutF t m = forall a.(FR t m a -> FR t m a)

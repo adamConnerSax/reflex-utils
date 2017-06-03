@@ -21,6 +21,7 @@ import           Control.Monad.Fix                                   (MonadFix)
 import           Control.Monad.IO.Class                              as IOC (MonadIO)
 import           Control.Monad.Reader                                (ask,
                                                                       runReaderT)
+import           Data.Functor.Compose                                (getCompose)
 
 import           Data.Monoid                                         ((<>))
 import qualified GHC.Generics                                        as GHC
@@ -62,6 +63,7 @@ import           Reflex.Dom.Contrib.Layout.Types                     (CssClass (
                                                                       emptyCss,
                                                                       oneClass)
 import           Reflex.Dom.Contrib.ReflexConstraints                (MonadWidgetExtraC)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult             (widgetResultToDynamic)
 
 #ifdef USE_WKWEBVIEW
 import           Language.Javascript.JSaddle.WKWebView               (run)
@@ -258,14 +260,14 @@ testComplexForm cfg = do
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
   cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just c)
   el "p" $ text "dynText:"
-  dynText ((T.pack . ppShow) <$> unDynValidation cDynM)
+  dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose cDynM))
   el "p" $ text "Observed:"
   el "p" blank
-  _ <- flexFill LayoutRight $ observeDynamic cfg (avToMaybe <$> unDynValidation cDynM)
+  _ <- flexFill LayoutRight $ observeDynamic cfg (widgetResultToDynamic $ avToMaybe <$> getCompose cDynM)
   return ()
 
 complexFormTab::FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
-complexFormTab cfg = TabInfo "complexFormTab" (constDyn ("Cmplex Example", M.empty))  $ testComplexForm cfg
+complexFormTab cfg = TabInfo "complexFormTab" (constDyn ("Complex Example", M.empty))  $ testComplexForm cfg
 
 
 flowTestWidget::(DomBuilder t m, HasDocument m, MonadWidgetExtraC t m, MonadFix m, MonadHold t m, PostBuild t m)=>Int->m (Dynamic t String)

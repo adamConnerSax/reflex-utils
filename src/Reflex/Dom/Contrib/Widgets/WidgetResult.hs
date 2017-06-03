@@ -11,6 +11,7 @@ module Reflex.Dom.Contrib.Widgets.WidgetResult
   , widgetResultToDynamic
   , updatedWidgetResult
   , currentWidgetResult
+  , constWidgetResult
   , buildWidgetResult
   , dynamicWidgetResultToWidgetResult
   , dynamicToWidgetResult
@@ -76,6 +77,9 @@ dynamicToWidgetResult d = WidgetResult d (() <$ updated d)
 
 buildReadOnlyWidgetResult :: Reflex t => Dynamic t a -> WidgetResult t a
 buildReadOnlyWidgetResult d = WidgetResult d never
+
+constWidgetResult :: Reflex t => a -> WidgetResult t a
+constWidgetResult = buildReadOnlyWidgetResult . constDyn
 
 -- this should only be used to retrofit a dynamic/event pair which already satisfy the
 unsafeBuildWidgetResult :: Reflex t => Dynamic t a -> Event t a -> WidgetResult t a
