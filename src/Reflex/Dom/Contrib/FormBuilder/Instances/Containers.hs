@@ -421,8 +421,9 @@ buildLBAddDelete::ContainerForm t m g k v
   ->DynMaybe t (f v)
   ->Form t m (f v)
 buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = makeForm $ fCol $ mdo
-  let eW' k v0 vEv = R.holdDyn v0 vEv >>= \vDyn -> editAndDeleteElemWidget eW (R.constDyn True) k vDyn
-      mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa 
+  let eW' k v0 vEv = R.holdDyn v0 vEv >>= editAndDeleteElemWidget eW (R.constDyn True) k
+      mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa
+      mapDynAV0 = fmap AccSuccess <$> mapDyn0
       diffMap' avOld new = case avOld of
         AccSuccess old -> diffMapF old new
         AccFailure _ -> Just <$> new
@@ -430,15 +431,15 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   updateMapDyn <- fItem $ LHF.listWithKeyShallowDiffLHFMap lhfEmptyMap diffMapEv eW' -- Dynamic t (Map k (WidgetResult t (Maybe (FValidation v))))
   
   insertDiffEv <- fRow $ newItemWidget nWF mapDyn newInputMapEv
-
-  let newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv --newInputMapEv -- Event t (Map k (Maybe v))
+  let mapAfterInsertEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) (fmap (fmap AccSuccess) <$> insertDiffEv)
+      newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv --newInputMapEv -- Event t (Map k (Maybe v))
       diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
       mapEditsFVEv = R.updated . join $ LHF.distributeLHFMapOverDynPure . fmap widgetResultToDynamic <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v))) ??
       editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
-  mapDyn <- R.buildDynamic (fmap AccSuccess <$> R.sample (R.current mapDyn0)) $ R.leftmost [ fmap AccSuccess <$> (R.updated mapDyn0)
-                                                                                           , editedMapEv
-                                                                                           ]
-  wr <- fmap (fmap from . sequenceA) <$> buildWidgetResult mapDyn editedMapEv
+  mapDyn <- R.buildDynamic (R.sample $ R.current mapDynAV0) $ R.leftmost [ R.updated mapDynAV0
+                                                                         , editedMapEv
+                                                                         ]
+  wr <- fmap (fmap from . sequenceA) <$> (buildWidgetResult mapDynAV0 $ R.leftmost [mapAfterInsertEv, editedMapEv])
   return $ Compose wr
 
 {-
@@ -537,7 +538,7 @@ buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
 
   dgvForDD <- R.holdDyn lhfEmptyMap updatedMapForDDEv -- input to dropdown widget 
   dgv <- R.holdDyn lhfEmptyMap updatedMapEv -- authoritative value of edited container
-  Compose . fmap AccSuccess <$> buildWidgetResult dgvIn editedMapEv
+  Compose . fmap AccSuccess <$> (buildWidgetResult dgvIn $ R.leftmost [editedMapEv, mapAfterInsertDeleteEv])
 
 
 selectWidget :: ( FormInstanceC t m
