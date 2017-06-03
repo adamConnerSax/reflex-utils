@@ -15,6 +15,7 @@ module Reflex.Dom.Contrib.FormBuilder.Configuration
   , FormType(..)
   , CollapsibleInitialState(..)
   , FR
+  , FormResult
   , FRW
   , FLayoutF
   , liftLF
@@ -80,7 +81,8 @@ data FormType = Interactive | ObserveOnly deriving (Eq)
 data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)
 
 type FR t m = ReaderT (FormConfiguration t m) m
-type FRW t m a = FR t m (WrappedWidgetResult t FValidation a)
+type FormResult t = WrappedWidgetResult t FValidation
+type FRW t m a = FR t m (FormResult t a)
 
 type FLayoutF t m = forall a.(FR t m a -> FR t m a)
 

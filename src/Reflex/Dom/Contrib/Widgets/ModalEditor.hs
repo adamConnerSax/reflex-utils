@@ -181,12 +181,12 @@ modalEditorEither editW aEDyn config = mdo
 
 -- NB:  This is only in (Either e a) rather than a because of the holdDyn, which needs a starting point.
 
-modalEditor :: forall t m e a. ( RD.DomBuilder t m
-                               , MonadWidgetExtraC t m
-                               , RD.PostBuild t m
-                               , MonadFix m
-                               , RD.MonadHold t m
-                               )
+modalEditor :: forall t m a. ( RD.DomBuilder t m
+                             , MonadWidgetExtraC t m
+                             , RD.PostBuild t m
+                             , MonadFix m
+                             , RD.MonadHold t m
+                             )
   => (Dynamic t (Maybe a) -> m (Dynamic t (Maybe a))) -- a widget for editing an a. returns Left on invalid value
   -> Dynamic t (Maybe a)
   -> ModalEditorConfig t a
