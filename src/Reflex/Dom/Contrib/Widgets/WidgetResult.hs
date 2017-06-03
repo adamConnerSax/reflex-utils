@@ -22,14 +22,17 @@ module Reflex.Dom.Contrib.Widgets.WidgetResult
   , transformWrappedWidgetResult
   ) where
 
-import           Reflex               (Behavior, Dynamic, Event, MonadHold,
-                                       Reflex, buildDynamic, constDyn, current,
-                                       fmapMaybe, leftmost, never, sample,
-                                       switch, tagPromptlyDyn, updated)
+import           Reflex                        (Behavior, Dynamic, Event,
+                                                MonadHold, Reflex, buildDynamic,
+                                                constDyn, current, fmapMaybe,
+                                                leftmost, never, sample, switch,
+                                                tagPromptlyDyn, updated)
 
-import           Control.Lens         (makeLenses)
-import           Control.Monad        (join)
-import           Data.Functor.Compose (Compose (Compose), getCompose)
+import           Reflex.Dom.Contrib.EventUtils (leftWhenNotRight)
+
+import           Control.Lens                  (makeLenses)
+import           Control.Monad                 (join)
+import           Data.Functor.Compose          (Compose (Compose), getCompose)
 
 
 -- | A holder for a Dynamic and an event that signals a subset of updates.  Users may expect
@@ -48,10 +51,18 @@ updatedWidgetResult (WidgetResult d e) = tagPromptlyDyn d e
 currentWidgetResult :: Reflex t => WidgetResult t a -> Behavior t a
 currentWidgetResult = current . _wrDyn
 
+
+-- There is a subtlety here.  What if d0 updates in the same frame as an updateEv occurs?
+-- We need to choose which one wins.
+-- I think we should prefer updates to d0 since they will often reset the control.
+-- but that means we need to suppress the updateEv iff it occurs in the same frame as
+-- an update to d0.
+-- If we don't do the suppression, the leftmost in buildDynamic needs to put updateEv first.
 buildWidgetResult :: (Reflex t, MonadHold t m) => Dynamic t a -> Event t a -> m (WidgetResult t a)
 buildWidgetResult d0 updateEv = do
-  d <- buildDynamic (sample $ current d0) $ leftmost [updated d0, updateEv]
-  return $ WidgetResult d (() <$ updateEv)
+  let d0Ev = updated d0
+  d <- buildDynamic (sample $ current d0) $ leftmost [d0Ev, updateEv]
+  return $ WidgetResult d (() <$ leftWhenNotRight updateEv d0Ev)
 
 dynamicWidgetResultToWidgetResult :: Reflex t => Dynamic t (WidgetResult t a) -> WidgetResult t a
 dynamicWidgetResultToWidgetResult dwr =

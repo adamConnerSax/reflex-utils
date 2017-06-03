@@ -31,6 +31,7 @@ library
   hs-source-dirs: src
   exposed-modules:
                   Reflex.Dom.Contrib.DynamicUtils
+                  Reflex.Dom.Contrib.EventUtils
                   Reflex.Dom.Contrib.ReflexConstraints
                   Reflex.Dom.Contrib.CssUtils
                   Reflex.Dom.Contrib.Widgets.WidgetResult
