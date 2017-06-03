@@ -50,7 +50,7 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder (DynMaybe(..), Form(..),
                                                         , fItem, fItemR, fRow, fCol, fCenter, fFill, avToMaybe, joinDynOfFormResults)
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynValidation(..),constDynValidation,joinDynOfDynValidation
                                                               ,accValidation, mergeAccValidation, FormErrors, FormError(FNothing), avToEither)
-import Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult, buildWidgetResult,
+import Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult, buildWidgetResult, dynamicToWidgetResult, currentWidgetResult,
                                                 dynamicWidgetResultToWidgetResult, buildReadOnlyWidgetResult, updatedWidgetResult, widgetResultToDynamic)                 
 import           Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..), LayoutDirection (..))
 import           Reflex.Dom.Contrib.DynamicUtils (dynBasedOn, dynAsEv, traceDynAsEv, mDynAsEv)
@@ -413,7 +413,7 @@ buildLBDelete (MapLike to from _) (MapElemWidgets eW _) mFN dmfa = makeForm $ do
 
 --NB: I see why tagPromtlyDyn is required for pairWidgetEv (so when the new one is drawn, it sees the updated map) but not quite why
 -- that doesn't lead to a cycle.
--- Should we do something better with the WidgetResults in updateMapDyn?  Get a Map k (Event ) and then mergeMap? 
+-- Should we do something better with the WidgetResults in updateMapDyn?  Get a Map k (Event) and then mergeMap? 
 buildLBAddDelete::ContainerForm t m g k v
   =>MapLike f g v
   ->MapElemWidgets g t m k v
@@ -441,7 +441,7 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   wr <- fmap (fmap from . sequenceA) <$> buildWidgetResult mapDyn editedMapEv
   return $ Compose wr
 
-
+{-
 newItemWidget' :: ContainerForm t m g k v
   => (R.Dynamic t (g (FValidation v)) -> R.Event t (k,v) -> R.Event t (g v) -> FRW t m (k,v))
   -> R.Dynamic t (g (FValidation v))
@@ -449,11 +449,12 @@ newItemWidget' :: ContainerForm t m g k v
   -> FR t m (R.Event t (g (Maybe v)))
 newItemWidget' editPairW mapDyn newInputMapEv = mdo
   addPairDV <- fRow $ editPairW mapDyn newPairEv newInputMapEv
-  let newPairMaybeDyn = avToMaybe <$> unDynValidation addPairDV
+  let newPairMaybeDyn = avToMaybe <$> getCompose addPairDV
   addButtonEv <- fItem $ buttonNoSubmit' "+" -- Event t ()
   let newPairEv = R.fmapMaybe id $ R.tag (R.current newPairMaybeDyn) addButtonEv
       addDiffEv = fmap Just . uncurry lhfMapSingleton <$> newPairEv  
   return addDiffEv
+-}
 
 newItemEditorConfig :: R.Reflex t => MW.ModalEditorConfig t a
 newItemEditorConfig = RD.def
@@ -470,7 +471,7 @@ newItemWidget :: ContainerForm t m g k v
   -> R.Event t (g v)
   -> FR t m (R.Event t (g (Maybe v)))
 newItemWidget editPairW mapDyn newInputMapEv = mdo
-  let modalEditW = const $ fmap avToEither . unDynValidation <$> editPairW mapDyn newPairEv newInputMapEv
+  let modalEditW = const $ widgetResultToDynamic . fmap avToEither . getCompose <$> editPairW mapDyn newPairEv newInputMapEv
       blankInput = R.constDyn $ Left [FNothing]
       pairEvToDiffEv pairEv = fmap Just . uncurry lhfMapSingleton <$> pairEv 
   newPairEv <- MW.modalEditor_change <$> MW.modalEditorEither modalEditW blankInput newItemEditorConfig
@@ -482,13 +483,14 @@ dynValidationToDynamicMaybe = fmap avToMaybe . unDynValidation
 
 -- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses.
 -- Just make widget into right form and do the distribute over the result
+-- Should we do something better with the WidgetResults in updateMapDyn?  Get a Map k (Event ) and then mergeMap? 
 buildLBEMapLWK'::ContainerForm t m g k v=>LBWidget t m k v->LBBuildF' g t m k v
 buildLBEMapLWK' editW _ mapDyn0 = do
   mapDynEv <- dynAsEv mapDyn0 
   mapDyn' <- R.holdDyn lhfEmptyMap mapDynEv
-  mapOfDyn <- LHF.listWithKeyLHFMap mapDyn' editW -- Dynamic t (M.Map k (Dynamic t (Maybe (FValidation v)))
-  let mapFValDyn = lhfMapMaybe id <$> join (LHF.distributeLHFMapOverDynPure <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
-  return . DynValidation $ sequenceA <$> mapFValDyn
+  mapOfDyn <- LHF.listWithKeyLHFMap mapDyn' editW -- Dynamic t (M.Map k (WidgetResult t (Maybe (FValidation v)))
+  let mapFValDyn = lhfMapMaybe id <$> join (LHF.distributeLHFMapOverDynPure . fmap widgetResultToDynamic <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
+  return $ Compose $ dynamicToWidgetResult $ sequenceA <$> mapFValDyn
 
 boolToEither::Bool -> Either () ()
 boolToEither True = Right ()
@@ -498,13 +500,14 @@ boolToEither False = Left ()
 fanBool::R.Reflex t=>R.Event t Bool->(R.Event t (), R.Event t ())
 fanBool = R.fanEither . fmap boolToEither
 
+-- in final line do we want all the events in the WidgetResult or just the updates?
 toSVLWKWidget::(RD.DomBuilder t m
                ,RD.PostBuild t m)
   =>ElemWidget t m k v -> (k -> R.Dynamic t v -> R.Dynamic t Bool -> FR t m (R.Event t (FValidation v)))
 toSVLWKWidget ew k dv db = do
    let divAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> db
-   dva <- RD.elDynAttr "div" divAttrs $ ew k dv
-   return $ R.updated $ unDynValidation dva  
+   fra <- RD.elDynAttr "div" divAttrs $ ew k dv
+   return $ R.updated $ widgetResultToDynamic $ getCompose fra  
 
 -- something using selectView
 buildSelectViewer::(FormInstanceC t m
@@ -534,7 +537,7 @@ buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
 
   dgvForDD <- R.holdDyn lhfEmptyMap updatedMapForDDEv -- input to dropdown widget 
   dgv <- R.holdDyn lhfEmptyMap updatedMapEv -- authoritative value of edited container
-  return $ DynValidation $ AccSuccess <$> dgv
+  Compose . fmap AccSuccess <$> buildWidgetResult dgvIn editedMapEv
 
 
 selectWidget :: ( FormInstanceC t m
@@ -609,8 +612,9 @@ buildLBWithSelectEditOnly::ContainerForm t m g k v
 buildLBWithSelectEditOnly labelStrategy (MapLike to from _) (MapElemWidgets eW _)  mFN dmfv =  makeForm $ do
   let dgv = fmap maybeMapToMap . getCompose $ to <$> dmfv
   (_, editedMapEv) <- selectWidget labelStrategy eW dgv
-  res <- R.buildDynamic (R.sample $ R.current dgv) $ R.leftmost [R.updated dgv, editedMapEv]
-  return . DynValidation $ AccSuccess . from <$> res
+  res <- buildWidgetResult dgv editedMapEv
+--  res <- R.buildDynamic (R.sample $ R.current dgv) $ R.leftmost [R.updated dgv, editedMapEv]
+  return . Compose $ AccSuccess . from <$> res
 
     
 showKeyEditVal::(FormInstanceC t m, VFormBuilderBoth t m k v)=>ElemWidget t m k v
@@ -625,13 +629,13 @@ hideKeyEditVal::(FormInstanceC t m, VFormBuilderC t m v)=>ElemWidget t m k v
 hideKeyEditVal _ vDyn = do
   fItem . unF $ buildVForm Nothing (Compose $ Just <$> vDyn)
 
-
+-- TODO: review dynamics vs WidgetResults here
 editAndDeleteElemWidget::(FormInstanceC t m, VFormBuilderBoth t m k v)
   =>ElemWidget t m k v->R.Dynamic t Bool->LBWidget t m k v
 editAndDeleteElemWidget eW visibleDyn k vDyn = mdo
   let widgetAttrs = (\x -> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
-  (visibleDyn', outDyn') <- RD.elDynAttr "div" widgetAttrs . fRow $ do
-    resDyn <- unDynValidation <$> (fItem $ eW k vDyn) -- Dynamic t (FValidation v)
+  (visibleDyn', outWR') <- RD.elDynAttr "div" widgetAttrs . fRow $ do
+    resWR <- getCompose <$> (fItem $ eW k vDyn) -- WidgetResult t (FValidation v)
 --    resEv <- dynAsEv resDyn -- Event t (FValidation v)  
     delButtonEv <- fItem $ fFill LayoutLeft $ buttonNoSubmit' "-"
 --    selEv <- dynAsEv visibleDyn
@@ -639,15 +643,11 @@ editAndDeleteElemWidget eW visibleDyn k vDyn = mdo
                [
                  R.updated visibleDyn
                , False <$ delButtonEv -- delete button pressed, so hide
-               , True <$ R.updated resDyn --resEv -- value updated so make sure it's visible (in case of re-use of deleted key)
+               , True <$ (R.updated $ widgetResultToDynamic $ resWR) --resEv -- value updated so make sure it's visible (in case of re-use of deleted key)
                ]
-    outDyn <- dynBasedOn (Just <$> resDyn) $ R.leftmost
-              [
-                Just <$> R.updated resDyn 
-              , Nothing <$ delButtonEv
-              ]
-    return (visDyn,outDyn)
-  return outDyn'
+    outWR <- buildWidgetResult (Just <$> widgetResultToDynamic resWR) $ Nothing <$ delButtonEv
+    return (visDyn,outWR)
+  return outWR'
 
 
 hiddenCSS::M.Map T.Text T.Text
@@ -659,46 +659,46 @@ ddAttrsDyn::R.Reflex t=>(Int->Int)->R.Dynamic t Int->R.Dynamic t RD.AttributeMap
 ddAttrsDyn sizeF = fmap (\n->if n==0 then hiddenCSS else visibleCSS <> ("size" =: (T.pack . show $ sizeF n)))
 
 -- unused from here down but good for reference
-type LBBuildF t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FR t m (R.Dynamic t (M.Map k v))
+type LBBuildF t m k v = Maybe FieldName->R.Dynamic t (M.Map k v)->FR t m (WidgetResult t (M.Map k v))
 
 buildLBEMapWithAdd::(FormInstanceC t m, VFormBuilderBoth t m k v, Ord k)
   =>LBBuildF t m k v->LBBuildF t m k v
 buildLBEMapWithAdd lbbf mFN mapDyn0 = fCol $ mdo
-  editedMapDyn <- fItem $ lbbf mFN mapDyn -- Dynamic t (M.Map k v)
+  editedMapWR <- fItem $ lbbf mFN (widgetResultToDynamic mapWR) -- WidgetResult t (M.Map k v)
   addEv <- fRow $ mdo -- Event t (k,v)
-    let newOneWidget = fmap avToMaybe . unDynValidation <$> (fRow . unF $ buildVForm Nothing (constDynMaybe Nothing)) -- m (Dynamic t (Maybe (k,v))
-        addWidget = join <$> RD.widgetHold newOneWidget (newOneWidget <$ addButtonEv) 
-    newOneDyn <- fItem addWidget -- Dynamic t (Maybe (k,v))
+    let newOneWidget = fmap avToMaybe . getCompose <$> (fRow . unF $ buildVForm Nothing (constDynMaybe Nothing)) -- m (WidgetResult t (Maybe (k,v))
+        addWidget = dynamicWidgetResultToWidgetResult <$> RD.widgetHold newOneWidget (newOneWidget <$ addButtonEv) 
+    newOneWR <- fItem addWidget -- WidgetResult t (Maybe (k,v))
     addButtonEv <- fCenter LayoutVertical . fItemR . lift $ containerActionButton "+" -- Event t ()
-    return $ R.attachWithMaybe const (R.current newOneDyn) addButtonEv -- fires only if newOneDyn is (Just x)
-  let mapWithAdditionEv = R.attachWith (\m (k,v)->M.insert k v m) (R.current editedMapDyn) addEv
-  mapDyn <- dynBasedOn mapDyn0 $ R.leftmost [R.updated mapDyn0, mapWithAdditionEv]
-  return editedMapDyn
+    return $ R.attachWithMaybe const (currentWidgetResult newOneWR) addButtonEv -- fires only if newOneWR is (Just x)
+  let mapWithAdditionEv = R.attachWith (\m (k,v)->M.insert k v m) (currentWidgetResult editedMapWR) addEv
+  mapWR <- buildWidgetResult mapDyn0 mapWithAdditionEv
+  return editedMapWR
 
 
 -- simplest.  Use listWithKey.  This will be for ReadOnly and fixed element (no adds or deletes allowed) uses. 
 buildLBEMapLWK::(FormInstanceC t m, VFormBuilderC t m v, Ord k, Show k)=>LBBuildF t m k v
 buildLBEMapLWK mFN map0Dyn = do
-  mapOfDynMaybe <- LHF.listWithKeyLHFMap map0Dyn editOne
-  return $ M.mapMaybe id <$> join (R.distributeMapOverDynPure <$> mapOfDynMaybe)
+  mapOfDynMaybe <- fmap (fmap widgetResultToDynamic) <$> LHF.listWithKeyLHFMap map0Dyn editOne -- Dynamic t (Map k (Dynamic t (Maybe v)))
+  return $ dynamicToWidgetResult $ M.mapMaybe id <$> join (R.distributeMapOverDynPure <$> mapOfDynMaybe)
 
 
-editOne::(FormInstanceC t m, VFormBuilderC t m v, Show k)=>k->R.Dynamic t v->FR t m (R.Dynamic t (Maybe v))
+editOne::(FormInstanceC t m, VFormBuilderC t m v, Show k)=>k->R.Dynamic t v->FR t m (WidgetResult t (Maybe v))
 editOne k valDyn = do
   fItem $ RD.el "div" $ RD.el "p" $ RD.text (T.pack $ show k)
-  fItem $ fmap avToMaybe . unDynValidation <$> unF (buildVForm Nothing (Compose $ Just <$> valDyn))
+  fItem $ fmap avToMaybe . getCompose <$> unF (buildVForm Nothing (Compose $ Just <$> valDyn))
 
 -- now do with ListViewWithKey so we can put in delete events
 -- NB: ListViewWithKey returns an Event t (M.Map k v) but it contains only the keys for which things have changed
 -- NB: ListViewWithKey gets only mapDyn0 as input.  Only need to update if something *else* changes the map.
 buildLBEMapLVWK::(FormInstanceC t m, VFormBuilderC t m v, Ord k , Show k)=> LBBuildF t m k v
 buildLBEMapLVWK mFN mapDyn0 = mdo
-  let editF k valDyn = R.updated <$> editOne k valDyn -- editOneEv (R.constDyn True) k valDyn
+  let editF k valDyn = R.updated . widgetResultToDynamic <$> editOne k valDyn -- editOneEv (R.constDyn True) k valDyn
   mapEditsEv  <- RD.listViewWithKey mapDyn0 editF -- Event t (M.Map k (Maybe v)), carries only updates
   let editedMapEv = R.attachWith (flip RD.applyMap) (R.current mapDyn) mapEditsEv
       mapEv = R.leftmost [R.updated mapDyn0, editedMapEv]
   mapDyn <- dynBasedOn mapDyn0 mapEv
-  return mapDyn
+  buildWidgetResult mapDyn0 editedMapEv
 
 
 
