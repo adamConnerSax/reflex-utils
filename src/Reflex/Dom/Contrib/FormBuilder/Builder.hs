@@ -27,6 +27,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , gBuildFormValidated
        , buildFMDWrappedList
        , actOnDBWidget
+       , joinDynOfFormResults
        , FMDWrapped
        , buildVForm
        , formField
@@ -277,19 +278,19 @@ cssClassAttr :: CssClasses -> M.Map T.Text T.Text
 cssClassAttr x = "class" RD.=: toCssString x
 
 fAttrs :: (RD.MonadHold t m, RD.DomBuilder t m,MonadFix m)
-  => DynValidation t a
+  => FormResult t a
   -> Maybe FieldName
   -> Maybe T.Text
   -> FR t m (R.Dynamic t (M.Map T.Text T.Text))
-fAttrs mDyn mFN mTypeS = fAttrs' mDyn mFN mTypeS (CssClasses [])
+fAttrs fra mFN mTypeS = fAttrs' fra mFN mTypeS (CssClasses [])
 
 fAttrs' :: (RD.MonadHold t m, R.Reflex t, MonadFix m)
-  => DynValidation t a
+  => FormResult t a
   -> Maybe FieldName
   -> Maybe T.Text
   -> CssClasses
   -> FR t m (R.Dynamic t (M.Map T.Text T.Text))
-fAttrs' mDyn mFN mTypeS fixedCss = do
+fAttrs' fra mFN mTypeS fixedCss = do
   validClasses <- validDataClasses
   invalidClasses <- invalidDataClasses
   let title = componentTitle mFN mTypeS
@@ -297,7 +298,7 @@ fAttrs' mDyn mFN mTypeS fixedCss = do
       invalidAttrs = titleAttr title <> cssClassAttr (invalidClasses <> fixedCss)
       f (AccSuccess _) = True
       f (AccFailure _) = False
-      validDyn = f <$> unDynValidation mDyn
+      validDyn = widgetResultToDynamic $ f <$> getCompose fra
   return . RD.ffor validDyn $ \x -> if x then validAttrs else invalidAttrs
 
 componentTitle :: Maybe FieldName -> Maybe T.Text -> T.Text

@@ -14,6 +14,7 @@ module Reflex.Dom.Contrib.Widgets.WidgetResult
   , buildWidgetResult
   , dynamicWidgetResultToWidgetResult
   , dynamicToWidgetResult
+  , buildReadOnlyWidgetResult
   , unsafeBuildWidgetResult
   , buildWrappedWidgetResult
   , dynamicToWrappedWidgetResult
@@ -61,6 +62,9 @@ dynamicWidgetResultToWidgetResult dwr =
 -- here so a widget which returns just a Dynamic can return a WidgetResult
 dynamicToWidgetResult :: Reflex t => Dynamic t a -> WidgetResult t a
 dynamicToWidgetResult d = WidgetResult d (() <$ updated d)
+
+buildReadOnlyWidgetResult :: Reflex t => Dynamic t a -> WidgetResult t a
+buildReadOnlyWidgetResult d = WidgetResult d never
 
 -- this should only be used to retrofit a dynamic/event pair which already satisfy the
 unsafeBuildWidgetResult :: Reflex t => Dynamic t a -> Event t a -> WidgetResult t a

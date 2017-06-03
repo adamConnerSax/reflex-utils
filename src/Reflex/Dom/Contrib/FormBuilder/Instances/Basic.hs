@@ -66,6 +66,9 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynMaybe,
 import           Reflex.Dom.Contrib.Layout.Types              (emptyCss,
                                                                toCssString)
 import           Reflex.Dom.Contrib.ReflexConstraints
+import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult, buildReadOnlyWidgetResult,
+                                                               buildWidgetResult,
+                                                               unsafeBuildWidgetResult)
 -- instances
 
 --some helpers
@@ -79,20 +82,20 @@ type FormInstanceC t m = (RD.HasDocument m, WidgetC t m, MonadWidgetExtraC t m, 
 instance {-# OVERLAPPABLE #-} B.Validatable FValidation a where
   validator = AccSuccess
 
-readOnlyW :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => (a -> T.Text) -> WidgetConfig t a -> m (R.Dynamic t a)
+readOnlyW :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => (a -> T.Text) -> WidgetConfig t a -> m (WidgetResult t a)
 readOnlyW f wc = do
   da <- R.holdDyn (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
   let ds = f <$> da
   RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
-  return da
+  return $ buildReadOnlyWidgetResult da
 
 formWidget :: forall t m a b. (R.Reflex t, RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m, MonadFix m)
   => (a -> b) -- map in/out type to widget type (int to text, e.g.,)
   -> (a -> T.Text) -- show in/out type
   -> Maybe FieldName -- field name ?
   -> WidgetConfig t a
-  -> (WidgetConfig t a -> m (R.Dynamic t a)) -- underlying reflex-dom-contrib widget
-  -> FR t m (R.Dynamic t b)
+  -> (WidgetConfig t a -> m (WidgetResult t a)) -- underlying reflex-dom-contrib widget, in WidgetResult form
+  -> FR t m (WidgetResult t b)
 formWidget f fString mFN wc widget = do
   let addToAttrs :: R.Reflex t => T.Text -> Maybe T.Text -> RD.Dynamic t (M.Map T.Text T.Text) -> RD.Dynamic t (M.Map T.Text T.Text)
       addToAttrs attr mVal attrsDyn = case mVal of
@@ -121,14 +124,13 @@ formWidget' :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m, MonadFix m
   -> (b -> T.Text) -- showText for widget type
   -> Maybe FieldName -- field name ?
   -> Maybe T.Text -- type name ?
-  -> (WidgetConfig t b -> m (R.Dynamic t b)) -- underlying reflex-dom-contrib widget
-  -> FR t m (DynValidation t a)
+  -> (WidgetConfig t b -> m (WidgetResult t b)) -- underlying reflex-dom-contrib widget
+  -> FR t m (FormResult t a)
 formWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = mdo
-  attrsDyn <- fAttrs dva mFN mTypeName
+  attrsDyn <- fAttrs fra mFN mTypeName
   let wc = WidgetConfig (toWT <$> updateEv) initialWV attrsDyn
-  dva <- item $ DynValidation <$> formWidget validateWT showWT mFN wc widget
-  return dva
-
+  fra <- item $ Compose <$> formWidget validateWT showWT mFN wc widget
+  return fra
 
 item :: Monad m => FLayoutF t m
 item = fItem
@@ -136,11 +138,17 @@ item = fItem
 instance R.Reflex t => Functor (HtmlWidget t) where
   fmap f (HtmlWidget v c kp kd ku hf) = HtmlWidget (f <$> v) (f <$> c) kp kd ku hf
 
-textWidgetValue :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
-textWidgetValue mFN c = _hwidget_value <$> restrictWidget' blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
+textWidgetResult :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (WidgetResult t T.Text)
+textWidgetResult mFN c = do
+  inputDyn <- R.holdDyn (_widgetConfig_initialValue c) (_widgetConfig_setValue c)
+  changeEv <- _hwidget_change <$> restrictWidget' blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
+  buildWidgetResult inputDyn changeEv
 
-textWidgetValue' :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
-textWidgetValue' mFN c = _hwidget_value <$> htmlTextInput (maybe "" T.pack mFN) c
+textWidgetResult' :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (WidgetResult t T.Text)
+textWidgetResult' mFN c = do
+  inputDyn <- R.holdDyn (_widgetConfig_initialValue c) (_widgetConfig_setValue c)
+  changeEv <- _hwidget_change <$> htmlTextInput (maybe "" T.pack mFN) c
+  buildWidgetResult inputDyn changeEv
 
 -- this does what restrictWidget does but allows the set event to change the "authoritative value"
 restrictWidget' :: (RD.DomBuilder t m, R.MonadHold t m)
@@ -173,7 +181,7 @@ buildDynReadable :: (FormInstanceC t m, Readable a, Show a)
 buildDynReadable va mFN dma = makeForm $ do
   let vfwt = parseAndValidate mFN fromText va
   inputEv <- dynMaybeAsEv dma
-  formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
+  formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetResult mFN
 
 buildDynReadMaybe :: (FormInstanceC t m, Read a, Show a)
   => FormValidator a
@@ -183,7 +191,7 @@ buildDynReadMaybe :: (FormInstanceC t m, Read a, Show a)
 buildDynReadMaybe va mFN dma = makeForm $ do
   let vfwt = parseAndValidate mFN (readMaybe . T.unpack) va
   inputEv <- dynMaybeAsEv dma
-  formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetValue mFN
+  formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetResult mFN
 
 -- NB this will handle Dynamic t (Dynamic t a)) inputs
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (R.Dynamic t a) where
@@ -194,7 +202,7 @@ instance FormInstanceC t m => FormBuilder t m T.Text where
   buildForm va mFN initialMDyn = makeForm $ do
     inputEv <- dynamicMaybeAsEv (getCompose initialMDyn) -- traceDynMAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")") (getCompose initialMDyn) -- FIXTrace
 --    inputEv <- maybe (return R.never) (traceDynAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")")) mInitialDyn  -- mDynAsEv mInitialDyn
-    formWidget' inputEv "" id va id mFN Nothing $ textWidgetValue mFN
+    formWidget' inputEv "" id va id mFN Nothing $ textWidgetResult mFN
 
 instance {-# OVERLAPPING #-} FormInstanceC t m => FormBuilder t m String where
   buildForm va mFN initialMDyn =
@@ -211,11 +219,17 @@ instance FormC e t m=>B.Builder (RFormWidget e t m) Char where
 -}
 
 
+htmlWidgetResult :: R.Reflex t => HtmlWidget t a -> WidgetResult t a
+htmlWidgetResult hw =
+  let val = _hwidget_value hw
+      changeEv = _hwidget_change hw
+  in unsafeBuildWidgetResult val changeEv
+
 -- We don't need this.  If we leave it out, the Enum instance will work and we get a dropdown instead of a checkbox.  Which might be better...
 instance FormInstanceC t m => FormBuilder t m Bool where
   buildForm va mFN initialMDyn = makeForm $ do
     inputEv <- dynMaybeAsEv initialMDyn
-    formWidget' inputEv False id va showText mFN Nothing (\c -> _hwidget_value <$> htmlCheckbox c)
+    formWidget' inputEv False id va showText mFN Nothing (\c -> htmlWidgetResult <$> htmlCheckbox c)
 
 instance FormInstanceC t m => FormBuilder t m Double where
   buildForm = buildDynReadable
@@ -264,7 +278,7 @@ instance FormInstanceC t m=>FormBuilder t m UTCTime where
           Just y  -> va y
         initialDateTime = Just $ UTCTime (fromGregorian 1971 1 1) (secondsToDiffTime 0)
     inputEv <- dynMaybeAsEv initialMDyn
-    formWidget' inputEv initialDateTime Just vfwt (maybe "" showText) mFN Nothing (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateTimeWidget c)
+    formWidget' inputEv initialDateTime Just vfwt (maybe "" showText) mFN Nothing (\c -> htmlWidgetResult <$> restrictWidget blurOrEnter dateTimeWidget c)
 
 
 instance FormInstanceC t m=>FormBuilder t m Day where
@@ -274,7 +288,7 @@ instance FormInstanceC t m=>FormBuilder t m Day where
           Just y  -> va y
         initialDay = Just $ fromGregorian 1971 1 1
     inputEv <- dynMaybeAsEv initialMDyn
-    formWidget' inputEv initialDay Just vfwt (maybe "" showText) mFN Nothing (\c -> _hwidget_value <$> restrictWidget blurOrEnter dateWidget c)
+    formWidget' inputEv initialDay Just vfwt (maybe "" showText) mFN Nothing (\c -> htmlWidgetResult <$> restrictWidget blurOrEnter dateWidget c)
 
 
 -- uses generics to build instances
@@ -294,13 +308,19 @@ buildFormIso isoAB vb mFN dmb = makeForm $ do
 instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (AccValidation a b) where
   buildForm = buildFormIso (iso eitherToAV avToEither)
 
+widget0Result :: R.Reflex t => Widget0 t a -> WidgetResult t a
+widget0Result w0 =
+  let val = _widget0_value w0
+      chg = _widget0_change w0
+  in unsafeBuildWidgetResult val chg
+
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (FormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=>FormBuilder t m a where
   buildForm va mFN initialMDyn = makeForm $ do
     let values = [minBound..] :: [a]
         initial = head values
     inputEv <- dynMaybeAsEv initialMDyn
-    formWidget' inputEv initial id va showText mFN Nothing (\c -> _widget0_value <$> htmlDropdownStatic values showText Prelude.id c)
+    formWidget' inputEv initial id va showText mFN Nothing (\c -> widget0Result <$> htmlDropdownStatic values showText Prelude.id c)
 
 
 -- |  Tuples. 2,3,4,5 tuples are here.

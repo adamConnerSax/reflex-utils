@@ -15,6 +15,7 @@ module Reflex.Dom.Contrib.Widgets.ModalEditor
   , modalEditor_value
   , modalEditor_mValue
   , modalEditor_change
+  , modalEditor_WidgetResult
   , OnExternalChange (..)
   , ButtonConfig (..)
   , button_label
@@ -141,7 +142,7 @@ modalEditorEither :: forall t m e a. ( RD.DomBuilder t m
                                      , MonadFix m
                                      , RD.MonadHold t m
                                      )
-  => (Dynamic t (Maybe a) -> m (Dynamic t (Either e a))) -- a widget for editing an a. returns Left on invalid value
+  => (Dynamic t (Maybe a) -> m (Dynamic t (Either e a))) -- a widget for editing an a. returns Left on invalid value.  FIXME
   -> Dynamic t (Either e a)
   -> ModalEditorConfig t a
   -> m (ModalEditor t e a)
