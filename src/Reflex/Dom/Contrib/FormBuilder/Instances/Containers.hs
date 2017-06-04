@@ -217,7 +217,7 @@ safeMaximum::Ord a=>[a]->Maybe a
 safeMaximum l = if null l then Nothing else Just $ maximum l
 
 listEditWidget::(FormInstanceC t m, VFormBuilderC t m a)
-  =>R.Dynamic t (IM.IntMap (FValidation a))
+  => R.Dynamic t (IM.IntMap (FValidation a))
   -> R.Event t (Int, a)
   -> R.Event t (IM.IntMap a)
   -> FRW t m (Int,a)
@@ -235,14 +235,16 @@ listEditWidget mapDyn newPairEv newMapEv = do
         return $ (,) <$> pure newKey <*> newElem
   joinDynOfFormResults <$> RD.widgetHold (widget 0) (widget <$> newKeyEv)
 
-listEditWidgetNoDup::(FormInstanceC t m, VFormBuilderC t m a, Eq a)=>R.Dynamic t (IM.IntMap (FValidation a)) -> R.Event t (Int, a) -> R.Event t (IM.IntMap a) -> FRW t m (Int,a)
+listEditWidgetNoDup::(FormInstanceC t m
+                     , VFormBuilderC t m a
+                     , Eq a)
+  => R.Dynamic t (IM.IntMap (FValidation a))
+  -> R.Event t (Int, a)
+  -> R.Event t (IM.IntMap a)
+  -> FRW t m (Int,a)
 listEditWidgetNoDup mapVDyn newPairEv newMapEv = do
-  let newKeyEv = R.leftmost [(+1) . fst <$>  newPairEv, maybe 0 (+1) . safeMaximum . IM.keys <$> newMapEv]
-      widget newKey = fRow $ do
-        newElem <- fItem . unF $ buildVForm Nothing (constDynMaybe Nothing)
-        return $ (,) <$> pure newKey <*> newElem
-      dupF (intKey,val) curMap = let isDup = L.elem val (IM.elems curMap) in if isDup then AccFailure [FNothing] else AccSuccess (intKey,val)
-  newPair <- joinDynOfFormResults <$> RD.widgetHold (widget 0) (widget <$> newKeyEv) -- FormResult t (k,v)
+  let dupF (intKey,val) curMap = let isDup = L.elem val (IM.elems curMap) in if isDup then AccFailure [FNothing] else AccSuccess (intKey,val)
+  newPair <- listEditWidget mapVDyn newPairEv newMapEv
   return . Compose . fmap mergeAccValidation . getCompose $ dupF <$> newPair <*> (Compose $ sequenceA <$> buildReadOnlyWidgetResult mapVDyn)
 
   
@@ -262,7 +264,7 @@ instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m [a] where
   buildForm =  buildList
 
 setEqML::Ord a=>MapLike S.Set IM.IntMap a
-setEqML = MapLike (IM.fromAscList . zip [0..] . S.toList) (S.fromList . fmap snd . IM.toList) LHF.lhfMapDiff
+setEqML = MapLike (IM.fromAscList . zip [0..] . S.toList) (S.fromList . fmap snd . IM.toList) LHF.lhfMapDiffNoEq
 
 setEqWidgets::(FormInstanceC t m, VFormBuilderC t m a,Eq a)=>MapElemWidgets IM.IntMap t m Int a
 setEqWidgets = MapElemWidgets hideKeyEditVal listEditWidgetNoDup

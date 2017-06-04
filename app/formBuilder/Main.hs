@@ -35,6 +35,7 @@ import           Data.Default                                        (def)
 import qualified Data.HashSet                                        as HS
 import qualified Data.Map                                            as M
 import qualified Data.Sequence                                       as Seq
+import qualified Data.Set                                            as Set
 import qualified Data.Text                                           as T
 import           Data.Time.Calendar                                  (Day (..), fromGregorian)
 import           Data.Time.Clock                                     (UTCTime (..))
@@ -271,11 +272,21 @@ testMap = M.fromList [("A",1),("B",2)]
 testMap2::M.Map T.Text (M.Map T.Text T.Text)
 testMap2 = M.fromList [("MapA",M.fromList [("A","a"),("B","b")]),("MapB",M.fromList [("C","c"),("E","e")])]
 
+hs :: HS.HashSet String
+hs = HS.fromList ["a","b"]
+
+hseq :: Seq.Seq String
+hseq = Seq.fromList ["a","b"]
+
+set :: Set.Set String
+set = Set.fromList ["a","b"]
+
+
 testComplexForm :: FormInstanceC t m=>FormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just sm)
+  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just set)
   el "p" $ text "dynText:"
   dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose cDynM))
   el "p" $ text "Observed:"

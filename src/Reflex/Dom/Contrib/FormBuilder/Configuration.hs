@@ -99,8 +99,6 @@ formResultError = formResultErrors . pure
 formResultNothing :: Reflex t => FormResult t a
 formResultNothing = formResultError FNothing
 
-
-
 type FRW t m a = FR t m (FormResult t a)
 
 type FLayoutF t m = forall a.(FR t m a -> FR t m a)
