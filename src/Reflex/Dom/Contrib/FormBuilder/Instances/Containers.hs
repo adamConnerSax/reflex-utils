@@ -54,6 +54,7 @@ import Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult, buildWidgetResult,
                                                 dynamicWidgetResultToWidgetResult, buildReadOnlyWidgetResult, updatedWidgetResult, widgetResultToDynamic)                 
 import           Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..), LayoutDirection (..))
 import           Reflex.Dom.Contrib.DynamicUtils (dynBasedOn, dynAsEv, traceDynAsEv, mDynAsEv)
+import Reflex.Dom.Contrib.EventUtils (leftWhenNotRight)
 import qualified Reflex.Dom.Contrib.ListHoldFunctions.Maps as LHF
 import           Reflex.Dom.Contrib.ListHoldFunctions.Maps (LHFMap(..))
 import qualified Reflex.Dom.Contrib.Widgets.ModalEditor as MW 
@@ -569,7 +570,7 @@ selectWidget labelStrategy eW dgv = do
   let mapEditEv = R.switch mapEditEvBeh 
       editDiffEv = fmap avToMaybe . uncurry lhfMapSingleton <$> mapEditEv
       editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dgv) editDiffEv  -- has edits; these don't get fed back in.  
-  return (maybeSelDyn, editedMapEv)
+  return (maybeSelDyn, leftWhenNotRight editedMapEv (R.updated dgv))
 
 
 selectWidgetWithDefault::ContainerForm t m g k v

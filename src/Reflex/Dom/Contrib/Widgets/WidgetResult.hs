@@ -62,7 +62,7 @@ currentWidgetResult = current . _wrDyn
 buildWidgetResult :: (Reflex t, MonadHold t m) => Dynamic t a -> Event t a -> m (WidgetResult t a)
 buildWidgetResult d0 updateEv = do
   let d0Ev = updated d0
-  d <- buildDynamic (sample $ current d0) $ leftmost [d0Ev, updateEv]
+  d <- buildDynamic (sample $ current d0) $ leftmost [d0Ev, updateEv] -- order reversed
   return $ WidgetResult d (() <$ leftWhenNotRight updateEv d0Ev)
 
 dynamicWidgetResultToWidgetResult :: Reflex t => Dynamic t (WidgetResult t a) -> WidgetResult t a
