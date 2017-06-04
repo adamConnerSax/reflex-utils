@@ -182,7 +182,7 @@ mapEditWidget::(FormInstanceC t m, VFormBuilderBoth t m k v)
 mapEditWidget _ newPair newMap = do
   let pairWidget = unF $ buildVForm Nothing (constDynMaybe Nothing)
       pairWidgetEv = pairWidget <$ R.leftmost [() <$ newPair, () <$ newMap]
-  joinDynOfFormResults <$> RD.widgetHold pairWidget pairWidgetEv -- DynValidation (k,v)
+  joinDynOfFormResults <$> RD.widgetHold pairWidget pairWidgetEv -- FormResult t (k,v)
 
 mapWidgets::(FormInstanceC t m, VFormBuilderBoth t m k v)=>MapElemWidgets (M.Map k) t m k v
 mapWidgets = MapElemWidgets showKeyEditVal mapEditWidget

@@ -174,6 +174,9 @@ data B = B { int::Int, listOfA::ListOfA } deriving (Show,GHC.Generic)
 
 newtype MyMap = MyMap { map_String_B::M.Map String B } deriving (Show,GHC.Generic)
 
+newtype SMap a = SMap { unSMap :: M.Map T.Text a } deriving (Show, GHC.Generic)
+newtype LMap a = LMap { unLMap :: M.Map T.Text a } deriving (Show, GHC.Generic)
+
 data BRec = BRec { oneB::B, seqOfA::Seq.Seq A, hashSetOfString::HS.HashSet String } deriving (Show)
 
 data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Generic)
@@ -204,6 +207,17 @@ instance FormInstanceC t m=>FormBuilder t m B where
 --instance HasDatatypeInfo MyMap
 instance FormInstanceC t m=>FormBuilder t m MyMap where
   buildForm va mFN = fmap MyMap . buildMapWithSelect (fmap map_String_B . va . MyMap) mFN . fmap map_String_B
+
+instance Generic (SMap a)
+instance HasDatatypeInfo (SMap a)
+instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (SMap a) where
+  buildForm va mFN = fmap SMap . buildMapWithSelect (fmap unSMap . va . SMap) mFN . fmap unSMap
+
+
+instance Generic (LMap a)
+instance HasDatatypeInfo (LMap a)
+instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (LMap a)
+
 
 instance Generic C
 instance HasDatatypeInfo C
@@ -246,6 +260,9 @@ lOfA2 = ListOfA [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregor
 b1 = B 12 $ lOfA1
 b2 = B 4 $ lOfA2
 
+sm = SMap $ M.fromList [("a",1.0 :: Double),("b", 2)]
+lm = LMap $ M.fromList [("a",1.0 :: Double),("b", 2)]
+
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 (ListOfA [])) Seq.empty HS.empty)
 
 testMap::M.Map T.Text Int
@@ -258,7 +275,7 @@ testComplexForm :: FormInstanceC t m=>FormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just testMap2)
+  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just sm)
   el "p" $ text "dynText:"
   dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose cDynM))
   el "p" $ text "Observed:"
