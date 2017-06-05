@@ -44,7 +44,7 @@ import qualified Reflex                                  as R
 import           Reflex.Dom                              (DropdownConfig (..),
                                                           dropdown, widgetHold)
 import qualified Reflex.Dom                              as RD
-import qualified Reflex.Dom.Contrib.Widgets.Modal        as RDC
+--import qualified Reflex.Dom.Contrib.Widgets.Modal        as RDC
 import           Reflex.Dynamic                          (constDyn, current,
                                                           tagPromptlyDyn,
                                                           updated)
@@ -52,13 +52,16 @@ import           Reflex.Dynamic                          (constDyn, current,
 import           Reflex.Dom.Contrib.DynamicUtils         (dynAsEv)
 import qualified Reflex.Dom.Contrib.Layout.FlexLayout    as L
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
-import           Reflex.Dom.Contrib.Widgets.WidgetResult (WrappedWidgetResult, unsafeBuildWrappedWidgetResult)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult,
+                                                          WrappedWidgetResult,
+                                                          unsafeBuildWrappedWidgetResult)
 
 import           Control.Lens                            (makeLenses, view,
                                                           (%~), (&), (^.))
 import           Control.Monad                           (join)
 import           Control.Monad.Fix                       (MonadFix)
 import           Data.Default
+import           Data.Either                             (isRight)
 import           Data.Functor.Compose                    (Compose (Compose),
                                                           getCompose)
 import qualified Data.Map                                as M
@@ -136,13 +139,14 @@ instance Reflex t => Default (ModalEditorConfig t a) where
         (const $ ButtonConfig "Cancel" M.empty Nothing) -- simple Cancel button in footer
 
 -- | Modal Editor for a Dynamic a
+-- | Widget as input takes an Event t () which will be fired when the modal is opened. This allows the widget to tag things.
 modalEditorEither :: forall t m e a. ( RD.DomBuilder t m
                                      , MonadWidgetExtraC t m
                                      , RD.PostBuild t m
                                      , MonadFix m
                                      , RD.MonadHold t m
                                      )
-  => (Dynamic t (Maybe a) -> m (Dynamic t (Either e a))) -- a widget for editing an a. returns Left on invalid value.  FIXME
+  => (Dynamic t (Maybe a) -> m (Dynamic t (Either e a))) -- a widget for editing an a. returns Left on invalid value.
   -> Dynamic t (Either e a)
   -> ModalEditorConfig t a
   -> m (ModalEditor t e a)
@@ -159,7 +163,7 @@ modalEditorEither editW aEDyn config = mdo
         return (cancelEv', okEv)
       showAttrs hideEv showEv = R.holdDyn visibleCSS $ R.leftmost [hiddenCSS <$ hideEv, visibleCSS <$ showEv]
       eaAndCloseW input = mdo -- returns m (Event t (Either e a), Event t ())
-        let body = L.flexRow $ editW $ (R.constDyn $ e2m input)
+        let body = L.flexRow $ editW $ (R.constDyn $ e2m input) -- we freeze the input on open
             modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
             closeOnOkEv okEv = if (config ^. modalEditor_closeOnOk) then () <$ okEv else R.never
             closeEv = R.leftmost [ cancelEv
@@ -167,7 +171,7 @@ modalEditorEither editW aEDyn config = mdo
                                  , closeOnOkEv newAEEv'
                                  ]
         modalVisAttrs <- showAttrs closeEv R.never -- we don't need to reshow because we build the widget anew each time the button is pressed.
-        (newAEEv', cancelEv) <- L.flexCol $ RD.elDynAttr "div" modalAttrsDyn $ RDC.mkModalBody header footer body
+        (newAEEv', cancelEv) <- L.flexCol $ RD.elDynAttr "div" modalAttrsDyn $ mkModalBody header footer body
         return $ (newAEEv', closeEv)
   let openButtonConfigOrig = (config ^. modalEditor_openButton) . e2m <$> newAEDyn
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
@@ -193,6 +197,35 @@ modalEditor :: forall t m a. ( RD.DomBuilder t m
   -> ModalEditorConfig t a
   -> m (ModalEditor t () a)
 modalEditor editW aMDyn config = modalEditorEither (fmap (fmap m2e) . editW) (m2e <$> aMDyn) config
+
+
+
+-- | Template for a modal with a header, body, and footer where the header has
+-- a close icon and the footer has a cancel and save button.
+-- copied From reflex-dom-contrib and modified to work with WidgetResults
+mkModalBody
+    :: ( RD.DomBuilder t m
+       , MonadWidgetExtraC t m
+       , RD.PostBuild t m
+       , MonadFix m
+       , RD.MonadHold t m
+       )
+    => m (R.Event t ())
+    -- ^ A header widget returning an event that closes the modal.
+    -> (R.Dynamic t (Either e a) -> m (R.Event t (), R.Event t ()))
+    -- ^ Footer widget that takes the current state of the body and returns
+    -- a pair of a cancel event and an ok event.
+    -> m (R.Dynamic t (Either e a))
+    -> m (R.Event t (Either e a), R.Event t ())
+mkModalBody header footer body = do
+  RD.divClass "modal-dialog" $ RD.divClass "modal-content" $ do
+    dismiss <- header
+    bodyRes <- RD.divClass "modal-body" body
+    (cancel, ok) <- footer bodyRes
+    let resE1 = R.tag (R.current bodyRes) ok -- changed
+        closem1 = R.leftmost
+                  [dismiss, cancel, () <$ R.ffilter isRight resE1]
+    return (resE1, closem1)
 
 hiddenCSS :: M.Map T.Text T.Text
 hiddenCSS  = "style" RD.=: "display: none !important"

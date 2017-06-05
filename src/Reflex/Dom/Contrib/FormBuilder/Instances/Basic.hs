@@ -141,7 +141,7 @@ instance R.Reflex t => Functor (HtmlWidget t) where
 textWidgetResult :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (WidgetResult t T.Text)
 textWidgetResult mFN c = do
   inputDyn <- R.holdDyn (_widgetConfig_initialValue c) (_widgetConfig_setValue c)
-  changeEv <- _hwidget_change <$> restrictWidget' blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
+  changeEv <- _hwidget_change <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
   buildWidgetResult inputDyn changeEv
 
 textWidgetResult' :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (WidgetResult t T.Text)
@@ -171,7 +171,6 @@ parseAndValidate mFN parse va t =
   case parse t of
     Nothing -> AccFailure [FNoParse $ parseError mFN t]
     Just y  -> va y
-
 
 buildDynReadable :: (FormInstanceC t m, Readable a, Show a)
   => FormValidator a

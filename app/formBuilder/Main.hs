@@ -278,15 +278,18 @@ hs = HS.fromList ["a","b"]
 hseq :: Seq.Seq String
 hseq = Seq.fromList ["a","b"]
 
-set :: Set.Set String
-set = Set.fromList ["a","b"]
+setString :: Set.Set String
+setString = Set.fromList ["a","b"]
+
+setInt :: Set.Set Int
+setInt = Set.fromList [1,2]
 
 
 testComplexForm :: FormInstanceC t m=>FormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just set)
+  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just setInt)
   el "p" $ text "dynText:"
   dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose cDynM))
   el "p" $ text "Observed:"
@@ -296,7 +299,6 @@ testComplexForm cfg = do
 
 complexFormTab::FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 complexFormTab cfg = TabInfo "complexFormTab" (constDyn ("Complex Example", M.empty))  $ testComplexForm cfg
-
 
 flowTestWidget::(DomBuilder t m, HasDocument m, MonadWidgetExtraC t m, MonadFix m, MonadHold t m, PostBuild t m)=>Int->m (Dynamic t String)
 flowTestWidget n = do

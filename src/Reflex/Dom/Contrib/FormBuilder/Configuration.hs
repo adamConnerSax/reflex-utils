@@ -19,6 +19,7 @@ module Reflex.Dom.Contrib.FormBuilder.Configuration
   , formResultErrors
   , formResultError
   , formResultNothing
+  , dynamicToFormResult
   , FRW
   , FLayoutF
   , liftLF
@@ -59,7 +60,7 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation
 import           Reflex.Dom.Contrib.Layout.Types              (CssClasses, LayoutDirection (..),
                                                                LayoutOrientation (..))
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WrappedWidgetResult,
-                                                               constWidgetResult)
+                                                               constWidgetResult, dynamicToWidgetResult)
 
 import qualified DataBuilder                                  as B
 import           Reflex                                       (Dynamic, Event,
@@ -98,6 +99,9 @@ formResultError = formResultErrors . pure
 
 formResultNothing :: Reflex t => FormResult t a
 formResultNothing = formResultError FNothing
+
+dynamicToFormResult :: Reflex t => Dynamic t a -> FormResult t a
+dynamicToFormResult = Compose . dynamicToWidgetResult . fmap AccSuccess 
 
 type FRW t m a = FR t m (FormResult t a)
 
