@@ -65,17 +65,17 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   postbuild <- RD.getPostBuild
   optionsNullEv <- R.holdUniqDyn (M.null <$> optionsDyn) >>= dynAsEv
   let (someOptionsEv, noOptionsEv) = fanBool optionsNullEv
-      (setToNothingEv, defaultKeySetEv) = R.fanEither $ maybe (Left ()) Right <$> leftmost [setEv, Just <$> R.fmapMaybe (const k0m) postbuild]
+      (setToNothingEv, keySetEv) = R.fanEither $ maybe (Left ()) Right <$> leftmost [setEv, Just <$> R.fmapMaybe (const k0m) postbuild]
       noOptionsWidget ev = return $ SafeDropdown (constDyn Nothing) ev
       noOptionsWidgetEv = noOptionsWidget (Nothing <$ noOptionsEv) <$ leftmost [noOptionsEv, setToNothingEv]
       defaultKeyNewOptionsEv = R.fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> optionsDyn) someOptionsEv
-      defaultKeySetSafeEv =
+      keySetSafeEv =
         let checkKey m k = if M.member k m then Just k else Nothing
-        in attachWithMaybe checkKey (current optionsDyn) defaultKeySetEv
+        in attachWithMaybe checkKey (current optionsDyn) keySetEv
       dropdownWidget k0 = mdo
         let newK0 curK m = if M.member curK m then Nothing else headMay $ M.keys m
             newK0Ev = attachWithMaybe newK0 (current $ RD._dropdown_value dd) (updated optionsDyn)
-            ddConfig = DropdownConfig (leftmost [newK0Ev, defaultKeySetSafeEv]) attrsDyn  
+            ddConfig = DropdownConfig (leftmost [newK0Ev, keySetSafeEv]) attrsDyn  
         dd <- dropdown k0 optionsDyn ddConfig
         return $ SafeDropdown (Just <$> RD._dropdown_value dd) (Just <$> RD._dropdown_change dd)
       newWidgetEv = leftmost [noOptionsWidgetEv, dropdownWidget <$> defaultKeyNewOptionsEv]

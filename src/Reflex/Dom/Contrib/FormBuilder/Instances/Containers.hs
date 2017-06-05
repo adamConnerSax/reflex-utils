@@ -51,14 +51,15 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder (DynMaybe(..), Form(..),
                                                           avToMaybe, joinDynOfFormResults, dynamicToFormResult)
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynValidation(..),constDynValidation,joinDynOfDynValidation
                                                               ,accValidation, mergeAccValidation, FormErrors, FormError(FNothing), avToEither)
-import Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult, buildWidgetResult, dynamicToWidgetResult, currentWidgetResult,
-                                                dynamicWidgetResultToWidgetResult, buildReadOnlyWidgetResult, updatedWidgetResult, widgetResultToDynamic)                 
+import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult, buildWidgetResult, dynamicToWidgetResult, currentWidgetResult,
+                                                          dynamicWidgetResultToWidgetResult, buildReadOnlyWidgetResult, updatedWidgetResult, widgetResultToDynamic)                 
 import           Reflex.Dom.Contrib.Layout.Types (LayoutOrientation(..), LayoutDirection (..))
 import           Reflex.Dom.Contrib.DynamicUtils (dynBasedOn, dynAsEv, traceDynAsEv, mDynAsEv)
-import Reflex.Dom.Contrib.EventUtils (leftWhenNotRight)
+import           Reflex.Dom.Contrib.EventUtils (leftWhenNotRight)
 import qualified Reflex.Dom.Contrib.ListHoldFunctions.Maps as LHF
 import           Reflex.Dom.Contrib.ListHoldFunctions.Maps (LHFMap(..))
-import qualified Reflex.Dom.Contrib.Widgets.ModalEditor as MW 
+import qualified Reflex.Dom.Contrib.Widgets.ModalEditor as MW
+import qualified Reflex.Dom.Contrib.Widgets.SafeDropdown as SD
 
 -- reflex imports
 import qualified Reflex as R 
@@ -521,6 +522,36 @@ buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
 
 
 selectWidget :: ( FormInstanceC t m
+                 , Traversable g
+                 , LHFMap g
+                 , LHFMapKey g ~ k
+                 , VFormBuilderBoth t m k v
+                 )
+  => LabelStrategy k v
+  -> ElemWidget t m k v
+  -> R.Dynamic t (g v)
+  -> FR t m (R.Dynamic t (Maybe k), R.Event t (g v))
+selectWidget labelStrategy eW dgv = do
+  let keyLabelMap = labelLHFMap labelStrategy <$> dgv
+      config = SD.SafeDropdownConfig R.never $ R.constDyn ("size" =: "1")        
+  sdd <- SD.safeDropdown Nothing keyLabelMap config
+  sddNullEv <- R.holdUniqDyn (isNothing <$> view SD.safeDropdown_value sdd) >>= dynAsEv
+  let (notNullEv, nullEv) = fanBool sddNullEv
+      nullWidgetEv = return R.never <$ nullEv
+      safeKeyEv = R.tagPromptlyDyn (head . LHF.lhfMapKeys <$> keyLabelMap) notNullEv
+      selWidget safeKey = do
+        selDyn <- R.holdDyn safeKey (R.fmapMaybe id $ view SD.safeDropdown_change sdd)
+        LHF.selectViewListWithKeyLHFMap selDyn dgv (toSVLWKWidget eW)  -- NB: this map doesn't need updating from edits or deletes
+        
+  editEvDyn <- RD.widgetHold (return R.never) $ R.leftmost [nullWidgetEv, selWidget <$> safeKeyEv]
+  mapEditEvBeh <- R.hold R.never (R.updated editEvDyn)
+  let mapEditEv = leftWhenNotRight (R.switch mapEditEvBeh) (R.updated dgv) -- updated inputs are not edits.  But those events are mixed in because dgv is input to selectWidget
+      editDiffEv = fmap avToMaybe . uncurry lhfMapSingleton <$> mapEditEv
+      editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dgv) editDiffEv  -- has edits; these don't get fed back in. 
+  return (view SD.safeDropdown_value sdd, editedMapEv) 
+
+
+selectWidget' :: ( FormInstanceC t m
                 , Traversable g
                 , LHFMap g
                 , LHFMapKey g ~ k
@@ -530,7 +561,7 @@ selectWidget :: ( FormInstanceC t m
   -> ElemWidget t m k v
   -> R.Dynamic t (g v)
   -> FR t m (R.Dynamic t (Maybe k), R.Event t (g v))
-selectWidget labelStrategy eW dgv = do
+selectWidget' labelStrategy eW dgv = do
   -- we need to deal differently with the null and non-null container case
   -- and we only want to know when we've changed from one to the other
   inputNullEv <- R.holdUniqDyn (lhfMapNull <$> dgv) >>= dynAsEv --(R.uniqDyn $ lhfMapNull <$> dgv)
