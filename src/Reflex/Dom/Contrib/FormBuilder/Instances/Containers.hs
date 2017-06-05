@@ -493,15 +493,15 @@ toSVLWKWidget ew k dv db = do
    return $ R.updated $ widgetResultToDynamic $ getCompose fra  
 
 -- something using selectView
-buildSelectViewer::(FormInstanceC t m
-                   , Traversable g
-                   , LHFMap g
-                   , LHFMapKey g ~ k
-                   , VFormBuilderBoth t m k v)
-  =>LabelStrategy k v->MapElemWidgets g t m k v->LBBuildF' g t m k v
+buildSelectViewer :: (FormInstanceC t m
+                     , Traversable g
+                     , LHFMap g
+                     , LHFMapKey g ~ k
+                     , VFormBuilderBoth t m k v)
+  => LabelStrategy k v
+  -> MapElemWidgets g t m k v
+  -> LBBuildF' g t m k v
 buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
-  newInputContainerEv <- dynAsEv dgvIn -- generate events when the input changes
-  
   -- chooser widget with dropdown
   (maybeSelDyn, editedMapEv) <- selectWidget labelStrategy eW dgvForDD
 
@@ -510,17 +510,14 @@ buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
   let deleteEv = R.fmapMaybe id $ R.tag (R.current maybeSelDyn) deleteButtonEv  -- Event t k, only fires if there is a current selection
       deleteDiffEv = flip lhfMapSingleton Nothing <$> deleteEv -- Event t (k, Nothing)  
         
-  insertDiffEv <- fRow $ newItemWidget nWF (fmap AccSuccess <$> dgv)
+  insertDiffEv <- fRow $ newItemWidget nWF (fmap AccSuccess <$> widgetResultToDynamic gvWR)
     
   let insertDeleteDiffEv = R.leftmost [insertDiffEv, deleteDiffEv]
-      mapAfterInsertDeleteEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dgv) insertDeleteDiffEv
+      mapAfterInsertDeleteEv = R.attachWith (flip LHF.lhfMapApplyDiff) (currentWidgetResult gvWR) insertDeleteDiffEv
       
-  let updatedMapForDDEv = R.leftmost [newInputContainerEv, mapAfterInsertDeleteEv] --widget already knows about edits
-      updatedMapEv = R.leftmost [updatedMapForDDEv, editedMapEv] -- order matters here.  mapEditEv on new map will not have the whole map.  Arbitrary patch.
-
-  dgvForDD <- R.holdDyn lhfEmptyMap updatedMapForDDEv -- input to dropdown widget 
-  dgv <- R.holdDyn lhfEmptyMap updatedMapEv -- authoritative value of edited container
-  Compose . fmap AccSuccess <$> (buildWidgetResult dgvIn $ R.leftmost [editedMapEv, mapAfterInsertDeleteEv])
+  dgvForDD <- dynBasedOn dgvIn mapAfterInsertDeleteEv -- dropdown causes edits so don't feed them back in.
+  gvWR <- buildWidgetResult dgvIn $ R.leftmost [editedMapEv, mapAfterInsertDeleteEv] -- authoritative value for (g v)
+  return $ Compose $ AccSuccess <$> gvWR 
 
 
 selectWidget :: ( FormInstanceC t m
@@ -540,28 +537,27 @@ selectWidget labelStrategy eW dgv = do
   let (nonNullEv,nullEv) = fanBool inputNullEv -- . R.updated . R.uniqDyn $ lhfMapNull <$> dgv
       nullWidget = RD.el "div" (RD.text "Empty Container") >> return (R.constDyn Nothing, R.never)
       nullWidgetEv = nullWidget <$ nullEv
-      -- This one needs to be prompt since the container just became non-null
-      defaultKeyEv = R.fmapMaybe id $ R.tagPromptlyDyn (headMay . lhfMapKeys <$> dgv) nonNullEv -- headMay and fmapMaybe id are redundant here but...
+      -- This one needs to be prompt since the container became non-null in this frame.  Non-prompt would get empty container.
+      defaultKeyEv = R.fmapMaybe id $ R.tagPromptlyDyn (headMay . lhfMapKeys <$> dgv) nonNullEv -- headMay and fmapMaybe id are redundant here.  This only fires when nonNullEv fires
       sWidget k0 = selectWidgetWithDefault labelStrategy eW k0 dgv
       widgetEv = R.leftmost [nullWidgetEv, sWidget <$> defaultKeyEv]
   selWidget <- fRow $ RD.widgetHold nullWidget widgetEv
   let maybeSelDyn =  join $ fst <$> selWidget -- Dynamic t (Maybe k)
       mapEditEvDyn = snd <$> selWidget
   mapEditEvBeh <- R.hold R.never (R.updated mapEditEvDyn)
-  let mapEditEv = R.switch mapEditEvBeh 
+  let mapEditEv = leftWhenNotRight (R.switch mapEditEvBeh) (R.updated dgv) -- updated inputs are not edits.  But those events are mixed in because dgv is input to selectWidget
       editDiffEv = fmap avToMaybe . uncurry lhfMapSingleton <$> mapEditEv
       editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current dgv) editDiffEv  -- has edits; these don't get fed back in.  
-  return (maybeSelDyn, leftWhenNotRight editedMapEv (R.updated dgv))
+  return (maybeSelDyn, editedMapEv)
 
-
-selectWidgetWithDefault::ContainerForm t m g k v
-  =>LabelStrategy k v
-  ->ElemWidget t m k v
-  ->k
-  ->R.Dynamic t (g v)
-  ->FR t m (R.Dynamic t (Maybe k), R.Event t (k, FValidation v))
+selectWidgetWithDefault :: ContainerForm t m g k v
+  => LabelStrategy k v
+  -> ElemWidget t m k v
+  -> k
+  -> R.Dynamic t (g v)
+  -> FR t m (R.Dynamic t (Maybe k), R.Event t (k, FValidation v))
 selectWidgetWithDefault labelStrategy eW k0 dgv = mdo
-  let keyLabelMap = labelLHFMap labelStrategy <$> dgv -- dynamic map for the dropdown/chooser.  dgvForDD will change on input change or new element add. Not edits. Deletes?
+  let keyLabelMap = labelLHFMap labelStrategy <$> dgv -- dynamic map for the dropdown/chooser.  dgvForDD will change on input change or new element add/delete.
       newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m  -- compute new default key           
       newk0Ev = R.attachWithMaybe newK0 (R.current k0Dyn) (R.updated keyLabelMap) -- has to be old k0, otherwise causality loop
       ddConfig = RD.DropdownConfig newk0Ev (R.constDyn ("size" =: "1")) -- TODO: figure out how to build a multi-chooser.
@@ -571,7 +567,6 @@ selectWidgetWithDefault labelStrategy eW k0 dgv = mdo
   editEv <- LHF.selectViewListWithKeyLHFMap selDyn dgv (toSVLWKWidget eW)  -- NB: this map doesn't need updating from edits or deletes
   return (Just <$> selDyn, editEv) -- we need the selection to make the delete button work
   
-    
 buildLBWithSelect::ContainerForm t m g k v
   =>LabelStrategy k v
   ->MapLike f g v 
@@ -582,8 +577,6 @@ buildLBWithSelect::ContainerForm t m g k v
 buildLBWithSelect labelStrategy (MapLike to from _) widgets mFN dmfa =  makeForm $ do
   let mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa
   fmap from <$> buildSelectViewer labelStrategy widgets mFN mapDyn0
-
-
 
 buildLBWithSelectEditOnly::ContainerForm t m g k v
   =>LabelStrategy k v
@@ -598,7 +591,6 @@ buildLBWithSelectEditOnly labelStrategy (MapLike to from _) (MapElemWidgets eW _
   res <- buildWidgetResult dgv editedMapEv
 --  res <- R.buildDynamic (R.sample $ R.current dgv) $ R.leftmost [R.updated dgv, editedMapEv]
   return . Compose $ AccSuccess . from <$> res
-
     
 showKeyEditVal::(FormInstanceC t m, VFormBuilderBoth t m k v)=>ElemWidget t m k v
 showKeyEditVal k vDyn = do
