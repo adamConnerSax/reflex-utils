@@ -121,7 +121,6 @@ safeDropdownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
   SafeDropdown valDyn changeEv <- safeDropdown l0m sdOptionsDyn cfg -- SafeDropdown t l
   return $ SafeDropdown (mapDynamic valDyn) (mapEvent changeEv)
 
-
 -- this is safe because of how SafeDropDown is built. 
 safeDropdownWrappedWidgetResult :: Reflex t => SafeDropdown t k -> WrappedWidgetResult t Maybe k
 safeDropdownWrappedWidgetResult sdd = unsafeBuildWrappedWidgetResult (_safeDropdown_value sdd) (_safeDropdown_change sdd) 

@@ -95,6 +95,7 @@ modalEditor_WidgetResult me = unsafeBuildWrappedWidgetResult (modalEditor_value 
 -- update function can place a default in on Nothing
 -- NB: This doesn't work yet because of a conflict with updating on close and reopen.  So control will always close on input change.
 data OnExternalChange a = Close | UpdateIfRight | UpdateOrDefault a
+data UpdateOutput = Always | OnOk
 
 data ButtonConfig = ButtonConfig { _button_label      :: T.Text
                                  , _button_attributes :: M.Map T.Text T.Text
@@ -106,6 +107,7 @@ makeLenses ''ButtonConfig
 -- widget could go in here but has no sensible default except "return"
 data ModalEditorConfig t a = ModalEditorConfig { _modalEditor_attributes   :: Dynamic t (M.Map T.Text T.Text)
                                                , _modalEditor_onChange     :: OnExternalChange a
+                                               , _modalEditor_updateOutput :: UpdateOutput
                                                , _modalEditor_closeOnOk    :: Bool
                                                , _modalEditor_openButton   :: Maybe a -> ButtonConfig
                                                , _modalEditor_XButton      :: Maybe (Maybe a -> ButtonConfig)
@@ -132,6 +134,7 @@ instance Reflex t => Default (ModalEditorConfig t a) where
   def = ModalEditorConfig
         (constDyn M.empty)
         Close -- close on change to input dynamic
+        OnOk -- pass all updates through
         True -- close on OK
         (const $ ButtonConfig "Edit" M.empty Nothing) -- default to Edit button which is disabled when input is Nothing
         Nothing -- default to no "x" button in the header
@@ -162,22 +165,27 @@ modalEditorEither editW aEDyn config = mdo
         cancelEv' <- L.flexItem $ dynamicButton ((config ^. modalEditor_CancelButton) . e2m <$> eaDyn)
         return (cancelEv', okEv)
       showAttrs hideEv showEv = R.holdDyn visibleCSS $ R.leftmost [hiddenCSS <$ hideEv, visibleCSS <$ showEv]
-      eaAndCloseW = mdo -- returns m (Event t (Either e a), Event t ())
+      eaAndCloseW inputWhenOpened = mdo -- returns m (Event t (Either e a), Event t ())
         let body = L.flexRow $ editW $ e2m <$> newAEDyn
             modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
             closeOnOkEv okEv = if (config ^. modalEditor_closeOnOk) then () <$ okEv else R.never
             closeEv = R.leftmost [ cancelEv
                                  , closeOnChangeEv
-                                 , closeOnOkEv newAEEv'
+                                 , closeOnOkEv okAEEv
                                  ]
         modalVisAttrs <- showAttrs closeEv R.never -- we don't need to reshow because we build the widget anew each time the button is pressed.
-        (newAEEv', cancelEv) <- L.flexCol $ RD.elDynAttr "div" modalAttrsDyn $ mkModalBody header footer body
-        return $ (newAEEv', closeEv)
+        (newAEEv', okAEEv, cancelEv) <- L.flexCol $ RD.elDynAttr "div" modalAttrsDyn $ mkModalBodyUpdateAlways header footer body
+        let updateAEEv = case config ^. modalEditor_updateOutput of
+                           Always -> newAEEv'
+                           OnOk   -> okAEEv
+        let retAEEv = R.leftmost [updateAEEv, inputWhenOpened <$ cancelEv]
+        return $ (retAEEv, closeEv)
   let openButtonConfigOrig = (config ^. modalEditor_openButton) . e2m <$> newAEDyn
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
   openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
   openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
-  evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (eaAndCloseW <$ openButtonEv)
+  let openEv = R.tag (current newAEDyn) openButtonEv
+  evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (eaAndCloseW <$> openEv)
   let newEaEv = R.switch (fst <$> evOfEvs)
       modalCloseEv = R.switch (snd <$> evOfEvs)
   newAEDyn <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [switchToDefaultEv, newInputEv, newEaEv]
@@ -201,8 +209,9 @@ modalEditor editW aMDyn config = modalEditorEither (fmap (fmap m2e) . editW) (m2
 
 -- | Template for a modal with a header, body, and footer where the header has
 -- a close icon and the footer has a cancel and save button.
--- copied From reflex-dom-contrib and modified to work with WidgetResults
-mkModalBody
+-- this version, copied From reflex-dom-contrib and modified.
+-- passes through all updates on its output so it can be wrapped to require "ok" or not.
+mkModalBodyUpdateAlways
     :: ( RD.DomBuilder t m
        , MonadWidgetExtraC t m
        , RD.PostBuild t m
@@ -214,17 +223,17 @@ mkModalBody
     -> (R.Dynamic t (Either e a) -> m (R.Event t (), R.Event t ()))
     -- ^ Footer widget that takes the current state of the body and returns
     -- a pair of a cancel event and an ok event.
-    -> m (R.Dynamic t (Either e a))
-    -> m (R.Event t (Either e a), R.Event t ())
-mkModalBody header footer body = do
+    -> m (R.Dynamic t (Either e a)) -- should this be WidgetResult so we can pass through only updates?
+    -> m (R.Event t (Either e a), R.Event t (Either e a), R.Event t ())
+mkModalBodyUpdateAlways header footer body = do
   RD.divClass "modal-dialog" $ RD.divClass "modal-content" $ do
     dismiss <- header
     bodyRes <- RD.divClass "modal-body" body
     (cancel, ok) <- footer bodyRes
-    let resE1 = R.tag (R.current bodyRes) ok -- changed
+    let resE1 = R.tag (R.current bodyRes) ok
         closem1 = R.leftmost
                   [dismiss, cancel, () <$ R.ffilter isRight resE1]
-    return (resE1, closem1)
+    return (R.updated bodyRes, resE1, closem1)
 
 hiddenCSS :: M.Map T.Text T.Text
 hiddenCSS  = "style" RD.=: "display: none !important"
