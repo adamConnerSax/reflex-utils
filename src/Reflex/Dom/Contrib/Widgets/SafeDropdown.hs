@@ -22,6 +22,7 @@ module Reflex.Dom.Contrib.Widgets.SafeDropdown
   ) where
 
 import Reflex.Dom.Contrib.DynamicUtils (dynAsEv)
+import Reflex.Dom.Contrib.EventUtils (fanBool)
 import Reflex.Dom.Contrib.Widgets.WidgetResult (WrappedWidgetResult, unsafeBuildWrappedWidgetResult)
 
 import Reflex (Dynamic,Event,Reflex,never,attachWithMaybe,leftmost)
@@ -51,17 +52,22 @@ data SafeDropdownConfig t k
 instance Reflex t => Default (SafeDropdownConfig t k) where
   def = SafeDropdownConfig never (constDyn M.empty)
 
-
 -- | Safe dropdown widget
 -- 1. Needs no default, though you can supply one.  Otherwise supply Nothing.  If supplied, it's checked to see if in map and ignored if not.
--- 2. Checks if value set by setValue is present.  Ignores if not. Forwards to internal dropdown otherwise.
--- 3. Checks if current selection has been removed. Switches to something else (if possible) in that case.
--- 4. Checks if current default has been removed and switches to something else (if possible) in that case. 
+-- 2. Checks if value set by setValue is present.  Ignores if not.
+-- 3. Checks if current selection has been removed and switches to something else if input map is non-empty.
+-- 4. Checks if current default has been removed and switches, via widgetHold, to something else if input map is non-empty.
 -- 5. Disappears from DOM (via widgetHold) if map of options is empty.  Reappears when there are options.
--- 6. value and change are both Maybe to account for the possibility of an empty set of options.
--- Change could still be k but then not fire when options become empty?
-safeDropdown :: forall k t m. (RD.DomBuilder t m, MonadFix m, R.MonadHold t m, RD.PostBuild t m, Ord k)
-  => Maybe k -> Dynamic t (M.Map k T.Text) -> SafeDropdownConfig t k ->m (SafeDropdown t k)
+-- 6. Value and change are both Maybe to account for the possibility of an empty set of options.
+-- Change could still be k but then not fire when options become empty? Then the event doesn't indicate the transition.
+safeDropdown :: forall k t m. ( RD.DomBuilder t m
+                              , MonadFix m
+                              , R.MonadHold t m
+                              , RD.PostBuild t m, Ord k)
+  => Maybe k
+  -> Dynamic t (M.Map k T.Text)
+  -> SafeDropdownConfig t k
+  -> m (SafeDropdown t k)
 safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   postbuild <- RD.getPostBuild
   optionsNullEv <- R.holdUniqDyn (M.null <$> optionsDyn) >>= dynAsEv
@@ -93,12 +99,20 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   return $ SafeDropdown (join $ _safeDropdown_value <$> safeDyn) (R.switch . current $ _safeDropdown_change <$> safeDyn)
 
 
+
+-- | Safe dropdown, applied to a map of where the dropdown labels are a function of the keys and the values we want
+-- to select are the values of the map.  This requires a function for getting a text representation of the map keys.
+-- NB: THe set event is if type l, the input map key, but the return values are of type v, the map value.
 safeDropdownOfLabelKeyedValue :: forall m t v l. (RD.DomBuilder t m
                                                  , MonadFix m
                                                  , R.MonadHold t m
                                                  , RD.PostBuild t m
                                                  , Ord l)
-  => (l -> T.Text) -> Maybe l -> Dynamic t (M.Map l v) -> SafeDropdownConfig t l -> m (SafeDropdown t v)
+  => (l -> T.Text)
+  -> Maybe l
+  -> Dynamic t (M.Map l v)
+  -> SafeDropdownConfig t l
+  -> m (SafeDropdown t v)
 safeDropdownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
   let sdOptionsDyn = M.mapWithKey (\l _ -> labelToText l) <$> optionsDyn
       maybeLookup opts ml = ml >>= flip M.lookup opts
@@ -107,22 +121,15 @@ safeDropdownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
   SafeDropdown valDyn changeEv <- safeDropdown l0m sdOptionsDyn cfg -- SafeDropdown t l
   return $ SafeDropdown (mapDynamic valDyn) (mapEvent changeEv)
 
-boolToEither :: Bool -> Either () ()
-boolToEither True = Right ()
-boolToEither False = Left ()
 
--- NB: right event fires if true, left if false--(FalseEv,TrueEv)--which fits Either but is not intuitive, at least to me
-fanBool :: Reflex t => Event t Bool -> (Event t (), Event t ())
-fanBool = R.fanEither . fmap boolToEither  
+-- this is safe because of how SafeDropDown is built. 
+safeDropdownWrappedWidgetResult :: Reflex t => SafeDropdown t k -> WrappedWidgetResult t Maybe k
+safeDropdownWrappedWidgetResult sdd = unsafeBuildWrappedWidgetResult (_safeDropdown_value sdd) (_safeDropdown_change sdd) 
 
 concat <$> mapM makeLenses
   [ ''SafeDropdown
   , ''SafeDropdownConfig
   ]
-
--- this is okay because of how SafeDropDown is built. 
-safeDropdownWrappedWidgetResult :: Reflex t => SafeDropdown t k -> WrappedWidgetResult t Maybe k
-safeDropdownWrappedWidgetResult sdd = unsafeBuildWrappedWidgetResult (_safeDropdown_value sdd) (_safeDropdown_change sdd) 
 
 instance RD.HasAttributes (SafeDropdownConfig t k) where
   type Attrs (SafeDropdownConfig t k) = Dynamic t (M.Map T.Text T.Text)
