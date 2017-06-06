@@ -72,12 +72,21 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
       keySetSafeEv =
         let checkKey m k = if M.member k m then Just k else Nothing
         in attachWithMaybe checkKey (current optionsDyn) keySetEv
+        
       dropdownWidget k0 = mdo
-        let newK0 curK m = if M.member curK m then Nothing else headMay $ M.keys m
-            newK0Ev = attachWithMaybe newK0 (current $ RD._dropdown_value dd) (updated optionsDyn)
-            ddConfig = DropdownConfig (leftmost [newK0Ev, keySetSafeEv]) attrsDyn  
-        dd <- dropdown k0 optionsDyn ddConfig
-        return $ SafeDropdown (Just <$> RD._dropdown_value dd) (Just <$> RD._dropdown_change dd)
+        let newK curK m = if M.member curK m then Nothing else headMay $ M.keys m
+            newKEv = attachWithMaybe newK (current ddVal) (updated optionsDyn)
+            k0removed oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m
+            k0removedEv = attachWithMaybe k0removed (current k0Dyn) (updated optionsDyn)
+            ddConfig = DropdownConfig (leftmost [newKEv, keySetSafeEv]) attrsDyn  
+        k0Dyn <- R.holdDyn k0 k0removedEv
+        ddDyn <- RD.widgetHold (dropdown k0 optionsDyn ddConfig) $ (\x->dropdown x optionsDyn ddConfig) <$> k0removedEv
+        let ddVal = join $ RD._dropdown_value <$> ddDyn
+        ddChangeEvEv <- dynAsEv $ RD._dropdown_change <$> ddDyn
+        ddChangeEvBeh <- R.hold R.never ddChangeEvEv
+        let ddChangeEv = R.switch ddChangeEvBeh
+        return $ SafeDropdown (Just <$> ddVal) (Just <$> ddChangeEv)
+        
       newWidgetEv = leftmost [noOptionsWidgetEv, dropdownWidget <$> defaultKeyNewOptionsEv]
   safeDyn <- widgetHold (noOptionsWidget never) newWidgetEv -- Dynamic t (SafeDropdown t k)
   return $ SafeDropdown (join $ _safeDropdown_value <$> safeDyn) (R.switch . current $ _safeDropdown_change <$> safeDyn)
