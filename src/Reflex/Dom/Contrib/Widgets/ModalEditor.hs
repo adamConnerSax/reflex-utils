@@ -152,18 +152,18 @@ modalEditorEither :: forall t m e a. ( RD.DomBuilder t m
   -> m (ModalEditor t e a)
 modalEditorEither editW aEDyn config = mdo
   let newInputEv = R.updated aEDyn
-      (widgetInputEv, closeOnChangeEv) = case config ^. modalEditor_onChange of
-        _ {- Close -}   -> (e2m <$> newInputEv, () <$ newInputEv)
---        UpdateIfRight -> (e2m <$> newInputEv, R.fmapMaybe (either (const $ Just ()) (const Nothing)) newInputEv)
---        UpdateOrDefault a -> (either (const $ Just a) Just <$> newInputEv, R.never)
+      (closeOnChangeEv, switchToDefaultEv) = case config ^. modalEditor_onChange of
+        Close             -> (() <$ newInputEv, R.never)
+        UpdateIfRight     -> (R.fmapMaybe (either (const $ Just ()) (const Nothing)) newInputEv, R.never)
+        UpdateOrDefault a -> (R.never, R.fmapMaybe (either (const $ Just $ Right a) (const Nothing)) newInputEv)
       header = maybe (return R.never) (\f -> L.flexRow $ dynamicButton $ f . e2m <$> newAEDyn) $ (config ^. modalEditor_XButton)
       footer eaDyn = L.flexRow $ do
         okEv <- L.flexItem $ dynamicButton ((config ^. modalEditor_OkButton) . e2m <$> eaDyn)
         cancelEv' <- L.flexItem $ dynamicButton ((config ^. modalEditor_CancelButton) . e2m <$> eaDyn)
         return (cancelEv', okEv)
       showAttrs hideEv showEv = R.holdDyn visibleCSS $ R.leftmost [hiddenCSS <$ hideEv, visibleCSS <$ showEv]
-      eaAndCloseW input = mdo -- returns m (Event t (Either e a), Event t ())
-        let body = L.flexRow $ editW $ (R.constDyn $ e2m input) -- we freeze the input on open
+      eaAndCloseW = mdo -- returns m (Event t (Either e a), Event t ())
+        let body = L.flexRow $ editW $ e2m <$> newAEDyn
             modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
             closeOnOkEv okEv = if (config ^. modalEditor_closeOnOk) then () <$ okEv else R.never
             closeEv = R.leftmost [ cancelEv
@@ -177,11 +177,10 @@ modalEditorEither editW aEDyn config = mdo
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
   openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
   openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
-  let openEv = R.tag (R.current newAEDyn) openButtonEv
-  evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (eaAndCloseW <$> openEv)
+  evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (eaAndCloseW <$ openButtonEv)
   let newEaEv = R.switch (fst <$> evOfEvs)
       modalCloseEv = R.switch (snd <$> evOfEvs)
-  newAEDyn <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [newInputEv, newEaEv]
+  newAEDyn <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [switchToDefaultEv, newInputEv, newEaEv]
   return $ ModalEditor newAEDyn (R.fmapMaybe e2m newEaEv)
 
 -- NB:  This is only in (Either e a) rather than a because of the holdDyn, which needs a starting point.
