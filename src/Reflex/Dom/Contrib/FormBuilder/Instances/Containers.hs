@@ -85,6 +85,7 @@ import           Control.Arrow ((&&&))
 -- imports only to make instances
 import qualified Data.List as L
 import qualified Data.Map as M
+import           Data.Bool (bool)
 import qualified Data.IntMap as IM
 import qualified Data.Sequence as Seq
 import qualified Data.Set as S
@@ -345,7 +346,6 @@ buildEqHashSet = buildAdjustableContainer hashSetEqML setEqWidgets
 instance (FormInstanceC t m, VFormBuilderC t m a, Hashable a, Eq a)=>FormBuilder t m (HS.HashSet a) where
   buildForm = buildEqHashSet
 
-  
 -- the various container builder components
 type BuildF t m a    = FormValidator a->Maybe FieldName->DynMaybe t a->FRW t m a
 type BuildForm t m a = FormValidator a->Maybe FieldName->DynMaybe t a->Form t m a
@@ -360,7 +360,6 @@ data MapLike f g v = MapLike { toMap::f v->g v
 data MapElemWidgets g t m k v = MapElemWidgets { elemW :: ElemWidget t m k v
                                                , newOneWF :: R.Dynamic t (g (FValidation v)) -> FRW t m (k,v)
                                                }
-
 
 instance (B.Validatable FValidation a, B.Validatable FValidation b)=>B.Validatable FValidation (a,b) where
   validator (a,b) = (,) <$> B.validator a <*> B.validator b
@@ -394,8 +393,6 @@ buildLBDelete (MapLike to from _) (MapElemWidgets eW _) mFN dmfa = makeForm $ do
   let eW' = editAndDeleteElemWidget eW (R.constDyn True)
       mapDyn0 = fmap maybeMapToMap . getCompose $ to <$> dmfa
   fmap from <$> buildLBEMapLWK' eW' mFN mapDyn0      
-
-
 
 --NB: I see why tagPromtlyDyn is required for pairWidgetEv (so when the new one is drawn, it sees the updated map) but not quite why
 -- that doesn't lead to a cycle.
@@ -507,8 +504,10 @@ buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
   (editedMapEv, deleteDiffEv) <- fRow $ do 
     (maybeSelDyn, editedMapEv') <- fRow $ selectWidget labelStrategy eW dgvForDD
 
-  -- we should make the button inactive if the container is empty
-    deleteDiffEv' <- fItem $ do
+  -- we should make the button invisible if the container is empty
+    let isEmptyContainerDyn = LHF.lhfMapNull <$> widgetResultToDynamic gvWR
+        delButtonAttrs = bool visibleCSS hiddenCSS <$> isEmptyContainerDyn
+    deleteDiffEv' <- fItem $ RD.elDynAttr "div" delButtonAttrs $ do
       deleteButtonEv <- fCol $ buttonNoSubmit' "Delete"
       let deleteEv = R.fmapMaybe id $ R.tag (R.current maybeSelDyn) deleteButtonEv  -- Event t k, only fires if there is a current selection
       return $ flip lhfMapSingleton Nothing <$> deleteEv -- Event t (k, Nothing)

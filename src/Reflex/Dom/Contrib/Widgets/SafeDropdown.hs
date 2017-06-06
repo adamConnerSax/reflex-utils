@@ -56,7 +56,7 @@ instance Reflex t => Default (SafeDropdownConfig t k) where
 -- 1. Needs no default, though you can supply one.  Otherwise supply Nothing.  If supplied, it's checked to see if in map and ignored if not.
 -- 2. Checks if value set by setValue is present.  Ignores if not. Forwards to internal dropdown otherwise.
 -- 3. Checks if current selection has been removed. Switches to something else (if possible) in that case.
--- 4. Checks if current default has been removed and switches to something else in that case. 
+-- 4. Checks if current default has been removed and switches to something else (if possible) in that case. 
 -- 5. Disappears from DOM (via widgetHold) if map of options is empty.  Reappears when there are options.
 -- 6. value and change are both Maybe to account for the possibility of an empty set of options.
 -- Change could still be k but then not fire when options become empty?
