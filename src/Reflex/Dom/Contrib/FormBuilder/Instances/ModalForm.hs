@@ -50,7 +50,7 @@ instance ( HasModalFormConfig t a
          ) => FormBuilder t m (ModalForm a) where
   buildForm vMFA mFN dmMF  =
     let va = fmap unModalForm . vMFA . ModalForm
-        modalWidget = fmap (widgetResultToDynamic . fmap avToEither . getCompose) . unF . buildForm va mFN . Compose  -- FIXME
+        modalWidget = fmap (fmap avToEither . getCompose) . unF . buildForm va mFN . Compose  -- FIXME
         aEDyn = maybeToEitherFE <$> (getCompose $ unModalForm <$> dmMF)
     in makeForm $ fmap ModalForm . Compose . fmap eitherToAV . getCompose . modalEditor_WidgetResult <$> modalEditorEither modalWidget aEDyn modalConfig
 
@@ -64,7 +64,7 @@ modalizeWidget ::  ( RD.DomBuilder t m
                    , RD.MonadHold t m
                    ) => ModalEditorConfig t a -> (DynMaybe t a -> m (FormResult t a)) -> DynMaybe t a -> m (FormResult t a)
 modalizeWidget cfg w dma =
-  let matchedWidget = fmap (widgetResultToDynamic . fmap avToEither . getCompose) . w . Compose
+  let matchedWidget = fmap (fmap avToEither . getCompose) . w . Compose
       matchedInput = maybeToEitherFE <$> getCompose dma
       matchOutput = transformWrappedWidgetResult eitherToAV . modalEditor_WidgetResult
   in matchOutput <$> modalEditorEither matchedWidget matchedInput cfg

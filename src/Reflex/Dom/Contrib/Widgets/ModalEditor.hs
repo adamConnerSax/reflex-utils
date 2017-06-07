@@ -56,7 +56,10 @@ import qualified Reflex.Dom.Contrib.Layout.FlexLayout    as L
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult,
                                                           WrappedWidgetResult,
-                                                          unsafeBuildWrappedWidgetResult)
+                                                          currentWidgetResult,
+                                                          unsafeBuildWrappedWidgetResult,
+                                                          updatedWidgetResult,
+                                                          widgetResultToDynamic)
 
 import           Control.Lens                            (makeLenses, view,
                                                           (%~), (&), (^.))
@@ -151,7 +154,7 @@ modalEditorEither :: forall t m e a. ( RD.DomBuilder t m
                                      , MonadFix m
                                      , RD.MonadHold t m
                                      )
-  => (Dynamic t (Maybe a) -> m (Dynamic t (Either e a))) -- a widget for editing an a. returns Left on invalid value.
+  => (Dynamic t (Maybe a) -> m (WidgetResult t (Either e a))) -- a widget for editing an a. returns Left on invalid value.
   -> Dynamic t (Either e a)
   -> ModalEditorConfig t a
   -> m (ModalEditor t e a)
@@ -201,7 +204,7 @@ modalEditor :: forall t m a. ( RD.DomBuilder t m
                              , MonadFix m
                              , RD.MonadHold t m
                              )
-  => (Dynamic t (Maybe a) -> m (Dynamic t (Maybe a))) -- a widget for editing an a. returns Left on invalid value
+  => (Dynamic t (Maybe a) -> m (WidgetResult t (Maybe a))) -- a widget for editing an a. returns Left on invalid value
   -> Dynamic t (Maybe a)
   -> ModalEditorConfig t a
   -> m (ModalEditor t () a)
@@ -225,17 +228,17 @@ mkModalBodyUpdateAlways
     -> (R.Dynamic t (Either e a) -> m (R.Event t (), R.Event t ()))
     -- ^ Footer widget that takes the current state of the body and returns
     -- a pair of a cancel event and an ok event.
-    -> m (R.Dynamic t (Either e a)) -- should this be WidgetResult so we can pass through only updates?
+    -> m (WidgetResult t (Either e a))
     -> m (R.Event t (Either e a), R.Event t (Either e a), R.Event t ())
 mkModalBodyUpdateAlways header footer body = do
   RD.divClass "modal-dialog" $ RD.divClass "modal-content" $ do
     dismiss <- header
     bodyRes <- RD.divClass "modal-body" body
-    (cancel, ok) <- footer bodyRes
-    let resE1 = R.tag (R.current bodyRes) ok
+    (cancel, ok) <- footer $ widgetResultToDynamic bodyRes
+    let resE1 = R.tag (currentWidgetResult bodyRes) ok
         closem1 = R.leftmost
                   [dismiss, cancel, () <$ R.ffilter isRight resE1]
-    return (R.updated bodyRes, resE1, closem1)
+    return (updatedWidgetResult bodyRes, resE1, closem1)
 
 hiddenCSS :: M.Map T.Text T.Text
 hiddenCSS  = "style" RD.=: "display: none !important"

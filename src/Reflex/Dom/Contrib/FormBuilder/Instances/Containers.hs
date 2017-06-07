@@ -451,7 +451,7 @@ newItemWidget :: ContainerForm t m g k v
   -> R.Dynamic t (g (FValidation v))
   -> FR t m (R.Event t (g (Maybe v)))
 newItemWidget editPairW mapDyn = mdo
-  let modalEditW = const $ widgetResultToDynamic . fmap avToEither . getCompose <$> editPairW mapDyn
+  let modalEditW = const $ fmap avToEither . getCompose <$> editPairW mapDyn
       blankInput = R.constDyn $ Left [FNothing]
       pairEvToDiffEv pairEv = fmap Just . uncurry lhfMapSingleton <$> pairEv
   newPairEv <- MW.modalEditor_change <$> MW.modalEditorEither modalEditW blankInput newItemEditorConfig
