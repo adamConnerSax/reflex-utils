@@ -16,6 +16,7 @@ module Reflex.Dom.Contrib.Widgets.WidgetResult
   , dynamicWidgetResultToWidgetResult
   , dynamicToWidgetResult
   , buildReadOnlyWidgetResult
+  , conservativeRetrofitWidgetResult
   , unsafeBuildWidgetResult
   , buildWrappedWidgetResult
   , dynamicToWrappedWidgetResult
@@ -80,6 +81,16 @@ buildReadOnlyWidgetResult d = WidgetResult d never
 
 constWidgetResult :: Reflex t => a -> WidgetResult t a
 constWidgetResult = buildReadOnlyWidgetResult . constDyn
+
+-- this will make any Dynamic t a -> m (Dynamic t b) widget into one which returns a WidgetResult.  But it can't know what's happening inside so
+-- it just assumes that any update coming out in the same frame as the input is updated is a result of that and
+-- doesn't include that in the "change" piece.  This could be wrong if, coincidentally, the widget changes something in the same frame as
+-- the input is updated.
+conservativeRetrofitWidgetResult :: (Reflex t, MonadHold t m) => (Dynamic t a -> m (Dynamic t b)) -> Dynamic t a -> m (WidgetResult t b)
+conservativeRetrofitWidgetResult w da = do
+  db <- w da
+  let filteredEvOut = leftWhenNotRight (updated db) (updated da)
+  return $ unsafeBuildWidgetResult db filteredEvOut
 
 -- this should only be used to retrofit a dynamic/event pair which already satisfy the
 unsafeBuildWidgetResult :: Reflex t => Dynamic t a -> Event t a -> WidgetResult t a

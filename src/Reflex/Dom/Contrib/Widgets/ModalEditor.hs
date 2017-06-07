@@ -17,6 +17,7 @@ module Reflex.Dom.Contrib.Widgets.ModalEditor
   , modalEditor_change
   , modalEditor_WidgetResult
   , OnExternalChange (..)
+  , UpdateOutput (..)
   , ButtonConfig (..)
   , button_label
   , button_attributes
@@ -25,6 +26,7 @@ module Reflex.Dom.Contrib.Widgets.ModalEditor
   , ModalEditorConfig (..)
   , modalEditor_attributes
   , modalEditor_onChange
+  , modalEditor_updateOutput
   , modalEditor_closeOnOk
   , modalEditor_openButton
   , modalEditor_XButton
