@@ -224,6 +224,10 @@ modalEditor editW aMDyn config = modalEditorEither (fmap (fmap m2e) . editW) (m2
 -- a close icon and the footer has a cancel and save button.
 -- this version, copied From reflex-dom-contrib and modified.
 -- passes through all updates on its output so it can be wrapped to require "ok" or not.
+-- It has 3 event outputs:
+-- 1. all updates that come from the body and
+-- 2. a tagged current value of the body on a press of "OK" and
+-- 3. an event to signal that a cancel or dismiss button has been pressed.
 mkModalBodyUpdateAlways
     :: ( RD.DomBuilder t m
        , MonadWidgetExtraC t m
