@@ -52,6 +52,7 @@ import           Reflex.Dynamic                          (constDyn, current,
                                                           updated)
 
 import           Reflex.Dom.Contrib.DynamicUtils         (dynAsEv)
+import           Reflex.Dom.Contrib.EventUtils           (leftWhenNotRight)
 import qualified Reflex.Dom.Contrib.Layout.FlexLayout    as L
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult,
@@ -164,18 +165,18 @@ modalEditorEither editW aEDyn config = mdo
         Close             -> (() <$ newInputEv, R.never)
         UpdateIfRight     -> (R.fmapMaybe (either (const $ Just ()) (const Nothing)) newInputEv, R.never)
         UpdateOrDefault a -> (R.never, R.fmapMaybe (either (const $ Just $ Right a) (const Nothing)) newInputEv)
-      header = maybe (return R.never) (\f -> L.flexRow $ dynamicButton $ f . e2m <$> newAEDyn) $ (config ^. modalEditor_XButton)
+      header = maybe (return R.never) (\f -> L.flexRow $ dynamicButton $ f . e2m <$> newAEForBody) $ (config ^. modalEditor_XButton)
       footer eaDyn = L.flexRow $ do
         okEv <- L.flexItem $ dynamicButton ((config ^. modalEditor_OkButton) . e2m <$> eaDyn)
         cancelEv' <- L.flexItem $ dynamicButton ((config ^. modalEditor_CancelButton) . e2m <$> eaDyn)
         return (cancelEv', okEv)
       showAttrs hideEv showEv = R.holdDyn visibleCSS $ R.leftmost [hiddenCSS <$ hideEv, visibleCSS <$ showEv]
       eaAndCloseW inputWhenOpened = mdo -- returns m (Event t (Either e a), Event t ())
-        let body = L.flexRow $ editW $ e2m <$> newAEDyn
+        let body = L.flexRow $ editW $ e2m <$> newAEForBody
             modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
-            closeOnOkEv okEv = if (config ^. modalEditor_closeOnOk) then () <$ okEv else R.never
-            closeEv = R.leftmost [ cancelEv
-                                 , closeOnChangeEv
+            closeOnOkEv okEv = if (config ^. modalEditor_closeOnOk) then okEv else R.never
+            closeEv = R.leftmost [ inputWhenOpened <$ cancelEv
+                                 , inputWhenOpened <$ closeOnChangeEv
                                  , closeOnOkEv okAEEv
                                  ]
         modalVisAttrs <- showAttrs closeEv R.never -- we don't need to reshow because we build the widget anew each time the button is pressed.
@@ -184,19 +185,22 @@ modalEditorEither editW aEDyn config = mdo
                            Always -> newAEEv'
                            OnOk   -> okAEEv
         let retAEEv = R.leftmost [updateAEEv, inputWhenOpened <$ cancelEv]
-        return $ (retAEEv, closeEv)
+        return $ (retAEEv, inputWhenOpened <$ closeEv)
   let openButtonConfigOrig = (config ^. modalEditor_openButton) . e2m <$> newAEDyn
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
   openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
   openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
-  let openEv = R.tag (current newAEDyn) openButtonEv
+  let openEv = R.tag (current newAEForBody) openButtonEv
   evOfEvs <- R.current <$> RD.widgetHold (return (R.never, R.never)) (eaAndCloseW <$> openEv)
   let newEaEv = R.switch (fst <$> evOfEvs)
       modalCloseEv = R.switch (snd <$> evOfEvs)
-  newAEDyn <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [switchToDefaultEv, newInputEv, newEaEv]
+  newAEDyn <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [switchToDefaultEv, newInputEv, newEaEv] -- auth value
+  newAEForBody <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [ switchToDefaultEv
+                                                                           , newInputEv
+                                                                           , modalCloseEv
+                                                                           ]
   return $ ModalEditor newAEDyn (R.fmapMaybe e2m newEaEv)
 
--- NB:  This is only in (Either e a) rather than a because of the holdDyn, which needs a starting point.
 
 modalEditor :: forall t m a. ( RD.DomBuilder t m
                              , MonadWidgetExtraC t m
@@ -236,8 +240,7 @@ mkModalBodyUpdateAlways header footer body = do
     bodyRes <- RD.divClass "modal-body" body
     (cancel, ok) <- footer $ widgetResultToDynamic bodyRes
     let resE1 = R.tag (currentWidgetResult bodyRes) ok
-        closem1 = R.leftmost
-                  [dismiss, cancel, () <$ R.ffilter isRight resE1]
+        closem1 = R.leftmost [dismiss, cancel, () <$ R.ffilter isRight resE1]
     return (updatedWidgetResult bodyRes, resE1, closem1)
 
 hiddenCSS :: M.Map T.Text T.Text
