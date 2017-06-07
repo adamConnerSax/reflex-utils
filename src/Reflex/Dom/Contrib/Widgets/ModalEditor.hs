@@ -185,7 +185,7 @@ modalEditorEither editW aEDyn config = mdo
                            Always -> newAEEv'
                            OnOk   -> okAEEv
         let retAEEv = R.leftmost [updateAEEv, inputWhenOpened <$ cancelEv]
-        return $ (retAEEv, inputWhenOpened <$ closeEv)
+        return $ (retAEEv, closeEv)
   let openButtonConfigOrig = (config ^. modalEditor_openButton) . e2m <$> newAEDyn
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
   openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
@@ -196,7 +196,7 @@ modalEditorEither editW aEDyn config = mdo
       modalCloseEv = R.switch (snd <$> evOfEvs)
   newAEDyn <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [switchToDefaultEv, newInputEv, newEaEv] -- auth value
   newAEForBody <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [ switchToDefaultEv
-                                                                           , newInputEv
+                                                                           , newInputEv -- this order matters since modalClose will carry inputWhenOpened
                                                                            , modalCloseEv
                                                                            ]
   return $ ModalEditor newAEDyn (R.fmapMaybe e2m newEaEv)
