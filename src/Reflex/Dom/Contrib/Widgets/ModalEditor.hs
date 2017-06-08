@@ -22,7 +22,8 @@ module Reflex.Dom.Contrib.Widgets.ModalEditor
   , button_label
   , button_attributes
   , button_iconClass
-  , disableIfNothing
+  , removeIfError
+  , disableAndDisplayIfError
   , ModalEditorConfig (..)
   , modalEditor_attributes
   , modalEditor_onChange
@@ -112,21 +113,25 @@ data ButtonConfig = ButtonConfig { _button_label      :: T.Text
 makeLenses ''ButtonConfig
 
 -- widget could go in here but has no sensible default except "return"
-data ModalEditorConfig t a = ModalEditorConfig { _modalEditor_attributes   :: Dynamic t (M.Map T.Text T.Text)
-                                               , _modalEditor_onChange     :: OnExternalChange a
-                                               , _modalEditor_updateOutput :: UpdateOutput
-                                               , _modalEditor_closeOnOk    :: Bool
-                                               , _modalEditor_openButton   :: Maybe a -> ButtonConfig
-                                               , _modalEditor_XButton      :: Maybe (Maybe a -> ButtonConfig)
-                                               , _modalEditor_OkButton     :: Maybe a -> ButtonConfig
-                                               , _modalEditor_CancelButton :: Maybe a -> ButtonConfig
-                                               }
+data ModalEditorConfig t e a = ModalEditorConfig { _modalEditor_attributes   :: Dynamic t (M.Map T.Text T.Text)
+                                                 , _modalEditor_onChange     :: OnExternalChange a
+                                                 , _modalEditor_updateOutput :: UpdateOutput
+                                                 , _modalEditor_closeOnOk    :: Bool
+                                                 , _modalEditor_openButton   :: Either e a -> ButtonConfig
+                                                 , _modalEditor_XButton      :: Maybe (Either e a -> ButtonConfig)
+                                                 , _modalEditor_OkButton     :: Either e a -> ButtonConfig
+                                                 , _modalEditor_CancelButton :: Either e a -> ButtonConfig
+                                                 }
 
 makeLenses ''ModalEditorConfig
 
-disableIfNothing :: Maybe a -> ButtonConfig -> ButtonConfig
-disableIfNothing Nothing (ButtonConfig l attrs ic) = ButtonConfig l (M.union hiddenCSS attrs) ic
-disableIfNothing _ x = x
+removeIfError :: Either e a -> ButtonConfig -> ButtonConfig
+removeIfError (Left _) (ButtonConfig l attrs ic) = ButtonConfig l (M.union hiddenCSS attrs) ic
+removeIfError _ x = x
+
+disableAndDisplayIfError :: (e -> T.Text) -> Either e a -> ButtonConfig -> ButtonConfig
+disableAndDisplayIfError f (Left e) (ButtonConfig l attrs ic) = ButtonConfig (f e) (M.union disableCSS attrs) Nothing
+disableAndDisplayIfError _ _ x = x
 
 dynamicButton :: (RD.DomBuilder t m, RD.PostBuild t m) => Dynamic t ButtonConfig -> m (RD.Event t ())
 dynamicButton cfg = do
@@ -137,7 +142,7 @@ dynamicButton cfg = do
     RD.dynText $ view button_label <$> cfg
 
 
-instance Reflex t => Default (ModalEditorConfig t a) where
+instance Reflex t => Default (ModalEditorConfig t e a) where
   def = ModalEditorConfig
         (constDyn M.empty)
         Close -- close on change to input dynamic
@@ -160,7 +165,7 @@ modalEditorEither :: forall t m e a. ( RD.DomBuilder t m
                                      )
   => (Dynamic t (Maybe a) -> m (WidgetResult t (Either e a))) -- a widget for editing an a. returns Left on invalid value.
   -> Dynamic t (Either e a)
-  -> ModalEditorConfig t a
+  -> ModalEditorConfig t e a
   -> m (ModalEditor t e a)
 modalEditorEither editW aEDyn config = do
   let newInputEv = R.updated aEDyn
@@ -168,10 +173,10 @@ modalEditorEither editW aEDyn config = do
         Close             -> (newInputEv, R.never)
         UpdateIfRight     -> (R.fmapMaybe (either (const Nothing) (Just . Right)) newInputEv, R.never)
         UpdateOrDefault a -> (R.never, R.fmapMaybe (either (const $ Just $ Right a) (const Nothing)) newInputEv)
-      header eaDyn = maybe (return R.never) (\f -> L.flexFill L.LayoutLeft $ dynamicButton $ f . e2m <$> eaDyn) $ (config ^. modalEditor_XButton)
+      header eaDyn = maybe (return R.never) (\f -> L.flexFill L.LayoutLeft $ dynamicButton $ f <$> eaDyn) $ (config ^. modalEditor_XButton)
       footer eaDyn = L.flexRow $ do
-        okEv <- L.flexFill L.LayoutRight $ dynamicButton ((config ^. modalEditor_OkButton) . e2m <$> eaDyn)
-        cancelEv' <- L.flexFill L.LayoutLeft $ dynamicButton ((config ^. modalEditor_CancelButton) . e2m <$> eaDyn)
+        okEv <- L.flexFill L.LayoutRight $ dynamicButton ((config ^. modalEditor_OkButton) <$> eaDyn)
+        cancelEv' <- L.flexFill L.LayoutLeft $ dynamicButton ((config ^. modalEditor_CancelButton) <$> eaDyn)
         return (cancelEv', okEv)
       showAttrs hideEv showEv = R.holdDyn visibleCSS $ R.leftmost [hiddenCSS <$ hideEv, visibleCSS <$ showEv]
       eaAndCloseW eaDyn inputWhenOpened = do
@@ -190,7 +195,7 @@ modalEditorEither editW aEDyn config = do
             updateBodyAEEv = R.leftmost [okAEEv, closingValueEv] -- in case we don't close on okay
             retAEEv = R.leftmost [updateAEEv, inputWhenOpened <$ cancelEv]
         return $ InnerModal retAEEv (() <$ closingValueEv) updateBodyAEEv
-  rec let openButtonConfigOrig = (config ^. modalEditor_openButton) . e2m <$> aeForBody
+  rec let openButtonConfigOrig = (config ^. modalEditor_openButton) <$> aeForBody
           openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
       openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
       openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
@@ -215,7 +220,7 @@ modalEditor :: forall t m a. ( RD.DomBuilder t m
                              )
   => (Dynamic t (Maybe a) -> m (WidgetResult t (Maybe a))) -- a widget for editing an a. returns Left on invalid value
   -> Dynamic t (Maybe a)
-  -> ModalEditorConfig t a
+  -> ModalEditorConfig t () a
   -> m (ModalEditor t () a)
 modalEditor editW aMDyn config = modalEditorEither (fmap (fmap m2e) . editW) (m2e <$> aMDyn) config
 
@@ -258,4 +263,6 @@ hiddenCSS  = "style" RD.=: "display: none !important"
 visibleCSS :: M.Map T.Text T.Text
 visibleCSS = "style" RD.=: "display: inline"
 
+disableCSS :: M.Map T.Text T.Text
+disableCSS = "disabled" RD.=: ""
 

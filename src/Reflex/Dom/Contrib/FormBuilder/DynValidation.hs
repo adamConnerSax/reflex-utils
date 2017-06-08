@@ -1,6 +1,8 @@
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 module Reflex.Dom.Contrib.FormBuilder.DynValidation
  (
    module Reflex.Dom.Contrib.FormBuilder.DynValidation
@@ -8,14 +10,18 @@ module Reflex.Dom.Contrib.FormBuilder.DynValidation
  )
 where
 
-import           Control.Monad     (join)
-import           Data.Text         (Text)
-import           Data.Validation   (AccValidation (..))
-import           DataBuilder.Types (MonadLike (..), MaybeLike(..))
-import           Reflex            (Dynamic, Event,Reflex, constDyn, zipDynWith)
-import           Reflex.Dom        (PostBuild)
-import           GHC.Generics      (Generic)
-import           Data.Functor.Compose (Compose(Compose,getCompose))
+import           Control.Monad                   (join)
+import           Data.Functor.Compose            (Compose (Compose, getCompose))
+import           Data.Monoid                     ((<>))
+import           Data.Text                       (Text)
+import qualified Data.Text                       as T
+import           Data.Validation                 (AccValidation (..))
+import           DataBuilder.Types               (MaybeLike (..),
+                                                  MonadLike (..))
+import           GHC.Generics                    (Generic)
+import           Reflex                          (Dynamic, Event, Reflex,
+                                                  constDyn, zipDynWith)
+import           Reflex.Dom                      (PostBuild)
 
 import           Reflex.Dom.Contrib.DynamicUtils (dynamicMaybeAsEv)
 
@@ -23,7 +29,7 @@ import           Reflex.Dom.Contrib.DynamicUtils (dynamicMaybeAsEv)
 type DynMaybe t = Compose (Dynamic t) Maybe
 
 constDynMaybe :: Reflex t => Maybe a -> DynMaybe t a
-constDynMaybe = Compose . constDyn 
+constDynMaybe = Compose . constDyn
 
 justDynMaybe :: Reflex t => Dynamic t a -> DynMaybe t a
 justDynMaybe = Compose . fmap Just
@@ -31,9 +37,20 @@ justDynMaybe = Compose . fmap Just
 dynMaybeAsEv :: PostBuild t m => DynMaybe t a -> m (Event t a)
 dynMaybeAsEv = dynamicMaybeAsEv . getCompose
 
+mapDynMaybe :: Reflex t => (a -> Maybe b) -> DynMaybe t a -> DynMaybe t b
+mapDynMaybe f = Compose . fmap (>>= f) . getCompose
+
 data FormError  = FNothing | FNoParse Text | FInvalid Text deriving (Show,Eq,Generic)
 
+printFormError :: FormError -> Text
+printFormError FNothing     = "Data Incomplete?"
+printFormError (FNoParse t) = "Can't parse " <> t
+printFormError (FInvalid t) = t
+
 type FormErrors = [FormError]
+
+printFormErrors :: FormErrors -> Text
+printFormErrors = T.intercalate "; " . fmap printFormError
 
 type FValidation = AccValidation FormErrors
 
@@ -46,7 +63,7 @@ avToMaybe (AccFailure _) = Nothing
 avToMaybe (AccSuccess a) = Just a
 
 maybeToAV :: Maybe a -> AccValidation FormErrors a
-maybeToAV Nothing = AccFailure [FNothing]
+maybeToAV Nothing  = AccFailure [FNothing]
 maybeToAV (Just a) = AccSuccess a
 
 avToEither :: AccValidation e a -> Either e a
@@ -57,7 +74,7 @@ eitherToAV = either AccFailure AccSuccess
 
 mergeAccValidation :: AccValidation e (AccValidation e a) -> AccValidation e a
 mergeAccValidation x = case x of
-  AccSuccess y -> y
+  AccSuccess y    -> y
   AccFailure errs -> AccFailure errs
 
 newtype DynValidation t a = DynValidation { unDynValidation :: Dynamic t (FValidation a) }

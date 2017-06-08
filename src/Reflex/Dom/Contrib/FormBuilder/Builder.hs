@@ -27,6 +27,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , gBuildFormValidated
        , gBuildForm
        , buildFMDWrappedList
+       , makeSubFormData
        , actOnDBWidget
        , joinDynOfFormResults
        , FMDWrapped
@@ -167,6 +168,7 @@ noFormField = makeForm . pure . dynamicToWrappedWidgetResult . fmap maybeToAV . 
 readOnlyFormField :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m a
 readOnlyFormField mFN =  toReadOnly . buildVForm mFN
 
+
 labelForm :: Monad m => T.Text -> T.Text -> T.Text -> CssClasses -> Form t m a -> Form t m a
 labelForm label title placeHolder classes =
   let labelCfg = LabelConfig label ("class" RD.=: toCssString classes)
@@ -182,6 +184,12 @@ buildFMDWrappedList::( RD.DomBuilder t m
                      , B.All2 (B.And (Builder (FR t m) (WidgetResult t) FValidation) (B.Validatable FValidation)) (B.Code a))
   => Maybe FieldName -> DynMaybe t a -> [FMDWrapped t m a]
 buildFMDWrappedList mFN = B.buildMDWrappedList mFN . B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose
+
+makeSubFormData :: (R.Reflex t, Functor m) => Maybe FieldName -> (a -> Bool) -> (DynMaybe t a -> Form t m a) -> B.ConName -> DynMaybe t a -> FMDWrapped t m a
+makeSubFormData mFN isThis subFormBuilder name dma =
+  let w =  B.FGV . fmap getCompose . unF . subFormBuilder . Compose . widgetResultToDynamic . fmap avToMaybe . B.unGV
+      gva = B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose $ dma
+  in B.makeMDWrapped mFN isThis w name gva
 
 actOnDBWidget :: Functor m => (FRW t m a -> FRW t m a) -> B.FGV (FR t m) (WidgetResult t) FValidation a -> B.FGV (FR t m) (WidgetResult t) FValidation a
 actOnDBWidget f = B.FGV . fmap getCompose . f . fmap Compose . B.unFGV

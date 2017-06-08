@@ -75,7 +75,8 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (DynValidation (
                                                                  avToEither,
                                                                  constDynValidation,
                                                                  joinDynOfDynValidation,
-                                                                 mergeAccValidation)
+                                                                 mergeAccValidation,
+                                                                 printFormErrors)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.Layout.Types                (LayoutDirection (..),
                                                                  LayoutOrientation (..))
@@ -438,12 +439,12 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN dmfa = m
   wr <- fmap (fmap from . sequenceA) <$> (buildWidgetResult mapDynAV0 $ R.leftmost [mapAfterInsertEv, editedMapEv])
   return $ Compose wr
 
-newItemEditorConfig :: R.Reflex t => MW.ModalEditorConfig t a
+newItemEditorConfig :: R.Reflex t => MW.ModalEditorConfig t FormErrors a
 newItemEditorConfig = RD.def
                       & MW.modalEditor_closeOnOk .~ True
                       & MW.modalEditor_openButton .~ const (MW.ButtonConfig "Add" M.empty (Just "fa fa-plus"))
                       & MW.modalEditor_XButton .~ Nothing
-                      & MW.modalEditor_OkButton .~ const (MW.ButtonConfig "OK" M.empty (Just "fa fa-check"))
+                      & MW.modalEditor_OkButton .~ flip (MW.disableAndDisplayIfError printFormErrors) (MW.ButtonConfig "OK" M.empty (Just "fa fa-check"))
                       & MW.modalEditor_CancelButton .~ const (MW.ButtonConfig "Cancel" M.empty (Just "fa fa-window-close"))
 
 newItemWidget :: ContainerForm t m g k v

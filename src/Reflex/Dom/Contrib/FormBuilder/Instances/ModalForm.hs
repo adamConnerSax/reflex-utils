@@ -42,7 +42,7 @@ import           Data.Functor.Compose                           (Compose (Compos
 newtype ModalForm a = ModalForm { unModalForm :: a } deriving (Functor)
 
 class HasModalFormConfig t a where
-  modalConfig :: ModalEditorConfig t a
+  modalConfig :: ModalEditorConfig t FormErrors a
 
 instance ( HasModalFormConfig t a
          , FormInstanceC t m
@@ -62,7 +62,7 @@ modalizeWidget ::  ( RD.DomBuilder t m
                    , RD.PostBuild t m
                    , MonadFix m
                    , RD.MonadHold t m
-                   ) => ModalEditorConfig t a -> (DynMaybe t a -> m (FormResult t a)) -> DynMaybe t a -> m (FormResult t a)
+                   ) => ModalEditorConfig t FormErrors a -> (DynMaybe t a -> m (FormResult t a)) -> DynMaybe t a -> m (FormResult t a)
 modalizeWidget cfg w dma =
   let matchedWidget = fmap (fmap avToEither . getCompose) . w . Compose
       matchedInput = maybeToEitherFE <$> getCompose dma
@@ -74,11 +74,10 @@ modalizeForm ::  ( RD.DomBuilder t m
                  , RD.PostBuild t m
                  , MonadFix m
                  , RD.MonadHold t m
-                 ) => ModalEditorConfig t a -> (DynMaybe t a -> Form t m a) -> DynMaybe t a -> Form t m a
+                 ) => ModalEditorConfig t FormErrors a -> (DynMaybe t a -> Form t m a) -> DynMaybe t a -> Form t m a
 modalizeForm cfg fw = makeForm . modalizeWidget cfg (unF . fw)
 
-
-modalizeFormField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t a -> DynMaybe t a -> Form t m a
+modalizeFormField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t FormErrors a -> DynMaybe t a -> Form t m a
 modalizeFormField cfg = modalizeForm cfg (buildVForm Nothing)
 
 maybeToEitherFE :: Maybe a -> Either FormErrors a

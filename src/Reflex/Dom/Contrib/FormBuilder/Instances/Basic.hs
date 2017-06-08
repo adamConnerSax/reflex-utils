@@ -22,6 +22,7 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        , buildDynReadable
        , FormInstanceC
        , buildFormIso
+       , buildEnumDropdown
        ) where
 
 import           Control.Lens                                 (over, view)
@@ -313,14 +314,21 @@ widget0Result w0 =
       chg = _widget0_change w0
   in unsafeBuildWidgetResult val chg
 
+buildEnumDropdown :: (FormInstanceC t m, Enum a, Bounded a, Eq a) => (a -> T.Text) -> FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
+buildEnumDropdown printF vF mFN dma = makeForm $ do
+    let values = [minBound..]
+        initial = head values
+    inputEv <- dynMaybeAsEv dma
+    formWidget' inputEv initial id vF printF mFN Nothing (\c -> widget0Result <$> htmlDropdownStatic values printF Prelude.id c)
+
 -- | Enums become dropdowns
-instance {-# OVERLAPPABLE #-} (FormInstanceC t m,Enum a,Show a,Bounded a, Eq a)=>FormBuilder t m a where
-  buildForm va mFN initialMDyn = makeForm $ do
-    let values = [minBound..] :: [a]
+instance {-# OVERLAPPABLE #-} (FormInstanceC t m, Enum a, Show a, Bounded a, Eq a) => FormBuilder t m a where
+  buildForm va mFN initialMDyn = buildEnumDropdown showText va mFN initialMDyn
+{-    let values = [minBound..] :: [a]
         initial = head values
     inputEv <- dynMaybeAsEv initialMDyn
     formWidget' inputEv initial id va showText mFN Nothing (\c -> widget0Result <$> htmlDropdownStatic values showText Prelude.id c)
-
+-}
 
 -- |  Tuples. 2,3,4,5 tuples are here.
 deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
