@@ -25,6 +25,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , validateForm
        , FormBuilder(..)
        , gBuildFormValidated
+       , gBuildForm
        , buildFMDWrappedList
        , actOnDBWidget
        , joinDynOfFormResults
@@ -142,6 +143,15 @@ gBuildFormValidated::( RD.DomBuilder t m
                      , B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
   => FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
 gBuildFormValidated va mFN = fgvToForm  . B.gBuildValidatedCS (npSequenceViaDMap distributeDMapOverWidgetResult) va mFN . dynMaybeToGBuildInput
+
+gBuildForm :: ( RD.DomBuilder t m
+              , RD.MonadHold t m
+              , RD.PostBuild t m
+              , B.Validatable FValidation a
+              , B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
+  => Maybe FieldName -> DynMaybe t a -> Form t m a
+gBuildForm = gBuildFormValidated B.validator
+
 
 type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable FValidation a)
 
