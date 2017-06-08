@@ -28,6 +28,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , gBuildForm
        , buildFMDWrappedList
        , makeSubFormData
+       , formFromSubForms
        , actOnDBWidget
        , joinDynOfFormResults
        , FMDWrapped
@@ -190,6 +191,10 @@ makeSubFormData mFN isThis subFormBuilder name dma =
   let w =  B.FGV . fmap getCompose . unF . subFormBuilder . Compose . widgetResultToDynamic . fmap avToMaybe . B.unGV
       gva = B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose $ dma
   in B.makeMDWrapped mFN isThis w name gva
+
+formFromSubForms ::  (R.Reflex t, Functor m, B.Buildable (FR t m) (WidgetResult t) FValidation)
+  => FormValidator a -> [DynMaybe t a -> FMDWrapped t m a] -> DynMaybe t a -> Form t m a
+formFromSubForms v subForms dma = validateForm v $ makeForm $ fmap Compose . B.unFGV . B.bSum $ fmap ($ dma) subForms
 
 actOnDBWidget :: Functor m => (FRW t m a -> FRW t m a) -> B.FGV (FR t m) (WidgetResult t) FValidation a -> B.FGV (FR t m) (WidgetResult t) FValidation a
 actOnDBWidget f = B.FGV . fmap getCompose . f . fmap Compose . B.unFGV
