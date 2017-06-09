@@ -40,6 +40,9 @@ dynMaybeAsEv = dynamicMaybeAsEv . getCompose
 mapDynMaybe :: Reflex t => (a -> Maybe b) -> DynMaybe t a -> DynMaybe t b
 mapDynMaybe f = Compose . fmap (>>= f) . getCompose
 
+addDefault :: Reflex t => a -> DynMaybe t a -> DynMaybe t a
+addDefault a = Compose . fmap (maybe (Just a) Just) . getCompose
+
 data FormError  = FNothing | FNoParse Text | FInvalid Text deriving (Show,Eq,Generic)
 
 printFormError :: FormError -> Text

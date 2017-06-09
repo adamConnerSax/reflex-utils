@@ -183,15 +183,17 @@ modalEditorEither editW aEDyn config = do
         let body = L.flexItem $ editW $ e2m <$> eaDyn
             closeOnOkEv okEv = if config ^. modalEditor_closeOnOk then okEv else R.never
         rec let modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
-                closingValueEv = R.leftmost [ inputWhenOpened <$ cancelEv -- when cancelled, we revert to the value we had when opened
+                closingValueEv = R.leftmost [ R.tag (R.current valueAtCancel) cancelEv -- when cancelled, we revert to the value we had when opened
                                             , closeOnChangeEv -- when the input changes, we switch to that value
                                             , closeOnOkEv okAEEv -- when okay is pressed and that closes, we switch to the new value
                                             ]
             modalVisAttrs <- showAttrs closingValueEv R.never -- we don't need to reshow because we build the widget anew each time the button is pressed.
             (newAEEv', okAEEv, cancelEv) <- RD.elDynAttr "div" modalAttrsDyn $ L.flexCol $ mkModalBodyUpdateAlways (header eaDyn) footer body
+            valueAtCancel <- R.holdDyn inputWhenOpened okAEEv
         let updateAEEv = case config ^. modalEditor_updateOutput of
                            Always -> newAEEv'
                            OnOk   -> okAEEv
+
             updateBodyAEEv = R.leftmost [okAEEv, closingValueEv] -- in case we don't close on okay
             retAEEv = R.leftmost [updateAEEv, inputWhenOpened <$ cancelEv]
         return $ InnerModal retAEEv (() <$ closingValueEv) updateBodyAEEv
