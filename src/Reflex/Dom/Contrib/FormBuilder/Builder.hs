@@ -27,7 +27,9 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , gBuildFormValidated
        , gBuildForm
        , buildFMDWrappedList
-       , makeSubFormData
+       , makeSubformData
+       , SubformArgs (SubformArgs)
+       , prismToSubformData
        , formFromSubForms
        , actOnDBWidget
        , joinDynOfFormResults
@@ -88,7 +90,9 @@ import           Reflex                                       as ReflexExport (P
 import qualified Reflex                                       as R
 import qualified Reflex.Dom                                   as RD
 
-import           Control.Lens                                 (view)
+import           Control.Lens                                 (Prism', has,
+                                                               preview, review,
+                                                               view)
 import           Control.Monad.Fix                            (MonadFix)
 import           Control.Monad.Morph
 import           Control.Monad.Reader                         (MonadReader (..),
@@ -186,11 +190,17 @@ buildFMDWrappedList::( RD.DomBuilder t m
   => Maybe FieldName -> DynMaybe t a -> [FMDWrapped t m a]
 buildFMDWrappedList mFN = B.buildMDWrappedList mFN . B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose
 
-makeSubFormData :: (R.Reflex t, Functor m) => Maybe FieldName -> (a -> Bool) -> (DynMaybe t a -> Form t m a) -> B.ConName -> DynMaybe t a -> FMDWrapped t m a
-makeSubFormData mFN isThis subFormBuilder name dma =
+makeSubformData :: (R.Reflex t, Functor m) => Maybe FieldName -> (a -> Bool) -> (DynMaybe t a -> Form t m a) -> B.ConName -> DynMaybe t a -> FMDWrapped t m a
+makeSubformData mFN isThis subFormBuilder name dma =
   let w =  B.FGV . fmap getCompose . unF . subFormBuilder . Compose . widgetResultToDynamic . fmap avToMaybe . B.unGV
       gva = B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose $ dma
   in B.makeMDWrapped mFN isThis w name gva
+
+data SubformArgs a b = SubformArgs (FormValidator b) B.ConName (Prism' a b)
+
+prismToSubformData :: (R.Reflex t, Functor m, FormBuilder t m b)
+  => Maybe FieldName -> SubformArgs a b -> DynMaybe t a -> FMDWrapped t m a
+prismToSubformData mFN (SubformArgs vb name p) = makeSubformData mFN (has p) (fmap (review p) . buildForm vb mFN . mapDynMaybe (preview p)) name
 
 formFromSubForms ::  (R.Reflex t, Functor m, B.Buildable (FR t m) (WidgetResult t) FValidation)
   => FormValidator a -> [DynMaybe t a -> FMDWrapped t m a] -> DynMaybe t a -> Form t m a
