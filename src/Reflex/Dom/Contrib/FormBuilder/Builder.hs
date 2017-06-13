@@ -12,13 +12,13 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        (
          module Reflex.Dom.Contrib.FormBuilder.DynValidation
        , module Reflex.Dom.Contrib.FormBuilder.Configuration
+       , module Reflex.Dom.Contrib.FormBuilder.Editor
        , dynamicForm
        , dynamicFormOfDynamic
        , formWithSubmitAction
        , observeDynamic
        , observeWidget
        , observeFlow
-       , Form
        , fgvToForm
        , formToFGV
        , FormValidator
@@ -30,13 +30,13 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , makeSubformData
        , SubformArgs (SubformArgs)
        , prismToSubformData
-       , formFromSubForms
+       , editorFromSubForms
        , actOnDBWidget
        , joinDynOfFormResults
        , FMDWrapped
        , buildVForm
-       , formField
-       , readOnlyFormField
+       , editField
+       , readOnlyField
        , noFormField
        , labelForm
        , makeForm
@@ -76,6 +76,7 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult, dyn
 
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation
+import           Reflex.Dom.Contrib.FormBuilder.Editor
 
 --import qualified Data.Dependent.Map                           as DM
 import qualified Data.Dependent.Map                           as DM
@@ -103,14 +104,16 @@ import qualified Data.Map                                     as M
 import           Data.Maybe                                   (fromMaybe,
                                                                isJust)
 import           Data.Monoid                                  ((<>))
+import           Data.Profunctor                              (lmap)
 import qualified Data.Text                                    as T
 import           Data.Validation                              (AccValidation (..))
 --import           Language.Haskell.TH
 
 
--- This is necessary because this functor and applicative are different from that of SFRW
+-- Form is necessary because it has functor and applicative that are different from that of SFRW
 -- NB: Form is *not* a Monad. So we do all the monadic widget building in (FRW t m a) and then wrap with makeForm
-type Form t m a = Compose (FR t m) (FormResult t) a
+-- NB: the Form type is now in Editor but re-exported from here.
+-- type Form t m a = Compose (FR t m) (FormResult t) a
 
 makeForm :: FRW t m a -> Form t m a
 makeForm = Compose
@@ -128,6 +131,9 @@ type FormValidator a = B.Validator FValidation a
 
 validateForm :: (Functor m, R.Reflex t) => FormValidator a -> Form t m a -> Form t m a
 validateForm va = makeForm . fmap Compose . B.unFGV . B.validateFGV va . B.FGV . fmap getCompose . unF
+
+validateDynEditor :: (R.Reflex t, Functor m) => FormValidator b -> DynEditor t m a b -> DynEditor t m a b
+validateDynEditor v de = DynEditor $ \dma -> validateForm v $ runDynEditor de dma
 
 dynMaybeToGBuildInput :: R.Reflex t => DynMaybe t a -> B.GV (WidgetResult t) FValidation a
 dynMaybeToGBuildInput = B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose
@@ -164,14 +170,17 @@ type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable FValidation a)
 buildVForm :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m a
 buildVForm = buildForm B.validator
 
-formField :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m a
-formField = buildVForm
+editField :: VFormBuilderC t m a => Maybe FieldName -> DynEditor t m a a
+editField mFN = DynEditor $ buildVForm mFN
 
-noFormField :: Applicative m => R.Reflex t => DynMaybe t a -> Form t m a
-noFormField = makeForm . pure . dynamicToWrappedWidgetResult . fmap maybeToAV . getCompose
+editValidatedField :: FormBuilder t m a => FormValidator a -> Maybe FieldName -> DynEditor t m a a
+editValidatedField v mFN = DynEditor $ buildForm v mFN
 
-readOnlyFormField :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m a
-readOnlyFormField mFN =  toReadOnly . buildVForm mFN
+noFormField :: (Applicative m, R.Reflex t) => DynEditor t m a a
+noFormField = DynEditor $ unEditedDynMaybe
+
+readOnlyField :: VFormBuilderC t m a => Maybe FieldName -> DynEditor t m a a
+readOnlyField mFN =  DynEditor $ toReadOnly . buildVForm mFN
 
 
 labelForm :: Monad m => T.Text -> T.Text -> T.Text -> CssClasses -> Form t m a -> Form t m a
@@ -190,9 +199,9 @@ buildFMDWrappedList::( RD.DomBuilder t m
   => Maybe FieldName -> DynMaybe t a -> [FMDWrapped t m a]
 buildFMDWrappedList mFN = B.buildMDWrappedList mFN . B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose
 
-makeSubformData :: (R.Reflex t, Functor m) => Maybe FieldName -> (a -> Bool) -> (DynMaybe t a -> Form t m a) -> B.ConName -> DynMaybe t a -> FMDWrapped t m a
-makeSubformData mFN isThis subFormBuilder name dma =
-  let w =  B.FGV . fmap getCompose . unF . subFormBuilder . Compose . widgetResultToDynamic . fmap avToMaybe . B.unGV
+makeSubformData :: (R.Reflex t, Functor m) => Maybe FieldName -> (a -> Bool) -> DynEditor t m a a -> B.ConName -> DynMaybe t a -> FMDWrapped t m a
+makeSubformData mFN isThis subFormEditor name dma =
+  let w =  B.FGV . fmap getCompose . unF . runDynEditor subFormEditor . Compose . widgetResultToDynamic . fmap avToMaybe . B.unGV
       gva = B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose $ dma
   in B.makeMDWrapped mFN isThis w name gva
 
@@ -200,11 +209,13 @@ data SubformArgs a b = SubformArgs (FormValidator b) B.ConName (Prism' a b)
 
 prismToSubformData :: (R.Reflex t, Functor m, FormBuilder t m b)
   => Maybe FieldName -> SubformArgs a b -> DynMaybe t a -> FMDWrapped t m a
-prismToSubformData mFN (SubformArgs vb name p) = makeSubformData mFN (has p) (fmap (review p) . buildForm vb mFN . mapDynMaybe (preview p)) name
+prismToSubformData mFN (SubformArgs vb name p) =
+  let mappedEditor = DynEditor $ fmap (review p) . buildForm vb mFN . mapDynMaybe (preview p)
+  in makeSubformData mFN (has p) mappedEditor name
 
-formFromSubForms ::  (R.Reflex t, Functor m, B.Buildable (FR t m) (WidgetResult t) FValidation)
-  => FormValidator a -> [DynMaybe t a -> FMDWrapped t m a] -> DynMaybe t a -> Form t m a
-formFromSubForms v subForms dma = validateForm v $ makeForm $ fmap Compose . B.unFGV . B.bSum $ fmap ($ dma) subForms
+editorFromSubForms ::  (R.Reflex t, Functor m, B.Buildable (FR t m) (WidgetResult t) FValidation)
+  => FormValidator a -> [DynMaybe t a -> FMDWrapped t m a] -> DynEditor t m a a
+editorFromSubForms v subForms = DynEditor $ \dma -> validateForm v $ makeForm $ fmap Compose . B.unFGV . B.bSum $ fmap ($ dma) subForms
 
 actOnDBWidget :: Functor m => (FRW t m a -> FRW t m a) -> B.FGV (FR t m) (WidgetResult t) FValidation a -> B.FGV (FR t m) (WidgetResult t) FValidation a
 actOnDBWidget f = B.FGV . fmap getCompose . f . fmap Compose . B.unFGV
@@ -235,8 +246,6 @@ dynamicForm cfg ma = runForm cfg $ buildVForm Nothing (constDynMaybe ma)
 
 dynamicFormOfDynamic :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> DynMaybe t a -> m (FormResult t a)
 dynamicFormOfDynamic cfg dma = runForm cfg $ buildVForm Nothing dma
-
-
 
 --TODO: is attachPromptlyDynWithMaybe the right thing here?
 formWithSubmitAction :: ( RD.DomBuilder t m
