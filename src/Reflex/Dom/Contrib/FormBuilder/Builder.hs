@@ -13,6 +13,9 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
          module Reflex.Dom.Contrib.FormBuilder.DynValidation
        , module Reflex.Dom.Contrib.FormBuilder.Configuration
        , module Reflex.Dom.Contrib.FormBuilder.Editor
+       , BuildForm
+       , BuildEditor
+       , buildFormToEditor
        , dynamicForm
        , dynamicFormOfDynamic
        , formWithSubmitAction
@@ -114,6 +117,15 @@ import           Data.Validation                              (AccValidation (..
 -- NB: Form is *not* a Monad. So we do all the monadic widget building in (FRW t m a) and then wrap with makeForm
 -- NB: the Form type is now in Editor but re-exported from here.
 -- type Form t m a = Compose (FR t m) (FormResult t) a
+
+type BuildForm t m a = FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
+type BuildEditor t m a = FormValidator a -> Maybe FieldName -> DynEditor t m a a
+
+
+-- adapter for BuildForm (in Containers)
+buildFormToEditor :: BuildForm t m a -> BuildEditor t m a
+buildFormToEditor bf v = DynEditor . bf v
+
 
 makeForm :: FRW t m a -> Form t m a
 makeForm = Compose

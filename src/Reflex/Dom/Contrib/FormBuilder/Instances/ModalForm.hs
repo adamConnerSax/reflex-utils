@@ -11,8 +11,9 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.ModalForm
        (
          ModalForm (..)
        , HasModalFormConfig (..)
-       , modalizeForm
-       , modalizeFormField
+       , modalizeWidget
+       , modalizeEditor
+       , modalEditField
        ) where
 
 
@@ -69,16 +70,16 @@ modalizeWidget cfg w dma =
       matchOutput = transformWrappedWidgetResult eitherToAV . modalEditor_WidgetResult
   in matchOutput <$> modalEditorEither matchedWidget matchedInput cfg
 
-modalizeForm ::  ( RD.DomBuilder t m
-                 , MonadWidgetExtraC t m
-                 , RD.PostBuild t m
-                 , MonadFix m
-                 , RD.MonadHold t m
-                 ) => ModalEditorConfig t FormErrors a -> (DynMaybe t a -> Form t m a) -> DynMaybe t a -> Form t m a
-modalizeForm cfg fw = makeForm . modalizeWidget cfg (unF . fw)
+modalizeEditor ::  ( RD.DomBuilder t m
+                   , MonadWidgetExtraC t m
+                   , RD.PostBuild t m
+                   , MonadFix m
+                   , RD.MonadHold t m
+                 ) => ModalEditorConfig t FormErrors a -> DynEditor t m a a -> DynEditor t m a a
+modalizeEditor cfg e = DynEditor $ makeForm . modalizeWidget cfg (unF . runDynEditor e)
 
-modalizeFormField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t FormErrors a -> DynMaybe t a -> Form t m a
-modalizeFormField cfg = modalizeForm cfg (buildVForm Nothing)
+modalEditField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t FormErrors a -> DynEditor t m a a --DynMaybe t a -> Form t m a
+modalEditField cfg = modalizeEditor cfg (editField Nothing)
 
 maybeToEitherFE :: Maybe a -> Either FormErrors a
 maybeToEitherFE = maybe (Left [FNothing]) Right

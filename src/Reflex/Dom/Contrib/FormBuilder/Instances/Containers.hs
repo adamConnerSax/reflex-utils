@@ -46,7 +46,8 @@ import           Reflex.Dom.Contrib.DynamicUtils                (dynAsEv,
                                                                  mDynAsEv,
                                                                  traceDynAsEv)
 import           Reflex.Dom.Contrib.EventUtils                  (fanBool, leftWhenNotRight)
-import           Reflex.Dom.Contrib.FormBuilder.Builder         (DynMaybe (..),
+import           Reflex.Dom.Contrib.FormBuilder.Builder         (BuildForm,
+                                                                 DynMaybe (..),
                                                                  FR, FRW,
                                                                  FValidation,
                                                                  FieldName,
@@ -362,7 +363,8 @@ instance (FormInstanceC t m, VFormBuilderC t m a, Hashable a, Eq a) => FormBuild
 
 -- the various container builder components
 type BuildF t m a    = FormValidator a -> Maybe FieldName -> DynMaybe t a -> FRW t m a
-type BuildForm t m a = FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
+--type BuildForm t m a = FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
+--type BuildEditor t m a = FormValidator a -> Maybe FieldName -> DynEditor t m a a
 
 type LBBuildF' g t m k v = Maybe FieldName -> R.Dynamic t (g v) -> FRW t m (g v)
 

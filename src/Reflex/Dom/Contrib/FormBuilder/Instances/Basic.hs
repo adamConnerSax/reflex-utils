@@ -19,10 +19,13 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        , formWidget'
        , dynAsEv
        , buildDynReadMaybe
+       , dynReadMaybeEditor
        , buildDynReadable
+       , dynReadableEditor
        , FormInstanceC
        , buildFormIso
        , buildEnumDropdown
+       , enumDropdownEditor
        ) where
 
 import           Control.Lens                                 (over, view)
@@ -183,6 +186,12 @@ buildDynReadable va mFN dma = makeForm $ do
   inputEv <- dynMaybeAsEv dma
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetResult mFN
 
+dynReadableEditor :: (FormInstanceC t m, Readable a, Show a)
+  => FormValidator a
+  -> Maybe FieldName
+  -> DynEditor t m a a
+dynReadableEditor va = DynEditor . buildDynReadable va
+
 buildDynReadMaybe :: (FormInstanceC t m, Read a, Show a)
   => FormValidator a
   -> Maybe FieldName
@@ -192,6 +201,14 @@ buildDynReadMaybe va mFN dma = makeForm $ do
   let vfwt = parseAndValidate mFN (readMaybe . T.unpack) va
   inputEv <- dynMaybeAsEv dma
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetResult mFN
+
+
+dynReadMaybeEditor :: (FormInstanceC t m, Read a, Show a)
+  => FormValidator a
+  -> Maybe FieldName
+  -> DynEditor t m a a
+dynReadMaybeEditor va = DynEditor . buildDynReadMaybe va
+
 
 -- NB this will handle Dynamic t (Dynamic t a)) inputs
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (R.Dynamic t a) where
@@ -234,44 +251,44 @@ instance FormInstanceC t m => FormBuilder t m Bool where
 instance FormInstanceC t m => FormBuilder t m Double where
   buildForm = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Float where
+instance FormInstanceC t m => FormBuilder t m Float where
   buildForm = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Int where
+instance FormInstanceC t m => FormBuilder t m Int where
   buildForm = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Integer where
+instance FormInstanceC t m => FormBuilder t m Integer where
   buildForm = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Int8 where
+instance FormInstanceC t m => FormBuilder t m Int8 where
   buildForm  = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Int16 where
+instance FormInstanceC t m => FormBuilder t m Int16 where
   buildForm  = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Int32 where
+instance FormInstanceC t m => FormBuilder t m Int32 where
   buildForm = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Int64 where
+instance FormInstanceC t m => FormBuilder t m Int64 where
   buildForm = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Word8 where
+instance FormInstanceC t m => FormBuilder t m Word8 where
   buildForm = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Word16 where
+instance FormInstanceC t m => FormBuilder t m Word16 where
   buildForm = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Word32 where
+instance FormInstanceC t m => FormBuilder t m Word32 where
   buildForm = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m Word64 where
+instance FormInstanceC t m => FormBuilder t m Word64 where
   buildForm = buildDynReadable
 
-instance FormInstanceC t m=>FormBuilder t m ByteString where
+instance FormInstanceC t m => FormBuilder t m ByteString where
   buildForm = buildDynReadable
 
 --dateTime and date
-instance FormInstanceC t m=>FormBuilder t m UTCTime where
+instance FormInstanceC t m => FormBuilder t m UTCTime where
   buildForm va mFN initialMDyn = makeForm $ do
     let vfwt x = case x of
           Nothing -> AccFailure [FNoParse "Couldn't parse as UTCTime."]
@@ -281,7 +298,7 @@ instance FormInstanceC t m=>FormBuilder t m UTCTime where
     formWidget' inputEv initialDateTime Just vfwt (maybe "" showText) mFN Nothing (\c -> htmlWidgetResult <$> restrictWidget blurOrEnter dateTimeWidget c)
 
 
-instance FormInstanceC t m=>FormBuilder t m Day where
+instance FormInstanceC t m => FormBuilder t m Day where
   buildForm va mFN initialMDyn = makeForm $ do
     let vfwt x = case x of
           Nothing -> AccFailure [FNoParse "Couldn't parse as Day."]
@@ -292,20 +309,20 @@ instance FormInstanceC t m=>FormBuilder t m Day where
 
 
 -- uses generics to build instances
-deriving instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m (Maybe a)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (Maybe a)
 
-deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (Either a b)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b) => FormBuilder t m (Either a b)
 
 -- if two things are Isomorphic, we can use one to build the other
 -- NB: Isomorphic sum types will end up using the constructors, etc. of the one used to bootstrap
-buildFormIso::(FormInstanceC t m, VFormBuilderC t m a)=>Iso' a b->FormValidator b->Maybe FieldName->DynMaybe t b->Form t m b
+buildFormIso::(FormInstanceC t m, VFormBuilderC t m a) => Iso' a b->FormValidator b->Maybe FieldName->DynMaybe t b->Form t m b
 buildFormIso isoAB vb mFN dmb = makeForm $ do
   let a2b = view isoAB
       b2a = view $ from isoAB
   unF $ a2b <$> buildForm (fmap b2a . vb . a2b) mFN (b2a <$> dmb)
 
 -- NB: Here, AccSuccess will appear as Right and AccFailure as Left in the forms.  To Avoid this we need to build a specific instance.
-instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (AccValidation a b) where
+instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b) => FormBuilder t m (AccValidation a b) where
   buildForm = buildFormIso (iso eitherToAV avToEither)
 
 widget0Result :: R.Reflex t => Widget0 t a -> WidgetResult t a
@@ -320,6 +337,9 @@ buildEnumDropdown printF vF mFN dma = makeForm $ do
         initial = head values
     inputEv <- dynMaybeAsEv dma
     formWidget' inputEv initial id vF printF mFN Nothing (\c -> widget0Result <$> htmlDropdownStatic values printF Prelude.id c)
+
+enumDropdownEditor :: (FormInstanceC t m, Enum a, Bounded a, Eq a) => (a -> T.Text) -> FormValidator a -> Maybe FieldName -> DynEditor t m a a
+enumDropdownEditor printF v = DynEditor . buildEnumDropdown printF v
 
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (FormInstanceC t m, Enum a, Show a, Bounded a, Eq a) => FormBuilder t m a where
