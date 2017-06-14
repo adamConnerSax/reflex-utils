@@ -83,6 +83,7 @@ library
                      , data-default
                      , ref-tf
                      , containers
+                     , bifunctors
                      , profunctors
                      , semigroups
                      , clay

@@ -1,7 +1,11 @@
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 module Reflex.Dom.Contrib.FormBuilder.Editor
   (
     Form
-  , DynEditor (DynEditor)
+--  , DynEditor (DynEditor)
   , runDynEditor
   , unEditedDynMaybe
   , FREditor (FREditor)
@@ -16,6 +20,8 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynMaybe,
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (dynamicToWidgetResult)
 
 
+import           Control.Monad                                (join)
+import           Data.Bifunctor                               (bimap)
 import           Data.Functor.Compose                         (Compose (Compose),
                                                                getCompose)
 import           Data.Profunctor                              (Choice (..), Profunctor (dimap),
@@ -26,7 +32,7 @@ import           Reflex                                       (Reflex)
 
 -- This is necessary because this functor and applicative are different from that of SFRW
 -- NB: Form is *not* a Monad. So we do all the monadic widget building in (FRW t m a) and then wrap with makeForm
-type Form t m a= Compose (FR t m) (FormResult t) a
+type Form t m = Compose (FR t m) (FormResult t)
 
 -- | Form is a functor and applicative since its components (ReaderT and WidgetResult) are
 -- DynMaybe is also a functor (and applicative) for the same reason.
@@ -35,6 +41,15 @@ type Form t m a= Compose (FR t m) (FormResult t) a
 unEditedDynMaybe :: (Reflex t, Applicative m) => DynMaybe t a -> Form t m a
 unEditedDynMaybe = Compose . pure . Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
 
+type DynEditor t m a b = Editor (DynMaybe t) (Form t m) a b
+
+instance (Reflex t, Applicative m) => NatBetween (DynMaybe t) (Form t m) where
+  nat = unEditedDynMaybe
+
+runDynEditor :: DynEditor t m a b -> DynMaybe t a -> Form t m b
+runDynEditor = runEditor
+
+{-
 -- | Editor is just a wrapper around the usual form building function.  This wrapper also allows
 -- all these instances to be written.
 -- Editor is UpStar and DownStar?  There are two functors involved...
@@ -64,7 +79,7 @@ instance (Reflex t, Applicative m) => Choice (FormFrom t m) where
         formL = w $ fL x
         formR = dynMaybeToForm $ fR x
 -}
-
+-}
 -- | This function just lifts a FormResult directly to a form, without any actual editing
 unEditedFR :: (Reflex t, Applicative m) => FormResult t a -> Form t m a
 unEditedFR = Compose . pure
@@ -104,6 +119,43 @@ instance (Reflex t, Functor (g t), Applicative (f t m)) => Strong (Editor t m) w
   first' (Editor e) = Editor $ \ic -> (,) <$> e (fst fric) <*> liftInput (snd fric)
 
 -}
-{-
-newtype Editor g f a b { runEditor ::
--}
+
+newtype Editor g f a b = Editor { runEditor :: g a -> f b }
+
+instance Functor f => Functor (Editor g f a) where
+  fmap h (Editor e) = Editor $ fmap h . e
+
+instance (Functor g, Functor f) => Profunctor (Editor f g) where
+  dimap q r (Editor e) = Editor $ fmap r . e . fmap q
+
+instance Applicative f => Applicative (Editor g f a) where
+  pure = Editor . const . pure
+  (Editor eFxy) <*> (Editor ex) = Editor $ \ga -> eFxy ga <*> ex ga
+
+class NatBetween g f where
+  nat :: g a -> f a
+
+-- first' :: Editor g f a b -> Editor g f (a,c) (b,c)
+instance (Applicative f, Functor g, NatBetween g f) => Strong (Editor g f) where
+  first' (Editor e) = Editor $ \gac -> (,) <$> e (fst <$> gac) <*> nat (snd <$> gac)
+
+class Combinable g f where
+  combine :: g (f a) -> f a
+
+-- left' :: Editor g f a b -> Editor g f (Either a c) (Either b c)
+instance (Applicative f, Applicative g, NatBetween g f, Combinable g f) => Choice (Editor g f) where
+  left' ed =
+    let s :: Either a c -> Either (g a) (g c)
+        s = bimap pure pure
+        r :: Editor g f x y -> Either (g x) (g c) -> Either (f y) (f c)
+        r (Editor e1) = bimap e1 nat
+        q :: Either (f b) (f c) -> f (Either b c)
+        q = either (fmap Left) (fmap Right)
+    in Editor $ \gexc -> combine $ fmap (q . r ed . s) gexc
+
+instance Monad f => Monad (Editor g f a) where
+  return = pure
+  eb >>= h = Editor $ \ga -> let q = flip runEditor ga in q eb >>= q . h
+
+
+
