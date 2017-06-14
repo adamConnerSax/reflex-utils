@@ -33,10 +33,16 @@ import           Data.Functor.Compose                         (Compose (Compose)
                                                                getCompose)
 import           Data.Profunctor                              (Choice (..), Profunctor (dimap),
                                                                Strong (..))
+import           Data.Profunctor.Traversing                   (Traversing (..))
 
 
-import           Reflex                                       (Reflex)
-import           Reflex.Dom                                   (DomBuilder, dyn)
+import           Reflex                                       (Dynamic, Event,
+                                                               MonadHold,
+                                                               Reflex,
+                                                               buildDynamic,
+                                                               constDyn)
+import           Reflex.Dom                                   (DomBuilder,
+                                                               PostBuild, dyn)
 
 
 
@@ -64,15 +70,26 @@ instance (Reflex t, Monad m) => Combinable (Form t m) (Form t m) where
   combine = Compose . fmap (Compose . join . fmap getCompose . getCompose) . join . fmap sequenceA . getCompose . fmap getCompose
 -}
 {-
-instance (Reflex t, Monad m, RD.DomBuilder t m) => Combinable (DynMaybe t) (Form t m) where
---  combine :: Dynamic t (Form t m a) -> Form t m a
-  combine df = makeForm $ do
-    env <- ask
-    let dm = fmap (flip runReader env . unF) df
-    formResultEv <- lift $ dyn dm -- Event t (FormResult t a)
-    formResultDyn <- holdDyn formResultNothing formResultEv
-    let fr = Compose . dynamicWidgetResultToWidgetResult $ fmap getCompose formResultDyn
-    return fr
+--|
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (Dynamic t) (Compose m (Dynamic t)) where
+--  combine :: Dynamic t (Compose m (Dynamic t) a) -> Compose m (Dynamic t) a
+  combine x = Compose $ do
+    x1 <- dyn $ fmap getCompose x -- Event
+    dd <- buildDynamic
+-}
+-- | This gives all the powers to Editors of the type Editor (DynMaybe t) (Compose m (DynMaybe) t) a b, e.g., widgets like DynMaybe t a -> m (DynMaybe t a)
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Compose m (DynMaybe t)) where
+--  combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
+  combine x =  Compose $ do
+    let x1 = fmap sequenceA . getCompose . fmap getCompose $ x -- Dynamic t (m (Maybe (DynMaybe t a)))
+    x2 <- dyn x1 -- Event t (Maybe (DynMaybe t a)))
+    let x3 = fmap join . sequenceA . fmap getCompose <$> x2 -- Event t (Dynamic t (Maybe a))
+    dmd <- buildDynamic (return $ constDyn Nothing) x3
+    return $ Compose $ join $ dmd
+
+{-
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Form t m) where
+  combine x = Compose $ do
 -}
 
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }
@@ -111,6 +128,10 @@ instance (Applicative f, Applicative g, NatBetween g f, Combinable g f) => Choic
         q :: Either (f b) (f c) -> f (Either b c)
         q = either (fmap Left) (fmap Right)
     in Editor $ \gexc -> combine $ fmap (q . r ed . s) gexc
+
+instance (Applicative g, Applicative f, NatBetween g f, Combinable g f) => Traversing (Editor g f) where
+--  wander :: (forall f. Applicative f => (a -> f b) -> (s -> f t)) -> Editor g f a b -> Editor g f s t
+  wander vlt (Editor eab) = Editor $ combine . fmap (vlt (eab . pure))
 
 instance (Applicative g, Functor f, NatBetween g f, Combinable f f) => C.Category (Editor g f) where
   id = Editor nat -- Editor g f a a
