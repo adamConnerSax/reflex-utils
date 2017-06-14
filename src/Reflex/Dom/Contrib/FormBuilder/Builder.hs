@@ -26,6 +26,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , formToFGV
        , FormValidator
        , validateForm
+       , validateEditor
        , FormBuilder(..)
        , gBuildFormValidated
        , gBuildForm
@@ -51,6 +52,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , module ReflexExport
        , module BExport
        , liftF
+       , liftE
        , liftTransform
        , liftRAction
        , liftAction
@@ -144,8 +146,8 @@ type FormValidator a = B.Validator FValidation a
 validateForm :: (Functor m, R.Reflex t) => FormValidator a -> Form t m a -> Form t m a
 validateForm va = makeForm . fmap Compose . B.unFGV . B.validateFGV va . B.FGV . fmap getCompose . unF
 
-validateDynEditor :: (R.Reflex t, Functor m) => FormValidator b -> DynEditor t m a b -> DynEditor t m a b
-validateDynEditor v de = DynEditor $ \dma -> validateForm v $ runDynEditor de dma
+validateEditor :: (R.Reflex t, Functor m) => FormValidator b -> DynEditor t m a b -> DynEditor t m a b
+validateEditor v de = DynEditor $ validateForm v . runDynEditor de
 
 dynMaybeToGBuildInput :: R.Reflex t => DynMaybe t a -> B.GV (WidgetResult t) FValidation a
 dynMaybeToGBuildInput = B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose
@@ -301,6 +303,9 @@ observeFlow cfg flow initialA =
 
 liftF :: FLayoutF t m -> Form t m a -> Form t m a
 liftF f = makeForm . f . unF
+
+liftE :: FLayoutF t m -> DynEditor t m a b -> DynEditor t m a b
+liftE f e = DynEditor $ liftF f . runDynEditor e
 
 liftTransform :: Monad m => (forall b. m b -> m b) -> Form t m a -> Form t m a
 liftTransform f = liftF (liftLF f)

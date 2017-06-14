@@ -151,7 +151,7 @@ instance Reflex t => Default (ModalEditorConfig t e a) where
         (const $ ButtonConfig "Edit" M.empty Nothing) -- default to Edit button which is disabled when input is Nothing
         Nothing -- default to no "x" button in the header
         (const $ ButtonConfig "OK" M.empty Nothing) -- simple OK button in footer
-        (const $ ButtonConfig "Cancel" M.empty Nothing) -- simple Cancel button in footer
+        (const $ ButtonConfig "Close" M.empty Nothing) -- simple Cancel button in footer
 
 data InnerModal t a = InnerModal { updateOutput :: Event t a, modalClosed :: Event t (), updateInput :: Event t a }
 
