@@ -87,18 +87,23 @@ instance (Reflex t, Applicative m) => Strong (FREditor t m) where
 
 
 {-
-newtype Editor t m g a b = Editor { runEditor :: g a -> Form t m b }
+-- liftInput
+newtype Editor (t :: k)  (m :: * -> *) (g :: k -> * -> *) (f :: k -> (* -> *) -> * -> *) (a :: *)  (b :: *) = Editor { runEditor :: g t a -> f t m b }
 
-instance (Reflex t, Functor m) => Functor (Editor t m g a) where
+instance (Reflex t, Functor (f t m)) => Functor (Editor t m g f a) where
   fmap d (Editor e) = Editor $ fmap d . e
 
-instance (Reflex t, Applicative m) => Applicative (Editor t m a) where
+instance (Reflex t, Applicative (f t m)) => Applicative (Editor t m g f a) where
   pure x = Editor $ const $ pure x
   (Editor efxy) <*> (Editor ex) = Editor $ \a -> exy a <*> ex a
 
-instance (Reflex t, Functor m) => Profunctor (Editor t m g) where
+instance (Reflex t, Functor (g t), Functor (f t m)) => Profunctor (Editor t m g f) where
   dimap f g (Editor e) = Editor $ fmap g . w . f
 
-instance (Reflex t, Applicative m) => Strong (Editor t m) where
-  first' (Editor e) = Editor $ \ic -> (,) <$> e (fst fric) <*> pure (snd fric)
+instance (Reflex t, Functor (g t), Applicative (f t m)) => Strong (Editor t m) where
+  first' (Editor e) = Editor $ \ic -> (,) <$> e (fst fric) <*> liftInput (snd fric)
+
+-}
+{-
+newtype Editor g f a b { runEditor ::
 -}
