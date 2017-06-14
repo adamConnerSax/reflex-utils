@@ -70,14 +70,16 @@ instance (Reflex t, Monad m) => Combinable (Form t m) (Form t m) where
   combine = Compose . fmap (Compose . join . fmap getCompose . getCompose) . join . fmap sequenceA . getCompose . fmap getCompose
 -}
 {-
---|
+--| Not sure I can write this one because where would the Dynamic start?  DynMaybe makes that simpler.  Maybe I could do Dynamic in but DynMaybe out?
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (Dynamic t) (Compose m (Dynamic t)) where
 --  combine :: Dynamic t (Compose m (Dynamic t) a) -> Compose m (Dynamic t) a
   combine x = Compose $ do
-    x1 <- dyn $ fmap getCompose x -- Event
+    x1 <- dyn $ fmap getCompose x -- Event t (
     dd <- buildDynamic
 -}
 -- | This gives all the powers to Editors of the type Editor (DynMaybe t) (Compose m (DynMaybe) t) a b, e.g., widgets like DynMaybe t a -> m (DynMaybe t a)
+-- but to do so, a dyn happens.  So this is not efficient.  Compositions (categorical or uses of Profunctor Choice, e.g., wander) will need to redraw the widget (when?)
+-- Can we improve this using a chooser?  Where would that go?
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Compose m (DynMaybe t)) where
 --  combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
   combine x =  Compose $ do
@@ -89,7 +91,12 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
 
 {-
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Form t m) where
+--combine :: DynMaybe t (Form t m a) -> Form t m a
   combine x = Compose $ do
+    env <- ask
+    let x1 = flip runReaderT env . getCompose <$> x -- DynMaybe t (m (FormResult t a))
+        x2 = fmap sequenceA $ getCompose x1 -- Dynamic t (m (Maybe (FormResult t a)))
+    x3 <- dyn x2 -- Event t (Maybe (FormResult t a))
 -}
 
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }
@@ -118,6 +125,11 @@ instance (Applicative f, Functor g, NatBetween g f) => Strong (Editor g f) where
 class Combinable g f where
   combine :: g (f a) -> f a
 
+{-
+instance (NatBetween g f, Combinable f f) => Combinable g f where
+  combine = combine . nat
+-}
+
 instance (Applicative f, Applicative g, NatBetween g f, Combinable g f) => Choice (Editor g f) where
 -- left' :: Editor g f a b -> Editor g f (Either a c) (Either b c)
   left' ed =
@@ -133,6 +145,7 @@ instance (Applicative g, Applicative f, NatBetween g f, Combinable g f) => Trave
 --  wander :: (forall f. Applicative f => (a -> f b) -> (s -> f t)) -> Editor g f a b -> Editor g f s t
   wander vlt (Editor eab) = Editor $ combine . fmap (vlt (eab . pure))
 
+-- | We just need "Pointed g" for pure and
 instance (Applicative g, Functor f, NatBetween g f, Combinable f f) => C.Category (Editor g f) where
   id = Editor nat -- Editor g f a a
   (Editor ebc) . (Editor eab) = Editor $ \ga -> combine $ fmap (ebc . pure) (eab ga) -- Editor g f b c -> Editor g f a b -> Editor g f a c
@@ -140,8 +153,6 @@ instance (Applicative g, Functor f, NatBetween g f, Combinable f f) => C.Categor
 instance Monad f => Monad (Editor g f a) where
   return = pure
   eb >>= h = Editor $ \ga -> let q = flip runEditor ga in q eb >>= q . h
-
-
 
 
 {-
