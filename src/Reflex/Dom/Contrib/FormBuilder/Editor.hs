@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
+{-# LANGUAGE UndecidableInstances  #-}
 module Reflex.Dom.Contrib.FormBuilder.Editor
   (
     Form
@@ -24,6 +25,8 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynMaybe,
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (dynamicToWidgetResult)
 
 
+import qualified Control.Category                             as C
+import           Control.Lens                                 (Lens)
 import           Control.Monad                                (join)
 import           Data.Bifunctor                               (bimap)
 import           Data.Functor.Compose                         (Compose (Compose),
@@ -34,6 +37,8 @@ import           Data.Profunctor                              (Choice (..), Prof
 
 import           Reflex                                       (Reflex)
 import           Reflex.Dom                                   (DomBuilder, dyn)
+
+
 
 -- This is necessary because this functor and applicative are different from that of SFRW
 -- NB: Form is *not* a Monad. So we do all the monadic widget building in (FRW t m a) and then wrap with makeForm
@@ -54,6 +59,10 @@ runDynEditor = runEditor
 instance (Reflex t, Applicative m) => NatBetween (DynMaybe t) (Form t m) where
   nat = unEditedDynMaybe
 
+{-
+instance (Reflex t, Monad m) => Combinable (Form t m) (Form t m) where
+  combine = Compose . fmap (Compose . join . fmap getCompose . getCompose) . join . fmap sequenceA . getCompose . fmap getCompose
+-}
 {-
 instance (Reflex t, Monad m, RD.DomBuilder t m) => Combinable (DynMaybe t) (Form t m) where
 --  combine :: Dynamic t (Form t m a) -> Form t m a
@@ -88,6 +97,7 @@ instance (Applicative f, Functor g, NatBetween g f) => Strong (Editor g f) where
 -- first' :: Editor g f a b -> Editor g f (a,c) (b,c)
   first' (Editor e) = Editor $ \gac -> (,) <$> e (fst <$> gac) <*> nat (snd <$> gac)
 
+-- | An odd thing which can be extract (for comonad g) or join (for Monad f => Combinable f f)
 class Combinable g f where
   combine :: g (f a) -> f a
 
@@ -102,9 +112,15 @@ instance (Applicative f, Applicative g, NatBetween g f, Combinable g f) => Choic
         q = either (fmap Left) (fmap Right)
     in Editor $ \gexc -> combine $ fmap (q . r ed . s) gexc
 
+instance (Applicative g, Functor f, NatBetween g f, Combinable f f) => C.Category (Editor g f) where
+  id = Editor nat -- Editor g f a a
+  (Editor ebc) . (Editor eab) = Editor $ \ga -> combine $ fmap (ebc . pure) (eab ga) -- Editor g f b c -> Editor g f a b -> Editor g f a c
+
 instance Monad f => Monad (Editor g f a) where
   return = pure
   eb >>= h = Editor $ \ga -> let q = flip runEditor ga in q eb >>= q . h
+
+
 
 
 {-
