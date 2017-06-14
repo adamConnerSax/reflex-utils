@@ -190,7 +190,7 @@ dynReadableEditor :: (FormInstanceC t m, Readable a, Show a)
   => FormValidator a
   -> Maybe FieldName
   -> DynEditor t m a a
-dynReadableEditor va = DynEditor . buildDynReadable va
+dynReadableEditor va = Editor . buildDynReadable va
 
 buildDynReadMaybe :: (FormInstanceC t m, Read a, Show a)
   => FormValidator a
@@ -202,12 +202,11 @@ buildDynReadMaybe va mFN dma = makeForm $ do
   inputEv <- dynMaybeAsEv dma
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetResult mFN
 
-
 dynReadMaybeEditor :: (FormInstanceC t m, Read a, Show a)
   => FormValidator a
   -> Maybe FieldName
   -> DynEditor t m a a
-dynReadMaybeEditor va = DynEditor . buildDynReadMaybe va
+dynReadMaybeEditor va = Editor . buildDynReadMaybe va
 
 
 -- NB this will handle Dynamic t (Dynamic t a)) inputs
@@ -339,7 +338,7 @@ buildEnumDropdown printF vF mFN dma = makeForm $ do
     formWidget' inputEv initial id vF printF mFN Nothing (\c -> widget0Result <$> htmlDropdownStatic values printF Prelude.id c)
 
 enumDropdownEditor :: (FormInstanceC t m, Enum a, Bounded a, Eq a) => (a -> T.Text) -> FormValidator a -> Maybe FieldName -> DynEditor t m a a
-enumDropdownEditor printF v = DynEditor . buildEnumDropdown printF v
+enumDropdownEditor printF v = Editor . buildEnumDropdown printF v
 
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (FormInstanceC t m, Enum a, Show a, Bounded a, Eq a) => FormBuilder t m a where

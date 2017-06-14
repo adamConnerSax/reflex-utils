@@ -126,7 +126,7 @@ type BuildEditor t m a = FormValidator a -> Maybe FieldName -> DynEditor t m a a
 
 -- adapter for BuildForm (in Containers)
 buildFormToEditor :: BuildForm t m a -> BuildEditor t m a
-buildFormToEditor bf v = DynEditor . bf v
+buildFormToEditor bf v = Editor . bf v
 
 
 makeForm :: FRW t m a -> Form t m a
@@ -147,7 +147,7 @@ validateForm :: (Functor m, R.Reflex t) => FormValidator a -> Form t m a -> Form
 validateForm va = makeForm . fmap Compose . B.unFGV . B.validateFGV va . B.FGV . fmap getCompose . unF
 
 validateEditor :: (R.Reflex t, Functor m) => FormValidator b -> DynEditor t m a b -> DynEditor t m a b
-validateEditor v de = DynEditor $ validateForm v . runDynEditor de
+validateEditor v de = Editor $ validateForm v . runEditor de
 
 dynMaybeToGBuildInput :: R.Reflex t => DynMaybe t a -> B.GV (WidgetResult t) FValidation a
 dynMaybeToGBuildInput = B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose
@@ -185,16 +185,16 @@ buildVForm :: VFormBuilderC t m a => Maybe FieldName -> DynMaybe t a -> Form t m
 buildVForm = buildForm B.validator
 
 editField :: VFormBuilderC t m a => Maybe FieldName -> DynEditor t m a a
-editField mFN = DynEditor $ buildVForm mFN
+editField mFN = Editor $ buildVForm mFN
 
 editValidatedField :: FormBuilder t m a => FormValidator a -> Maybe FieldName -> DynEditor t m a a
-editValidatedField v mFN = DynEditor $ buildForm v mFN
+editValidatedField v mFN = Editor $ buildForm v mFN
 
 noFormField :: (Applicative m, R.Reflex t) => DynEditor t m a a
-noFormField = DynEditor $ unEditedDynMaybe
+noFormField = Editor $ unEditedDynMaybe
 
 readOnlyField :: VFormBuilderC t m a => Maybe FieldName -> DynEditor t m a a
-readOnlyField mFN =  DynEditor $ toReadOnly . buildVForm mFN
+readOnlyField mFN =  Editor $ toReadOnly . buildVForm mFN
 
 
 labelForm :: Monad m => T.Text -> T.Text -> T.Text -> CssClasses -> Form t m a -> Form t m a
@@ -215,7 +215,7 @@ buildFMDWrappedList mFN = B.buildMDWrappedList mFN . B.GV . dynamicToWidgetResul
 
 makeSubformData :: (R.Reflex t, Functor m) => Maybe FieldName -> (a -> Bool) -> DynEditor t m a a -> B.ConName -> DynMaybe t a -> FMDWrapped t m a
 makeSubformData mFN isThis subFormEditor name dma =
-  let w =  B.FGV . fmap getCompose . unF . runDynEditor subFormEditor . Compose . widgetResultToDynamic . fmap avToMaybe . B.unGV
+  let w =  B.FGV . fmap getCompose . unF . runEditor subFormEditor . Compose . widgetResultToDynamic . fmap avToMaybe . B.unGV
       gva = B.GV . dynamicToWidgetResult . fmap maybeToAV . getCompose $ dma
   in B.makeMDWrapped mFN isThis w name gva
 
@@ -224,12 +224,12 @@ data SubformArgs a b = SubformArgs (FormValidator b) B.ConName (Prism' a b)
 prismToSubformData :: (R.Reflex t, Functor m, FormBuilder t m b)
   => Maybe FieldName -> SubformArgs a b -> DynMaybe t a -> FMDWrapped t m a
 prismToSubformData mFN (SubformArgs vb name p) =
-  let mappedEditor = DynEditor $ fmap (review p) . buildForm vb mFN . mapDynMaybe (preview p)
+  let mappedEditor = Editor $ fmap (review p) . buildForm vb mFN . mapDynMaybe (preview p)
   in makeSubformData mFN (has p) mappedEditor name
 
 editorFromSubForms ::  (R.Reflex t, Functor m, B.Buildable (FR t m) (WidgetResult t) FValidation)
   => FormValidator a -> [DynMaybe t a -> FMDWrapped t m a] -> DynEditor t m a a
-editorFromSubForms v subForms = DynEditor $ \dma -> validateForm v $ makeForm $ fmap Compose . B.unFGV . B.bSum $ fmap ($ dma) subForms
+editorFromSubForms v subForms = Editor $ \dma -> validateForm v $ makeForm $ fmap Compose . B.unFGV . B.bSum $ fmap ($ dma) subForms
 
 actOnDBWidget :: Functor m => (FRW t m a -> FRW t m a) -> B.FGV (FR t m) (WidgetResult t) FValidation a -> B.FGV (FR t m) (WidgetResult t) FValidation a
 actOnDBWidget f = B.FGV . fmap getCompose . f . fmap Compose . B.unFGV
@@ -305,7 +305,7 @@ liftF :: FLayoutF t m -> Form t m a -> Form t m a
 liftF f = makeForm . f . unF
 
 liftE :: FLayoutF t m -> DynEditor t m a b -> DynEditor t m a b
-liftE f e = DynEditor $ liftF f . runDynEditor e
+liftE f e = Editor $ liftF f . runEditor e
 
 liftTransform :: Monad m => (forall b. m b -> m b) -> Form t m a -> Form t m a
 liftTransform f = liftF (liftLF f)

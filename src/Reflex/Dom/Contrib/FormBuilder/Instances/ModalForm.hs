@@ -76,9 +76,9 @@ modalizeEditor ::  ( RD.DomBuilder t m
                    , MonadFix m
                    , RD.MonadHold t m
                  ) => ModalEditorConfig t FormErrors a -> DynEditor t m a a -> DynEditor t m a a
-modalizeEditor cfg e = DynEditor $ makeForm . modalizeWidget cfg (unF . runDynEditor e)
+modalizeEditor cfg e = Editor $ makeForm . modalizeWidget cfg (unF . runEditor e)
 
-modalEditField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t FormErrors a -> DynEditor t m a a --DynMaybe t a -> Form t m a
+modalEditField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t FormErrors a -> DynEditor t m a a
 modalEditField cfg = modalizeEditor cfg (editField Nothing)
 
 maybeToEitherFE :: Maybe a -> Either FormErrors a
