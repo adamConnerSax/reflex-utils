@@ -1,5 +1,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -10,12 +12,8 @@ module Reflex.Dom.Contrib.FormBuilder.Editor
   , runEditor
   , transformEditor
   , DynEditor
---  , DynEditor (DynEditor)
   , runDynEditor
   , unEditedDynMaybe
---  , FREditor (FREditor)
---  , runFREditor
---  , unEditedFR
   ) where
 
 
@@ -56,7 +54,6 @@ import           Reflex.Dom                                   (DomBuilder,
                                                                PostBuild, dyn)
 
 
-
 -- This is necessary because this functor and applicative are different from that of SFRW
 -- NB: Form is *not* a Monad. So we do all the monadic widget building in (FRW t m a) and then wrap with makeForm
 type Form t m = Compose (FR t m) (FormResult t)
@@ -76,24 +73,23 @@ runDynEditor = runEditor
 instance (Reflex t, Applicative m) => NatBetween (DynMaybe t) (Form t m) where
   nat = unEditedDynMaybe
 
-instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (Form t m) (Form t m) where
---combine :: Form t m (Form t m) -> Form t m
-  combine x = Compose $ getCompose x >>= getCompose . combine . Compose . fmap avToMaybe . widgetResultToDynamic . getCompose
-{-  combine x = Compose $ do
-    x1 <- getCompose x -- FormResult t (Form t m a)
-    let x2 = Compose $ fmap avToMaybe $ widgetResultToDynamic $ getCompose x1 -- DynMaybe t (Form t m a)
-        x3 = combine x2
-    getCompose x3 -- Form t m a
--}
 
---    . fmap (Compose . join . fmap getCompose . getCompose) . join . fmap sequenceA . getCompose . fmap getCompose
+-- | This makes any Editor with a (m (DynMaybe t)) result into a Category.
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (Compose m (DynMaybe t)) (Compose m (DynMaybe t)) where
+  combine :: Compose m (DynMaybe t) (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
+  combine x = Compose $ getCompose x >>= getCompose . combine
+
+-- | This makes any Editor with a (Form t m) result into a Category.
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (Form t m) (Form t m) where
+  combine :: Form t m (Form t m a) -> Form t m a
+  combine x = Compose $ getCompose x >>= getCompose . combine
 
 -- | This gives all the powers to Editors of the type Editor (DynMaybe t) (Compose m (DynMaybe) t) a b, e.g., widgets like DynMaybe t a -> m (DynMaybe t a)
 -- but to do so, a dyn happens.  So this is not efficient.  Compositions (categorical or uses of Profunctor Choice, e.g., wander) will need to redraw the widget (when?)
 -- Can we improve this using a chooser?  Where would that go?
 
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Compose m (DynMaybe t)) where
---  combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
+  combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
   combine x =  Compose $ do
     let x1 = fmap sequenceA . getCompose . fmap getCompose $ x -- Dynamic t (m (Maybe (DynMaybe t a)))
     x2 <- dyn x1 -- Event t (Maybe (DynMaybe t a)))
@@ -102,14 +98,17 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
     return $ Compose $ join $ dmd
 
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Form t m) where
---combine :: DynMaybe t (Form t m a) -> Form t m a
+  combine :: DynMaybe t (Form t m a) -> Form t m a
+  combine = combine . Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
+
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (FormResult t) (Form t m) where
+  combine :: FormResult t (Form t m a) -> Form t m a
   combine x = Compose $ do
-    let x1 = fmap sequenceA $ getCompose $ fmap getCompose $ x -- DynMaybe t ((FR t m) (FormResult t a))
-    x2 <- dyn x1 -- Event t (Maybe (FormResult t a))
-    let x3 = fmap (mergeAccValidation . maybeToAV) . sequenceA . fmap getCompose <$> x2 -- Event t (WidgetResult t (FValidation a))
+    let x1 = fmap getCompose . fmap sequenceA . widgetResultToDynamic . getCompose $ x -- Dynamic t ((FR t m) (FormResult t (FValidation a)))
+    x2 <- dyn x1 -- Event t (FormResult t (FValidation a))
+    let x3 = fmap mergeAccValidation . getCompose <$> x2 -- Event t (WidgetResult t (FValidation a))
     x4 <- holdDyn (constWidgetResult $ AccFailure [FNothing]) x3 -- Dynamic t (WidgetResult t (FValidation a))
     return $ Compose $ dynamicWidgetResultToWidgetResult x4
-
 
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }
 
@@ -130,7 +129,7 @@ class NatBetween g f where
   nat :: g a -> f a
 
 instance (Applicative f, Functor g, NatBetween g f) => Strong (Editor g f) where
--- first' :: Editor g f a b -> Editor g f (a,c) (b,c)
+  first' :: Editor g f a b -> Editor g f (a,c) (b,c)
   first' (Editor e) = Editor $ \gac -> (,) <$> e (fst <$> gac) <*> nat (snd <$> gac)
 
 -- | An odd thing which can be extract (for comonad g) or join (for Monad f => Combinable f f)
@@ -143,7 +142,7 @@ instance (NatBetween g f, Combinable f f) => Combinable g f where
 -}
 
 instance (Applicative f, Applicative g, NatBetween g f, Combinable g f) => Choice (Editor g f) where
--- left' :: Editor g f a b -> Editor g f (Either a c) (Either b c)
+  left' :: Editor g f a b -> Editor g f (Either a c) (Either b c)
   left' ed =
     let s :: Either a c -> Either (g a) (g c)
         s = bimap pure pure
@@ -154,7 +153,7 @@ instance (Applicative f, Applicative g, NatBetween g f, Combinable g f) => Choic
     in Editor $ \gexc -> combine $ fmap (q . r ed . s) gexc
 
 instance (Applicative g, Applicative f, NatBetween g f, Combinable g f) => Traversing (Editor g f) where
---  wander :: (forall f. Applicative f => (a -> f b) -> (s -> f t)) -> Editor g f a b -> Editor g f s t
+  wander :: (forall f. Applicative f => (a -> f b) -> (s -> f t)) -> Editor g f a b -> Editor g f s t
   wander vlt (Editor eab) = Editor $ combine . fmap (vlt (eab . pure))
 
 -- | We just need "Pointed g" for pure and
