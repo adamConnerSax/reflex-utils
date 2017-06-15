@@ -84,9 +84,15 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
   combine :: Form t m (Form t m a) -> Form t m a
   combine x = Compose $ getCompose x >>= getCompose . combine
 
--- | This gives all the powers to Editors of the type Editor (DynMaybe t) (Compose m (DynMaybe) t) a b, e.g., widgets like DynMaybe t a -> m (DynMaybe t a)
+-- | This gives all the powers (Choice, Category, Traversing) to Editors.
 -- but to do so, a dyn happens.  So this is not efficient.  Compositions (categorical or uses of Profunctor Choice, e.g., wander) will need to redraw the widget (when?)
 -- Can we improve this using a chooser?  Where would that go?
+
+-- Ditto for DynMaybe t m -> Form t m
+-- NB: This one uses the instance for (FormResult t m) (Form t m) by upgrading the DynMaybe to a FormResult.
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Form t m) where
+  combine :: DynMaybe t (Form t m a) -> Form t m a
+  combine = combine . Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
 
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Compose m (DynMaybe t)) where
   combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
@@ -97,10 +103,7 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
     dmd <- buildDynamic (return $ constDyn Nothing) x3
     return $ Compose $ join $ dmd
 
-instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Form t m) where
-  combine :: DynMaybe t (Form t m a) -> Form t m a
-  combine = combine . Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
-
+-- Ditto for FormResult t m -> Form t m
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (FormResult t) (Form t m) where
   combine :: FormResult t (Form t m a) -> Form t m a
   combine x = Compose $ do
