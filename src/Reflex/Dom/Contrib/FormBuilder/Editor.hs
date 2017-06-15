@@ -97,6 +97,9 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
     let x1 = flip runReaderT env . getCompose <$> x -- DynMaybe t (m (FormResult t a))
         x2 = fmap sequenceA $ getCompose x1 -- Dynamic t (m (Maybe (FormResult t a)))
     x3 <- dyn x2 -- Event t (Maybe (FormResult t a))
+    let q Nothing = dynValidationErr [FNothing]
+        q (Just x) = x
+        x4 = fmap q . sequenceA . fmap getCompose <$> x3
 -}
 
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }
