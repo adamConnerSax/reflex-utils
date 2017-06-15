@@ -20,14 +20,24 @@ module Reflex.Dom.Contrib.FormBuilder.Editor
 
 
 import           Reflex.Dom.Contrib.FormBuilder.Configuration (FR, FormResult)
-import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynMaybe,
-                                                               maybeToAV)
-import           Reflex.Dom.Contrib.Widgets.WidgetResult      (dynamicToWidgetResult)
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation (AccValidation (AccFailure),
+                                                               DynMaybe,
+                                                               FormError (FNothing),
+                                                               avToMaybe,
+                                                               dynValidationErr,
+                                                               maybeToAV,
+                                                               mergeAccValidation)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult,
+                                                               dynamicToWidgetResult,
+                                                               dynamicWidgetResultToWidgetResult,
+                                                               widgetResultToDynamic)
 
 
 import qualified Control.Category                             as C
 import           Control.Lens                                 (Lens)
 import           Control.Monad                                (join)
+import           Control.Monad.Trans                          (lift)
+import           Control.Monad.Trans.Reader                   (ask, runReaderT)
 import           Data.Bifunctor                               (bimap)
 import           Data.Functor.Compose                         (Compose (Compose),
                                                                getCompose)
@@ -40,7 +50,8 @@ import           Reflex                                       (Dynamic, Event,
                                                                MonadHold,
                                                                Reflex,
                                                                buildDynamic,
-                                                               constDyn)
+                                                               constDyn,
+                                                               holdDyn)
 import           Reflex.Dom                                   (DomBuilder,
                                                                PostBuild, dyn)
 
@@ -65,21 +76,22 @@ runDynEditor = runEditor
 instance (Reflex t, Applicative m) => NatBetween (DynMaybe t) (Form t m) where
   nat = unEditedDynMaybe
 
-{-
-instance (Reflex t, Monad m) => Combinable (Form t m) (Form t m) where
-  combine = Compose . fmap (Compose . join . fmap getCompose . getCompose) . join . fmap sequenceA . getCompose . fmap getCompose
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (Form t m) (Form t m) where
+--combine :: Form t m (Form t m) -> Form t m
+  combine x = Compose $ getCompose x >>= getCompose . combine . Compose . fmap avToMaybe . widgetResultToDynamic . getCompose
+{-  combine x = Compose $ do
+    x1 <- getCompose x -- FormResult t (Form t m a)
+    let x2 = Compose $ fmap avToMaybe $ widgetResultToDynamic $ getCompose x1 -- DynMaybe t (Form t m a)
+        x3 = combine x2
+    getCompose x3 -- Form t m a
 -}
-{-
---| Not sure I can write this one because where would the Dynamic start?  DynMaybe makes that simpler.  Maybe I could do Dynamic in but DynMaybe out?
-instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (Dynamic t) (Compose m (Dynamic t)) where
---  combine :: Dynamic t (Compose m (Dynamic t) a) -> Compose m (Dynamic t) a
-  combine x = Compose $ do
-    x1 <- dyn $ fmap getCompose x -- Event t (
-    dd <- buildDynamic
--}
+
+--    . fmap (Compose . join . fmap getCompose . getCompose) . join . fmap sequenceA . getCompose . fmap getCompose
+
 -- | This gives all the powers to Editors of the type Editor (DynMaybe t) (Compose m (DynMaybe) t) a b, e.g., widgets like DynMaybe t a -> m (DynMaybe t a)
 -- but to do so, a dyn happens.  So this is not efficient.  Compositions (categorical or uses of Profunctor Choice, e.g., wander) will need to redraw the widget (when?)
 -- Can we improve this using a chooser?  Where would that go?
+
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Compose m (DynMaybe t)) where
 --  combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
   combine x =  Compose $ do
@@ -89,18 +101,15 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
     dmd <- buildDynamic (return $ constDyn Nothing) x3
     return $ Compose $ join $ dmd
 
-{-
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Form t m) where
 --combine :: DynMaybe t (Form t m a) -> Form t m a
   combine x = Compose $ do
-    env <- ask
-    let x1 = flip runReaderT env . getCompose <$> x -- DynMaybe t (m (FormResult t a))
-        x2 = fmap sequenceA $ getCompose x1 -- Dynamic t (m (Maybe (FormResult t a)))
-    x3 <- dyn x2 -- Event t (Maybe (FormResult t a))
-    let q Nothing = dynValidationErr [FNothing]
-        q (Just x) = x
-        x4 = fmap q . sequenceA . fmap getCompose <$> x3
--}
+    let x1 = fmap sequenceA $ getCompose $ fmap getCompose $ x -- DynMaybe t ((FR t m) (FormResult t a))
+    x2 <- dyn x1 -- Event t (Maybe (FormResult t a))
+    let x3 = fmap (mergeAccValidation . maybeToAV) . sequenceA . fmap getCompose <$> x2 -- Event t (WidgetResult t (FValidation a))
+    x4 <- holdDyn (constWidgetResult $ AccFailure [FNothing]) x3 -- Dynamic t (WidgetResult t (FValidation a))
+    return $ Compose $ dynamicWidgetResultToWidgetResult x4
+
 
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }
 
