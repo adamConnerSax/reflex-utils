@@ -60,10 +60,12 @@ type Form t m = Compose (FR t m) (FormResult t)
 
 -- | Form is a functor and applicative since its components (ReaderT and WidgetResult) are
 -- DynMaybe is also a functor (and applicative) for the same reason.
+dynMaybeToFormResult :: Reflex t => DynMaybe t a -> FormResult t a
+dynMaybeToFormResult = Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
 
 -- | This function just lifts a DynMaybe directly to a form, without any actual editing
 unEditedDynMaybe :: (Reflex t, Applicative m) => DynMaybe t a -> Form t m a
-unEditedDynMaybe = Compose . pure . Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
+unEditedDynMaybe = Compose . pure . dynMaybeToFormResult
 
 type DynEditor t m a b = Editor (DynMaybe t) (Form t m) a b
 
@@ -73,40 +75,43 @@ runDynEditor = runEditor
 instance (Reflex t, Applicative m) => NatBetween (DynMaybe t) (Form t m) where
   nat = unEditedDynMaybe
 
-
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m, Combinable h (Compose m h)) => Combinable (Compose m h) (Compose m h) where
   combine :: Compose m h (Compose m h a) -> Compose m h a
   combine x = Compose $ getCompose x >>= getCompose . combine
 
-
 -- | This gives all the powers (Choice, Category, Traversing) to Editors.
 -- but to do so, a dyn happens.  So this is not efficient.  Compositions (categorical or uses of Profunctor Choice, e.g., wander) will need to redraw the widget (when?)
--- Can we improve this using a chooser?  Where would that go?
+-- Can we do a factorDyn somehow, when the common/Left type has a generics-sop.Generic instance?
 
 -- Ditto for DynMaybe t m -> Form t m
 -- NB: This one uses the instance for (FormResult t m) (Form t m) by upgrading the DynMaybe to a FormResult.
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Form t m) where
   combine :: DynMaybe t (Form t m a) -> Form t m a
-  combine = combine . Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
+  combine = combine . dynMaybeToFormResult
 
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Compose m (DynMaybe t)) where
   combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
   combine x =  Compose $ do
-    let x1 = fmap sequenceA . getCompose . fmap getCompose $ x -- Dynamic t (m (Maybe (DynMaybe t a)))
-    x2 <- dyn x1 -- Event t (Maybe (DynMaybe t a)))
-    let x3 = fmap join . sequenceA . fmap getCompose <$> x2 -- Event t (Dynamic t (Maybe a))
-    dmd <- buildDynamic (return $ constDyn Nothing) x3
-    return $ Compose $ join $ dmd
+    let mdm2dm = Compose . fmap join . sequenceA . fmap getCompose  
+        x1 = fmap (fmap mdm2dm . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t (m (DynMaybe t a))
+    x2 <- dyn x1 -- Event t (DynMaybe t a)
+    dmd <- buildDynamic (return $ constDyn Nothing) (getCompose <$> x2)
+    return $ Compose $ join dmd
 
 -- Ditto for FormResult t m -> Form t m
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (FormResult t) (Form t m) where
   combine :: FormResult t (Form t m a) -> Form t m a
   combine x = Compose $ do
-    let x1 = fmap getCompose . fmap sequenceA . widgetResultToDynamic . getCompose $ x -- Dynamic t ((FR t m) (FormResult t (FValidation a)))
-    x2 <- dyn x1 -- Event t (FormResult t (FValidation a))
-    let x3 = fmap mergeAccValidation . getCompose <$> x2 -- Event t (WidgetResult t (FValidation a))
-    x4 <- holdDyn (constWidgetResult $ AccFailure [FNothing]) x3 -- Dynamic t (WidgetResult t (FValidation a))
+    let fvfr2fr = Compose . fmap mergeAccValidation . sequenceA . fmap getCompose
+    let x1 = widgetResultToDynamic . fmap (fmap fvfr2fr . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t ((FR t m) (FormResult t a))
+    x2 <- dyn x1 -- Event t (FormResult t a)
+    x4 <- holdDyn (constWidgetResult $ AccFailure [FNothing]) (getCompose <$> x2) -- Dynamic t (WidgetResult t (FValidation a))
     return $ Compose $ dynamicWidgetResultToWidgetResult x4
+
+{-
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (h t) (Compose m (h t)) where
+  combine :: h t (Compose m (h t) a) -> Compose m (h t) a
+-}
 
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }
 
