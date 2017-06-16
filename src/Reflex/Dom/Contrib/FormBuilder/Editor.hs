@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE TypeFamilies          #-}
 module Reflex.Dom.Contrib.FormBuilder.Editor
   (
     Form
@@ -29,7 +30,7 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult
                                                                dynamicToWidgetResult,
                                                                dynamicWidgetResultToWidgetResult,
                                                                widgetResultToDynamic)
-
+import           Reflex.Dynamic.FactorDyn (maybeDyn', eitherDyn)
 
 import qualified Control.Category                             as C
 import           Control.Lens                                 (Lens)
@@ -155,18 +156,57 @@ instance (Applicative f, Applicative g, NatBetween g f, Combinable g f) => Choic
         q = either (fmap Left) (fmap Right)
     in Editor $ \gexc -> combine $ fmap (q . r ed . s) gexc
 
+-- Applicative (Pointed) is the obvious way to do this but there are others, 
+class Monad m => Distributable g m where
+  distribute :: g (Either a c) -> m (g (Either (g a) (g c)))
+{-                                     
+instance Reflex t => Distributable (DynMaybe t) where
+  distribute :: DynMaybe t (Either a c) -> m (DynMaybe t (Either (DynMaybe t a) (DynMaybe t c)))
+  distribute x =
+    let x1 :: Dynamic t (Maybe (Dynamic t (Either a c)))
+        x1 = maybeDyn' . getCompose $ x
+        x2 :: DynMaybe t (Either (Dynamic t a) (Dynamic t c))
+        x2 = Compose . join . fmap (sequenceA . fmap eitherDyn) $ x1
+        x3 :: DynMaybe t (Either (DynMaybe t a) (DynMaybe t c))
+        x3 = fmap (bimap (fmap $ Compose . pure) (fmap $ Compose . pure)) x2
+    in x3
+
+--    fmap (bimap (fmap $ Compose . pure) (fmap $ Compose . pure)) . Compose . join . fmap (sequenceA . fmap eitherDyn) . maybeDyn' . getCompose
+-}
+
+{-                                    
+instance (Applicative f, Monad m, f ~ Compose m g) => Choice (Editor g f) where
+  left' :: Editor g f a b -> Editor g f (Either a c) (Either b c)
+  left' ed =
+    let s :: Either a c -> Either (g a) (g c)
+        s = bimap pure pure
+        r :: Editor g f x y -> Either (g x) (g c) -> Either (f y) (f c)
+        r (Editor e1) = bimap e1 nat
+        q :: Either (f b) (f c) -> f (Either b c)
+        q = either (fmap Left) (fmap Right)
+    in Editor $ \gexc -> combine $ fmap (q . r ed . s) gexc
+-}
+
 instance (Applicative g, Applicative f, NatBetween g f, Combinable g f) => Traversing (Editor g f) where
   wander :: (forall f. Applicative f => (a -> f b) -> (s -> f t)) -> Editor g f a b -> Editor g f s t
   wander vlt (Editor eab) = Editor $ combine . fmap (vlt (eab . pure))
 
+{-
 -- | We just need "Pointed g" for pure and
 instance (Applicative g, Functor f, NatBetween g f, Combinable f f) => C.Category (Editor g f) where
   id = Editor nat -- Editor g f a a
   (Editor ebc) . (Editor eab) = Editor $ \ga -> combine $ fmap (ebc . pure) (eab ga) -- Editor g f b c -> Editor g f a b -> Editor g f a c
+-}
+
+
+instance (Monad m, f ~ Compose m g) => C.Category (Editor g f) where
+  id = Editor $ Compose . pure -- Editor g f a a
+  (Editor ebc) . (Editor eab) = Editor $ \ga -> Compose $ join $ fmap (getCompose . ebc) (getCompose $ eab ga)-- Editor g f b c -> Editor g f a b -> Editor g f a c
+
 
 instance Monad f => Monad (Editor g f a) where
   return = pure
-  eb >>= h = Editor $ \ga -> let q = flip runEditor ga in q eb >>= q . h
+  eab >>= h = Editor $ \ga -> runEditor eab ga >>= flip runEditor ga . h
 
 
 {-    

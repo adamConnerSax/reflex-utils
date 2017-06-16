@@ -16,7 +16,7 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/adamConnerSax/reflex-sumType-utilities
-    commit: "a45d745d5179d1d1d52b4de7ad945923eeecd7c5"
+    commit: "ae53680dde9babeea3b1760fce7c4a60a3e58c2e"
   extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex

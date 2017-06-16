@@ -73,6 +73,7 @@ library
                      , reflex
                      , reflex-dom
                      , reflex-dom-contrib
+                     , reflex-sumType-utilities
                      , dependent-map
                      , transformers
                      , exception-transformers
