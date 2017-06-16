@@ -74,6 +74,11 @@ instance (Reflex t, Applicative m) => NatBetween (DynMaybe t) (Form t m) where
   nat = unEditedDynMaybe
 
 
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m, Combinable h (Compose m h)) => Combinable (Compose m h) (Compose m h) where
+  combine :: Compose m h (Compose m h a) -> Compose m h a
+  combine x = Compose $ getCompose x >>= getCompose . combine
+
+{-    
 -- | This makes any Editor with a (m (DynMaybe t)) result into a Category.
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (Compose m (DynMaybe t)) (Compose m (DynMaybe t)) where
   combine :: Compose m (DynMaybe t) (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
@@ -83,6 +88,7 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (Form t m) (Form t m) where
   combine :: Form t m (Form t m a) -> Form t m a
   combine x = Compose $ getCompose x >>= getCompose . combine
+-}
 
 -- | This gives all the powers (Choice, Category, Traversing) to Editors.
 -- but to do so, a dyn happens.  So this is not efficient.  Compositions (categorical or uses of Profunctor Choice, e.g., wander) will need to redraw the widget (when?)
