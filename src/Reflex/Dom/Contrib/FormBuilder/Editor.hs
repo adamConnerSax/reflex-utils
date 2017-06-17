@@ -187,7 +187,6 @@ fromAccValEither (SR x) = AccSuccess $ Right x
 factorAccValEither :: (Reflex t, MonadHold t m, MonadFix m) => Dynamic t (AccValEither e a b) -> m (Dynamic t (AccValEither (Dynamic t e) (Dynamic t a) (Dynamic t b)))
 factorAccValEither = factorDyn'
 
-{-
 instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormResult t) m where
   distribute :: forall t a b m. (Reflex t, MonadHold t m, MonadFix m) => FormResult t (Either a b) -> m (FormResult t (Either (FormResult t a) (FormResult t b)))
   distribute x = do
@@ -200,11 +199,9 @@ instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormResult t) m
         f x = case x of
           AccFailure de -> fmap AccFailure de
           AccSuccess y -> constDyn $ AccSuccess y
-        x4 :: Dynamic t (AccValidation FormErrors (Either (Dynamic t a) (Dynamic t b)))
+        x4 :: FormResult t (Either (Dynamic t a) (Dynamic t b))
         x4 = Compose $ dynamicToWidgetResult $ join $ fmap f x3
-    return $ fmap (bimap (dynMaybeToFormResult . Compose . fmap pure) (dynMaybeToFormResult . Compose . fmap pure)) $ Compose x4 
--}
-
+    return $ fmap (bimap (dynMaybeToFormResult . Compose . fmap pure) (dynMaybeToFormResult . Compose . fmap pure)) x4 
 
 instance (Applicative f, Functor g, Monad m, f ~ Compose m g, Distributable g m, Combinable g f) => Choice (Editor g f) where
   left' :: forall g f a b c m. (Applicative f, Functor g, Monad m, f ~ Compose m g, Distributable g m, Combinable g f) => Editor g f a b -> Editor g f (Either a c) (Either b c)
