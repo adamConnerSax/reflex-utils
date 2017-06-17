@@ -16,7 +16,8 @@ module Reflex.Dom.Contrib.FormBuilder.Editor
   , transformEditor
   , DynEditor
   , runDynEditor
-  , unEditedDynMaybe
+  , dynMaybeToFormResult
+  , formResultToDynMaybe
   ) where
 
 
@@ -65,22 +66,24 @@ import           Reflex.Dom                                   (DomBuilder,
 -- NB: Form is *not* a Monad. So we do all the monadic widget building in (FRW t m a) and then wrap with makeForm
 type Form t m = Compose (FR t m) (FormResult t)
 
--- | Form is a functor and applicative since its components (ReaderT and WidgetResult) are
--- DynMaybe is also a functor (and applicative) for the same reason.
 dynMaybeToFormResult :: Reflex t => DynMaybe t a -> FormResult t a
 dynMaybeToFormResult = Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
 
--- | This function just lifts a DynMaybe directly to a form, without any actual editing
-unEditedDynMaybe :: (Reflex t, Applicative m) => DynMaybe t a -> Form t m a
-unEditedDynMaybe = Compose . pure . dynMaybeToFormResult
+formResultToDynMaybe :: Reflex t => FormResult t a -> DynMaybe t a
+formResultToDynMaybe = Compose . widgetResultToDynamic . fmap avToMaybe . getCompose
 
 type DynEditor t m a b = Editor (DynMaybe t) (Form t m) a b
 
+type FormEditor t m a b = Editor (FormResult t) (Form t m) a b
+
+toDynEditor :: Reflex t => FormEditor t m a b -> DynEditor t m a b
+toDynEditor = transformEditor dynMaybeToFormResult id
+
+toFormEditor :: Reflex t => DynEditor t m a b -> FormEditor t m a b
+toFormEditor = transformEditor formResultToDynMaybe id
+
 runDynEditor :: DynEditor t m a b -> DynMaybe t a -> Form t m b
 runDynEditor = runEditor
-
-instance (Reflex t, Applicative m) => NatBetween (DynMaybe t) (Form t m) where
-  nat = unEditedDynMaybe
 
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m, Combinable h (Compose m h)) => Combinable (Compose m h) (Compose m h) where
   combine :: Compose m h (Compose m h a) -> Compose m h a
@@ -134,9 +137,6 @@ instance (Functor g, Functor f) => Profunctor (Editor f g) where
 instance Applicative f => Applicative (Editor g f a) where
   pure = Editor . const . pure
   (Editor eFxy) <*> (Editor ex) = Editor $ \ga -> eFxy ga <*> ex ga
-
-class NatBetween g f where
-  nat :: g a -> f a
 
 instance (Applicative f, Functor g, f ~ Compose m g, Applicative m) => Strong (Editor g f) where
   first' :: Editor g f a b -> Editor g f (a,c) (b,c)
@@ -220,6 +220,12 @@ instance (Applicative g, Applicative f, f ~ Compose m g, Monad m, Distributable 
 instance (Monad m, f ~ Compose m g) => C.Category (Editor g f) where
   id = Editor $ Compose . pure -- Editor g f a a
   (Editor ebc) . (Editor eab) = Editor $ \ga -> Compose $ join $ fmap (getCompose . ebc) (getCompose $ eab ga)-- Editor g f b c -> Editor g f a b -> Editor g f a c
+
+-- FormEditor is already a category by the above
+{-
+instance (Reflex t, MonadHold t m, MonadFix m) => C.Category (DynEditor t m) where
+  id = transformEditor  
+-}
 
 instance Monad f => Monad (Editor g f a) where
   return = pure

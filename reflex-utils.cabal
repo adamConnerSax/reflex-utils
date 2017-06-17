@@ -222,6 +222,30 @@ executable reflex-utils-formBuilder-warp
                      , validation
   default-language:    Haskell2010
 
+executable reflex-utils-editor-warp
+  if flag(wkwebview)
+    buildable: False
+  hs-source-dirs:      app/editor
+  main-is:             Main.hs
+  other-modules:       
+  ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
+  if flag(warp)
+   cpp-options: -DUSE_WARP -DUSE_JSADDLE
+   build-depends: jsaddle-warp
+                , cabal-macosx >= 0.2.3.4 && < 0.3
+  if flag(ghcjs)
+   cpp-options: -DUSE_GHCJS 
+  build-depends:       base
+                     , reflex
+                     , reflex-dom
+                     , reflex-utils
+                     , ghcjs-dom
+                     , lens
+                     , dataBuilder
+                     , process
+                     , text
+  default-language:    Haskell2010
+
 
 executable reflex-utils-layout-warp
   if flag(wkwebview)

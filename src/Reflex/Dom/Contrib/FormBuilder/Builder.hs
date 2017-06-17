@@ -191,7 +191,7 @@ editValidatedField :: FormBuilder t m a => FormValidator a -> Maybe FieldName ->
 editValidatedField v mFN = Editor $ buildForm v mFN
 
 noFormField :: (Applicative m, R.Reflex t) => DynEditor t m a a
-noFormField = Editor $ unEditedDynMaybe
+noFormField = Editor $ Compose . pure . dynMaybeToFormResult
 
 readOnlyField :: VFormBuilderC t m a => Maybe FieldName -> DynEditor t m a a
 readOnlyField mFN =  Editor $ toReadOnly . buildVForm mFN
