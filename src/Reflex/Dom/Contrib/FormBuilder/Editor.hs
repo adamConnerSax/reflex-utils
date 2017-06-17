@@ -217,16 +217,13 @@ instance (Applicative g, Applicative f, f ~ Compose m g, Monad m, Distributable 
   wander :: (forall f. Applicative f => (a -> f b) -> (s -> f t)) -> Editor g f a b -> Editor g f s t
   wander vlt (Editor eab) = Editor $ combine . fmap (vlt (eab . pure))
 
-
 instance (Monad m, f ~ Compose m g) => C.Category (Editor g f) where
   id = Editor $ Compose . pure -- Editor g f a a
   (Editor ebc) . (Editor eab) = Editor $ \ga -> Compose $ join $ fmap (getCompose . ebc) (getCompose $ eab ga)-- Editor g f b c -> Editor g f a b -> Editor g f a c
 
-
 instance Monad f => Monad (Editor g f a) where
   return = pure
   eab >>= h = Editor $ \ga -> runEditor eab ga >>= flip runEditor ga . h
-
 
 {-    
 -- | This makes any Editor with a (m (DynMaybe t)) result into a Category.
