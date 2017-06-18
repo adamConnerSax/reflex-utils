@@ -14,19 +14,13 @@ module Reflex.Dom.Contrib.FormBuilder.Editor
   , Editor (Editor)
   , runEditor
   , transformEditor
-  , DynEditor
   , FormEditor
-  , toDynEditor
-  , toFormEditor
-  , runDynEditor
-  , dynMaybeToFormResult
-  , formResultToDynMaybe
   , (|<|)
   , (|>|)
   ) where
 
 
-import           Reflex.Dom.Contrib.FormBuilder.Configuration (FR, FormResult)
+import           Reflex.Dom.Contrib.FormBuilder.Configuration (FR, FormValue, dynMaybeToFormValue)
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (AccValidation (AccSuccess, AccFailure),
                                                                DynMaybe,
                                                                FormError (FNothing), FormErrors,
@@ -69,26 +63,9 @@ import           Reflex.Dom                                   (DomBuilder,
 
 -- This is necessary because this functor and applicative are different from that of SFRW
 -- NB: Form is *not* a Monad. So we do all the monadic widget building in (FRW t m a) and then wrap with makeForm
-type Form t m = Compose (FR t m) (FormResult t)
+type Form t m = Compose (FR t m) (FormValue t)
 
-dynMaybeToFormResult :: Reflex t => DynMaybe t a -> FormResult t a
-dynMaybeToFormResult = Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
-
-formResultToDynMaybe :: Reflex t => FormResult t a -> DynMaybe t a
-formResultToDynMaybe = Compose . widgetResultToDynamic . fmap avToMaybe . getCompose
-
-type DynEditor t m a b = Editor (DynMaybe t) (Form t m) a b
-
-type FormEditor t m a b = Editor (FormResult t) (Form t m) a b
-
-toDynEditor :: Reflex t => FormEditor t m a b -> DynEditor t m a b
-toDynEditor = transformEditor dynMaybeToFormResult id
-
-toFormEditor :: Reflex t => DynEditor t m a b -> FormEditor t m a b
-toFormEditor = transformEditor formResultToDynMaybe id
-
-runDynEditor :: DynEditor t m a b -> DynMaybe t a -> Form t m b
-runDynEditor = runEditor
+type FormEditor t m a b = Editor (FormValue t) (Form t m) a b
 
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m, Combinable h (Compose m h)) => Combinable (Compose m h) (Compose m h) where
   combine :: Compose m h (Compose m h a) -> Compose m h a
@@ -99,10 +76,10 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m, Combi
 -- Can we do a factorDyn somehow, when the common/Left type has a generics-sop.Generic instance?
 
 -- Ditto for DynMaybe t m -> Form t m
--- NB: This one uses the instance for (FormResult t m) (Form t m) by upgrading the DynMaybe to a FormResult.
+-- NB: This one uses the instance for (FormValue t m) (Form t m) by upgrading the DynMaybe to a FormValue.
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Form t m) where
   combine :: DynMaybe t (Form t m a) -> Form t m a
-  combine = combine . dynMaybeToFormResult
+  combine = combine . dynMaybeToFormValue
 
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Compose m (DynMaybe t)) where
   combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
@@ -113,13 +90,13 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
     dmd <- buildDynamic (return $ constDyn Nothing) (getCompose <$> x2)
     return $ Compose $ join dmd
 
--- Ditto for FormResult t m -> Form t m
-instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (FormResult t) (Form t m) where
-  combine :: FormResult t (Form t m a) -> Form t m a
+-- Ditto for FormValue t m -> Form t m
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (FormValue t) (Form t m) where
+  combine :: FormValue t (Form t m a) -> Form t m a
   combine x = Compose $ do
     let fvfr2fr = Compose . fmap mergeAccValidation . sequenceA . fmap getCompose
-    let x1 = widgetResultToDynamic . fmap (fmap fvfr2fr . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t ((FR t m) (FormResult t a))
-    x2 <- dyn x1 -- Event t (FormResult t a)
+    let x1 = widgetResultToDynamic . fmap (fmap fvfr2fr . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t ((FR t m) (FormValue t a))
+    x2 <- dyn x1 -- Event t (FormValue t a)
     x4 <- holdDyn (constWidgetResult $ AccFailure [FNothing]) (getCompose <$> x2) -- Dynamic t (WidgetResult t (FValidation a))
     return $ Compose $ dynamicWidgetResultToWidgetResult x4
 
@@ -192,8 +169,8 @@ fromAccValEither (SR x) = AccSuccess $ Right x
 factorAccValEither :: (Reflex t, MonadHold t m, MonadFix m) => Dynamic t (AccValEither e a b) -> m (Dynamic t (AccValEither (Dynamic t e) (Dynamic t a) (Dynamic t b)))
 factorAccValEither = factorDyn'
 
-instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormResult t) m where
-  distribute :: forall t a b m. (Reflex t, MonadHold t m, MonadFix m) => FormResult t (Either a b) -> m (FormResult t (Either (FormResult t a) (FormResult t b)))
+instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormValue t) m where
+  distribute :: forall t a b m. (Reflex t, MonadHold t m, MonadFix m) => FormValue t (Either a b) -> m (FormValue t (Either (FormValue t a) (FormValue t b)))
   distribute x = do
     let x1 :: Dynamic t (AccValEither FormErrors a b)
         x1 = widgetResultToDynamic . fmap toAccValEither $ getCompose x
@@ -204,11 +181,16 @@ instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormResult t) m
         f x = case x of
           AccFailure de -> fmap AccFailure de
           AccSuccess y -> constDyn $ AccSuccess y
-        x4 :: FormResult t (Either (Dynamic t a) (Dynamic t b))
+        x4 :: FormValue t (Either (Dynamic t a) (Dynamic t b))
         x4 = Compose $ dynamicToWidgetResult $ join $ fmap f x3
-    return $ fmap (bimap (dynMaybeToFormResult . Compose . fmap pure) (dynMaybeToFormResult . Compose . fmap pure)) x4 
+    return $ fmap (bimap (dynMaybeToFormValue . Compose . fmap pure) (dynMaybeToFormValue . Compose . fmap pure)) x4 
 
-instance (Applicative f, Functor g, Monad m, f ~ Compose m g, Distributable g m, Combinable g f) => Choice (Editor g f) where
+instance (Applicative f
+         , Functor g
+         , Monad m
+         , f ~ Compose m g
+         , Distributable g m
+         , Combinable g f) => Choice (Editor g f) where
   left' :: forall g f a b c m. (Applicative f, Functor g, Monad m, f ~ Compose m g, Distributable g m, Combinable g f) => Editor g f a b -> Editor g f (Either a c) (Either b c)
   left' ed = Editor $ \geac -> Compose $ do
     dist_geac :: g (Either (g a) (g c)) <- distribute geac    
@@ -218,7 +200,12 @@ instance (Applicative f, Functor g, Monad m, f ~ Compose m g, Distributable g m,
         x2 = fmap (either (fmap Left) (fmap Right)) x1
     getCompose $ combine x2
 
-instance (Applicative g, Applicative f, f ~ Compose m g, Monad m, Distributable g m, Combinable g f) => Traversing (Editor g f) where
+instance (Applicative g
+         , Applicative f
+         , f ~ Compose m g
+         , Monad m
+         , Distributable g m
+         , Combinable g f) => Traversing (Editor g f) where
   wander :: (forall f. Applicative f => (a -> f b) -> (s -> f t)) -> Editor g f a b -> Editor g f s t
   wander vlt (Editor eab) = Editor $ combine . fmap (vlt (eab . pure))
 
