@@ -287,12 +287,12 @@ observeWidget cfg wa =
   runForm (setToObserve cfg) . makeForm $ lift wa >>= unF . buildVForm Nothing . constDynMaybe . Just
 
 
-observeFlow::( RD.DomBuilder t m
-             , R.MonadHold t m
-             , MonadFix m
-             , VFormBuilderC t m a
-             , VFormBuilderC t m b)
-           => FormConfiguration t m -> (a -> m b) -> a -> m (FormResult t b)
+observeFlow :: ( RD.DomBuilder t m
+               , R.MonadHold t m
+               , MonadFix m
+               , VFormBuilderC t m a
+               , VFormBuilderC t m b)
+  => FormConfiguration t m -> (a -> m b) -> a -> m (FormResult t b)
 observeFlow cfg flow initialA =
   runForm cfg . makeForm  $ do
     let initialWidget = flow initialA
@@ -304,8 +304,8 @@ observeFlow cfg flow initialA =
 liftF :: FLayoutF t m -> Form t m a -> Form t m a
 liftF f = makeForm . f . unF
 
-liftE :: FLayoutF t m -> DynEditor t m a b -> DynEditor t m a b
-liftE f e = Editor $ liftF f . runEditor e
+liftE :: FLayoutF t m -> Editor x (Form t m) a b -> Editor x (Form t m) a b
+liftE f = transformEditor id (liftF f) -- Editor $ liftF f . runEditor e
 
 liftTransform :: Monad m => (forall b. m b -> m b) -> Form t m a -> Form t m a
 liftTransform f = liftF (liftLF f)

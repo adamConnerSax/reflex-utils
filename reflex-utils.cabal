@@ -240,7 +240,9 @@ executable reflex-utils-editor-warp
                      , reflex-dom
                      , reflex-utils
                      , ghcjs-dom
+                     , containers
                      , lens
+                     , profunctors
                      , dataBuilder
                      , process
                      , text
