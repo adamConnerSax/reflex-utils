@@ -236,13 +236,6 @@ instance (Monad m, f ~ Compose m g) => C.Category (Editor g f) where
   ebc . eab = ebc |<| eab
 
 
-
--- FormEditor is already a category by the above
-{-
-instance (Reflex t, MonadHold t m, MonadFix m) => C.Category (DynEditor t m) where
-  id = transformEditor  
--}
-
 instance Monad f => Monad (Editor g f a) where
   return = pure
   eab >>= h = Editor $ \ga -> runEditor eab ga >>= flip runEditor ga . h
