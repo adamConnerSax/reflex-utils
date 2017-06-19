@@ -21,7 +21,8 @@ import           Control.Monad.Fix                                   (MonadFix)
 import           Control.Monad.IO.Class                              as IOC (MonadIO)
 import           Control.Monad.Reader                                (ask,
                                                                       runReaderT)
-import           Data.Functor.Compose                                (getCompose)
+import           Data.Functor.Compose                                (Compose (Compose),
+                                                                      getCompose)
 
 import           Data.Monoid                                         ((<>))
 import qualified GHC.Generics                                        as GHC
@@ -67,7 +68,7 @@ import           Reflex.Dom.Contrib.ReflexConstraints                (MonadWidge
 import           Reflex.Dom.Contrib.Widgets.WidgetResult             (widgetResultToDynamic)
 
 #ifdef USE_WKWEBVIEW
-import           Language.Javascript.JSaddle.WKWebView               (run)
+--import           Language.Javascript.JSaddle.WKWebView               (run)
 #endif
 
 #ifdef USE_WARP
@@ -289,12 +290,15 @@ testComplexForm :: FormInstanceC t m=>FormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just c)
+  fr <- flexFill LayoutRight $ dynamicForm cfg (Just c)
   el "p" $ text "dynText:"
-  dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose cDynM))
+  dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose fr))
+  el "p" $ text "As input:"
+  el "p" blank
+  fr' <- flexFill LayoutRight $ dynamicFormOfDynamic cfg $ Compose $ fmap avToMaybe $ widgetResultToDynamic $ getCompose fr
   el "p" $ text "Observed:"
   el "p" blank
-  _ <- flexFill LayoutRight $ observeDynamic cfg (widgetResultToDynamic $ avToMaybe <$> getCompose cDynM)
+  _ <- flexFill LayoutRight $ observeDynamic cfg (widgetResultToDynamic $ avToMaybe <$> getCompose fr')
   return ()
 
 complexFormTab::FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
@@ -346,11 +350,12 @@ formBuilderMain  :: JSM ()
 formBuilderMain  =
   mainWidgetWithHead (headElt "formBuilder demo" toLink toEmbed) $ test (customizeConfig def)
 
-
+{--
 #ifdef USE_WKWEBVIEW
 main::IO ()
 main = run formBuilderMain
 #endif
+--}
 
 #ifdef USE_WARP
 main::IO ()
@@ -360,7 +365,9 @@ main = do
   run port formBuilderMain
 #endif
 
+{--
 #ifdef USE_GHCJS
 main :: IO ()
 main = formBuilderMain
 #endif
+--}
