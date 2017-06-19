@@ -18,6 +18,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , buildFormToEditor
        , dynamicForm
        , dynamicFormOfDynamic
+       , dynamicFormOfFormValue
        , formWithSubmitAction
        , observeDynamic
        , observeWidget
@@ -286,12 +287,7 @@ formWithSubmitAction cfg ma submitWidget = do
 
 
 observeDynamic :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> R.Dynamic t a -> m (FormValue t a)
-observeDynamic cfg aDyn = do
-  aEv <- dynAsEv aDyn
-  aDyn' <- R.holdDyn Nothing (Just <$> aEv)
-  dynamicFormOfDynMaybe cfg (Compose aDyn')
---  runForm (setToObserve cfg) $ buildVForm Nothing (Compose aDyn')
-
+observeDynamic cfg aDyn = dynamicFormOfDynamic (setToObserve cfg) aDyn
 
 observeWidget :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> m a -> m (FormValue t a)
 observeWidget cfg wa =

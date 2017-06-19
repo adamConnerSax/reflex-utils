@@ -486,7 +486,7 @@ toSVLWKWidget ew k dv db = do
    return $ R.updated $ widgetResultToDynamic $ getCompose fra
 
 -- something using selectView
-buildSelectViewer :: (FormInstanceC t m
+buildSelectViewer :: ( FormInstanceC t m
                      , Traversable g
                      , LHFMap g
                      , LHFMapKey g ~ k

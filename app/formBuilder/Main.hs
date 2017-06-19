@@ -67,7 +67,7 @@ import           Reflex.Dom.Contrib.ReflexConstraints                (MonadWidge
 import           Reflex.Dom.Contrib.Widgets.WidgetResult             (widgetResultToDynamic)
 
 #ifdef USE_WKWEBVIEW
-import           Language.Javascript.JSaddle.WKWebView               (run)
+--import           Language.Javascript.JSaddle.WKWebView               (run)
 #endif
 
 #ifdef USE_WARP
@@ -168,7 +168,7 @@ instance FormInstanceC t m=>FormBuilder t m ReadableType where
 --We'll put these all in a Sum type to show how the form building handles that
 data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType | AA Age deriving (Show,GHC.Generic)
 
-newtype ListOfA = ListOfA [A] deriving (Show)
+newtype ListOfA = ListOfA [A] deriving (Show, GHC.Generic)
 
 --And then put those sum types in some other containerized contexts
 data B = B { int::Int, listOfA::ListOfA } deriving (Show,GHC.Generic)
@@ -182,7 +182,6 @@ data BRec = BRec { oneB::B, seqOfA::Seq.Seq A, hashSetOfString::HS.HashSet Strin
 
 data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Generic)
 
-
 -- generic instances
 -- NB: "Generic" below is the Generics.SOP sort.
 -- NB: You don't need the "buildA .. = .. gBuildA .. " lines if the default formatting is okay.  But this allows you to insert layout on a per type basis.
@@ -192,17 +191,23 @@ instance HasDatatypeInfo A
 instance FormInstanceC t m=>FormBuilder t m A where
   buildForm va mFN = liftF fRow . gBuildFormValidated va mFN
 
+{-
+instance Generic ListOfA
+instance HasDatatypeInfo ListOfA
+instance FormInstanceC t m => FormBuilder t m ListOfA
+-}
+
 convertValidator::FormValidator ListOfA -> FormValidator [A]
 convertValidator vLA = fmap (\(ListOfA x) -> x) . vLA . ListOfA
 
 instance (FormInstanceC t m, VFormBuilderC t m A)=>FormBuilder t m ListOfA where
   buildForm va mFN = fmap ListOfA . buildListWithSelect (convertValidator va) mFN . fmap (\(ListOfA x)->x)
 
+
 instance Generic B
 instance HasDatatypeInfo B
 instance FormInstanceC t m=>FormBuilder t m B where
   buildForm va mFN = liftF (fieldSet "B" . fRow) . gBuildFormValidated va mFN
-
 
 --instance Generic MyMap
 --instance HasDatatypeInfo MyMap
@@ -214,11 +219,9 @@ instance HasDatatypeInfo (SMap a)
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (SMap a) where
   buildForm va mFN = fmap SMap . buildMapWithSelect (fmap unSMap . va . SMap) mFN . fmap unSMap
 
-
 instance Generic (LMap a)
 instance HasDatatypeInfo (LMap a)
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (LMap a)
-
 
 instance Generic C
 instance HasDatatypeInfo C
@@ -289,12 +292,15 @@ testComplexForm :: FormInstanceC t m=>FormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  cDynM <- flexFill LayoutRight $ dynamicForm cfg (Just c)
+  fv <- flexFill LayoutRight $ dynamicForm cfg (Just b1)
   el "p" $ text "dynText:"
-  dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose cDynM))
+  dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose fv))
+  el "p" $ text "Input into new form:"
+  el "p" blank
+  fv' <- flexFill LayoutRight $ dynamicFormOfFormValue cfg fv
   el "p" $ text "Observed:"
   el "p" blank
-  _ <- flexFill LayoutRight $ observeDynamic cfg (widgetResultToDynamic $ avToMaybe <$> getCompose cDynM)
+  _ <- flexFill LayoutRight $ observeDynamic cfg (widgetResultToDynamic $ avToMaybe <$> getCompose fv')
   return ()
 
 complexFormTab::FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
@@ -348,8 +354,8 @@ formBuilderMain  =
 
 
 #ifdef USE_WKWEBVIEW
-main::IO ()
-main = run formBuilderMain
+--main::IO ()
+--main = run formBuilderMain
 #endif
 
 #ifdef USE_WARP
@@ -361,6 +367,6 @@ main = do
 #endif
 
 #ifdef USE_GHCJS
-main :: IO ()
-main = formBuilderMain
+--main :: IO ()
+--main = formBuilderMain
 #endif
