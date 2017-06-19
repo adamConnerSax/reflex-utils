@@ -292,7 +292,7 @@ testComplexForm :: FormInstanceC t m=>FormConfiguration t m -> m ()
 testComplexForm cfg = do
   el "p" $ text ""
   el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  fv <- flexFill LayoutRight $ dynamicForm cfg (Just b1)
+  fv <- flexFill LayoutRight $ dynamicForm cfg (Just c)
   el "p" $ text "dynText:"
   dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose fv))
   el "p" $ text "Input into new form:"

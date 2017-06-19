@@ -42,7 +42,8 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
 
 
 import           Reflex.Dom.Contrib.DynamicUtils                (dynAsEv,
-                                                                 dynBasedOn,
+                                                                 dynPlusEvent,
+                                                                 dynStartingFrom,
                                                                  mDynAsEv,
                                                                  traceDynAsEv)
 import           Reflex.Dom.Contrib.EventUtils                  (fanBool, leftWhenNotRight)
@@ -438,7 +439,7 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN fvfa = m
       diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
       mapEditsFVEv = R.updated . join $ LHF.distributeLHFMapOverDynPure . fmap widgetResultToDynamic <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v))) ??
       editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
-  mapDyn <- dynBasedOn mapDynAV0 $ R.leftmost [R.updated mapDynAV0, editedMapEv]
+  mapDyn <- dynPlusEvent mapDynAV0 editedMapEv
   wr <- fmap (fmap from . sequenceA) <$> (buildWidgetResult mapDynAV0 $ R.leftmost [mapAfterInsertEv, editedMapEv])
   return $ Compose wr
 
@@ -499,7 +500,7 @@ buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
   (editedMapEv, deleteDiffEv) <- fRow $ do
     (maybeSelDyn, editedMapEv') <- fRow $ selectWidget labelStrategy eW dgvForDD
 
-  -- we should make the button invisible if the container is empty
+  -- we make the button invisible if the container is empty
     let isEmptyContainerDyn = LHF.lhfMapNull <$> widgetResultToDynamic gvWR
         delButtonAttrs = bool visibleCSS hiddenCSS <$> isEmptyContainerDyn
     deleteDiffEv' <- fItem $ RD.elDynAttr "div" delButtonAttrs $ do
@@ -512,7 +513,7 @@ buildSelectViewer labelStrategy (MapElemWidgets eW nWF) mFN dgvIn = fCol $ mdo
   let insertDeleteDiffEv = R.leftmost [insertDiffEv, deleteDiffEv]
       mapAfterInsertDeleteEv = R.attachWith (flip LHF.lhfMapApplyDiff) (currentWidgetResult gvWR) insertDeleteDiffEv
 
-  dgvForDD <- dynBasedOn dgvIn mapAfterInsertDeleteEv -- dropdown causes edits so don't feed them back in.
+  dgvForDD <- dynPlusEvent dgvIn mapAfterInsertDeleteEv -- dropdown causes edits so don't feed them back in.
   gvWR <- buildWidgetResult dgvIn $ R.leftmost [editedMapEv, mapAfterInsertDeleteEv] -- authoritative value for (g v)
   return $ Compose $ AccSuccess <$> gvWR
 
@@ -592,10 +593,9 @@ editAndDeleteElemWidget eW visibleDyn k vDyn = mdo
   (visibleDyn', outWR') <- RD.elDynAttr "div" widgetAttrs . fRow $ do
     resWR <- getCompose <$> (fItem $ eW k vDyn) -- WidgetResult t (FValidation v)
     delButtonEv <- fItem $ fFill LayoutLeft $ buttonNoSubmit' "-"
-    visDyn <-  dynBasedOn visibleDyn $ R.leftmost
+    visDyn <-  dynPlusEvent visibleDyn $ R.leftmost
                [
-                 R.updated visibleDyn
-               , False <$ delButtonEv -- delete button pressed, so hide
+                 False <$ delButtonEv -- delete button pressed, so hide
                , True <$ (R.updated $ widgetResultToDynamic $ resWR) --resEv -- value updated so make sure it's visible (in case of re-use of deleted key)
                ]
     outWR <- buildWidgetResult (Just . AccSuccess <$> vDyn) $ R.leftmost [Just <$> updatedWidgetResult resWR, Nothing <$ delButtonEv]
