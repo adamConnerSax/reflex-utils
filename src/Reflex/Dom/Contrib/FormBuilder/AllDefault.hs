@@ -132,7 +132,7 @@ defDynamicDiv dynAttrs = liftLF $ RD.elDynAttr "div" dynAttrs
 defFailureF :: RD.DomBuilder t m => T.Text -> FRW t m a
 defFailureF msg = do
   RD.text msg
-  return formResultNothing
+  return formValueNothing
 
 whichFired :: R.Reflex t => [R.Event t a] -> R.Event t Int
 whichFired = R.leftmost . zipWith (<$) [0..]
@@ -168,9 +168,9 @@ defSumF conWidgets = fRow $ do
   let switchWidgetEv = R.updated . R.uniqDyn $ curIndex
       errorW msg = do
         RD.el "span" $ RD.text msg
-        return $ formResultError $ FInvalid msg
+        return $ formValueError $ FInvalid msg
       newWidgetEv = fromMaybe (errorW "index error in defSumF!") . (\n -> safeIndex n widgets) <$> switchWidgetEv
-  fItem $ joinDynOfFormResults <$> RD.widgetHold (fromMaybe (errorW "empty widget list in defSumF!") $ safeHead widgets) newWidgetEv
+  fItem $ joinDynOfFormValues <$> RD.widgetHold (fromMaybe (errorW "empty widget list in defSumF!") $ safeHead widgets) newWidgetEv
 
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 

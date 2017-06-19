@@ -60,6 +60,7 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder         (BuildForm,
                                                                  avToMaybe,
                                                                  buildVForm,
                                                                  constDynMaybe,
+                                                                 constFormValue,
                                                                  dynamicToFormValue,
                                                                  fCenter, fCol,
                                                                  fFill, fItem,
@@ -170,7 +171,6 @@ buildContainerEditOnly :: ContainerForm t m g k v
   -> BuildForm t m (f v)
 buildContainerEditOnly ml mews va mFN = validateForm va . buildLBEditOnly ml mews mFN
 
-
 buildAdjustableContainer :: ContainerForm t m g k v
   => MapLike f g v
   -> MapElemWidgets g t m k v
@@ -243,7 +243,7 @@ listEditWidget mapDyn = do
       newKeyDyn = keyFromIntMap <$> mapDyn
   fRow $ do
     newElem <- fItem . unF $ buildVForm Nothing formValueNothing
-    return $ (,) <$> dynamicToFormValue newKeyDyn <*> newElem
+    return $ (,) <$> Compose (dynamicToWidgetResult $ fmap AccSuccess newKeyDyn) <*> newElem
 
 listEditWidgetNoDup ::  (FormInstanceC t m
                        , VFormBuilderC t m a
@@ -252,9 +252,9 @@ listEditWidgetNoDup ::  (FormInstanceC t m
   -> FRW t m (Int,a)
 listEditWidgetNoDup mapDyn = do
   let dupF curMap (intKey,val) = let isDup = L.elem val (IM.elems curMap) in if isDup then AccFailure [FNothing] else AccSuccess (intKey,val)
-      mapFR = Compose $ dynamicToWidgetResult $ sequenceA <$> mapDyn
+      mapFV = Compose $ dynamicToWidgetResult $ sequenceA <$> mapDyn
   newPair <- listEditWidget mapDyn -- FormValue t (Int, a)
-  return . Compose . fmap mergeAccValidation . getCompose $ dupF <$> mapFR <*> newPair
+  return . Compose . fmap mergeAccValidation . getCompose $ dupF <$> mapFV <*> newPair
 
 
 listWidgets :: (FormInstanceC t m, VFormBuilderC t m a) => MapElemWidgets IM.IntMap t m Int a
@@ -368,7 +368,7 @@ type BuildF t m a    = FormValidator a -> Maybe FieldName -> FormValue t a -> FR
 --type BuildForm t m a = FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
 --type BuildEditor t m a = FormValidator a -> Maybe FieldName -> DynEditor t m a a
 
-type LBBuildF' g t m k v = Maybe FieldName -> WidgetResult t (g v) -> FRW t m (g v)
+type LBBuildF' g t m k v = Maybe FieldName -> R.Dynamic t (g v) -> FRW t m (g v)
 
 data MapLike f g v = MapLike { toMap   :: f v -> g v
                              , fromMap :: g v -> f v
@@ -385,10 +385,10 @@ instance (B.Validatable FValidation a, B.Validatable FValidation b) => B.Validat
 type ElemWidget t m k v = k -> R.Dynamic t v -> FRW t m v
 type LBWidget t m k v = k -> R.Dynamic t v -> FR t m (WidgetResult t (Maybe (FValidation v)))
 
-elemWidgetToLBWidget :: (R.Reflex t, Functor m)=>ElemWidget t m k v->LBWidget t m k v
+elemWidgetToLBWidget :: (R.Reflex t, Functor m) => ElemWidget t m k v->LBWidget t m k v
 elemWidgetToLBWidget ew k vDyn = fmap Just . getCompose <$> ew k vDyn
 
-fValMapToMap::LHFMap f=>FValidation (f v) -> f v
+fValMapToMap::LHFMap f => FValidation (f v) -> f v
 fValMapToMap (AccFailure _) = lhfEmptyMap
 fValMapToMap (AccSuccess x) = x
 
@@ -399,8 +399,8 @@ buildLBEditOnly :: ContainerForm t m g k v
   -> FormValue t (f v)
   -> Form t m (f v)
 buildLBEditOnly (MapLike to from _) (MapElemWidgets eW _) mFN fvfa =  makeForm $ do
-  let mapWR0 = fmap fValMapToMap . getCompose $ to <$> fvfa
-  fmap from <$> buildLBEMapLWK' (elemWidgetToLBWidget eW) mFN mapWR0
+  let mapDyn0 = widgetResultToDynamic $ fmap fValMapToMap . getCompose $ to <$> fvfa
+  fmap from <$> buildLBEMapLWK' (elemWidgetToLBWidget eW) mFN mapDyn0
 
 buildLBDelete :: ContainerForm t m g k v
   => MapLike f g v
@@ -410,8 +410,8 @@ buildLBDelete :: ContainerForm t m g k v
   -> Form t m (f v)
 buildLBDelete (MapLike to from _) (MapElemWidgets eW _) mFN fvfa = makeForm $ do
   let eW' = editAndDeleteElemWidget eW (R.constDyn True)
-      mapWR0 = fmap fValMapToMap . getCompose $ to <$> fvfa
-  fmap from <$> buildLBEMapLWK' eW' mFN mapWR0
+      mapDyn0 = widgetResultToDynamic $ fmap fValMapToMap . getCompose $ to <$> fvfa
+  fmap from <$> buildLBEMapLWK' eW' mFN mapDyn0
 
 --NB: I see why tagPromtlyDyn is required for pairWidgetEv (so when the new one is drawn, it sees the updated map) but not quite why
 -- that doesn't lead to a cycle.
@@ -424,24 +424,22 @@ buildLBAddDelete :: ContainerForm t m g k v
   -> Form t m (f v)
 buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN fvfa = makeForm $ fCol $ mdo
   let eW' k v0 vEv = R.holdDyn v0 vEv >>= editAndDeleteElemWidget eW (R.constDyn True) k
-      mapWR0 = fmap fValMapToMap . getCompose $ to <$> fvfa
-      mapWRAV0 = fmap AccSuccess <$> mapWR0
+      mapDyn0 = widgetResultToDynamic $ fmap fValMapToMap . getCompose $ to <$> fvfa
+      mapDynAV0 = fmap AccSuccess <$> mapDyn0
       diffMap' avOld new = case avOld of
         AccSuccess old -> diffMapF old new
         AccFailure _   -> Just <$> new
-  newInputMapEv <- dynAsEv (widgetResultToDynamic mapWR0)
+  newInputMapEv <- dynAsEv mapDyn0
   updateMapDyn <- fItem $ LHF.listWithKeyShallowDiffLHFMap lhfEmptyMap diffMapEv eW' -- Dynamic t (Map k (WidgetResult t (Maybe (FValidation v))))
 
-  insertDiffEv <- fRow $ newItemWidget nWF (dynamicToWidgetResult mapDyn) -- TODO: use WidgetResult throughout
+  insertDiffEv <- fRow $ newItemWidget nWF mapDyn
   let mapAfterInsertEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) (fmap (fmap AccSuccess) <$> insertDiffEv)
       newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv --newInputMapEv -- Event t (Map k (Maybe v))
       diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
       mapEditsFVEv = R.updated . join $ LHF.distributeLHFMapOverDynPure . fmap widgetResultToDynamic <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v))) ??
       editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
-  mapDyn <- R.buildDynamic (R.sample $ currentWidgetResult mapDynWR0) $ R.leftmost [ R.updated mapDynAV0
-                                                                                   , editedMapEv
-                                                                                   ]
-  wr <- fmap (fmap from . sequenceA) <$> (buildWidgetResult (widgetResultToDynamic mapDynWR0) $ R.leftmost [mapAfterInsertEv, editedMapEv])
+  mapDyn <- dynBasedOn mapDynAV0 $ R.leftmost [R.updated mapDynAV0, editedMapEv]
+  wr <- fmap (fmap from . sequenceA) <$> (buildWidgetResult mapDynAV0 $ R.leftmost [mapAfterInsertEv, editedMapEv])
   return $ Compose wr
 
 newItemEditorConfig :: R.Reflex t => MW.ModalEditorConfig t FormErrors a
@@ -453,11 +451,11 @@ newItemEditorConfig = RD.def
                       & MW.modalEditor_CancelButton .~ const (MW.ButtonConfig "Cancel" M.empty (Just "fa fa-window-close"))
 
 newItemWidget :: ContainerForm t m g k v
-  => (WidgetResult t (g (FValidation v)) -> FRW t m (k,v))
-  -> WidgetResult t (g (FValidation v))
+  => (R.Dynamic t (g (FValidation v)) -> FRW t m (k,v))
+  -> R.Dynamic t (g (FValidation v))
   -> FR t m (R.Event t (g (Maybe v)))
-newItemWidget editPairW mapWR = mdo
-  let modalEditW = const $ fmap avToEither . getCompose <$> editPairW mapWR
+newItemWidget editPairW mapDyn = mdo
+  let modalEditW = const $ fmap avToEither . getCompose <$> editPairW mapDyn
       blankInput = R.constDyn $ Left [FNothing]
       pairEvToDiffEv pairEv = fmap Just . uncurry lhfMapSingleton <$> pairEv
   newPairEv <- MW.modalEditor_change <$> MW.modalEditorEither modalEditW blankInput newItemEditorConfig
@@ -467,8 +465,8 @@ newItemWidget editPairW mapWR = mdo
 -- Just make widget into right form and do the distribute over the result
 -- Should we do something better with the WidgetResults in updateMapDyn?  Get a Map k (Event ) and then mergeMap?
 buildLBEMapLWK'::ContainerForm t m g k v => LBWidget t m k v->LBBuildF' g t m k v
-buildLBEMapLWK' editW _ mapWR0 = do
-  mapEv <- dynAsEv (widgetResultToDynamic mapWR0)
+buildLBEMapLWK' editW _ mapDyn0 = do
+  mapEv <- dynAsEv mapDyn0
   mapDyn <- R.holdDyn lhfEmptyMap mapEv
   mapOfDyn <- LHF.listWithKeyLHFMap mapDyn editW -- Dynamic t (M.Map k (WidgetResult t (Maybe (FValidation v)))
   let mapFValDyn = lhfMapMaybe id <$> join (LHF.distributeLHFMapOverDynPure . fmap widgetResultToDynamic <$> mapOfDyn) -- Dynamic t (Map k (FValidation v))
@@ -555,8 +553,8 @@ buildLBWithSelect :: ContainerForm t m g k v
   -> FormValue t (f v)
   -> Form t m (f v)
 buildLBWithSelect labelStrategy (MapLike to from _) widgets mFN fvfa =  makeForm $ do
-  let mapWR0 = fmap fValMapToMap . getCompose $ to <$> fvfa
-  fmap from <$> buildSelectViewer labelStrategy widgets mFN mapWR0
+  let mapDyn0 = widgetResultToDynamic $ fmap fValMapToMap . getCompose $ to <$> fvfa
+  fmap from <$> buildSelectViewer labelStrategy widgets mFN mapDyn0
 
 buildLBWithSelectEditOnly :: ContainerForm t m g k v
   => LabelStrategy k v
@@ -566,22 +564,22 @@ buildLBWithSelectEditOnly :: ContainerForm t m g k v
   -> FormValue t (f v)
   -> Form t m (f v)
 buildLBWithSelectEditOnly labelStrategy (MapLike to from _) (MapElemWidgets eW _)  mFN fvfv =  makeForm $ do
-  let wrgv = fmap fValMapToMap . getCompose $ to <$> fvfv
+  let dgv = widgetResultToDynamic $ fmap fValMapToMap . getCompose $ to <$> fvfv
   (_, editedMapEv) <- selectWidget labelStrategy eW dgv
-  res <- buildWidgetResult (widgetResultToDynamic wrgv) editedMapEv
+  res <- buildWidgetResult dgv editedMapEv
 --  res <- R.buildDynamic (R.sample $ R.current dgv) $ R.leftmost [R.updated dgv, editedMapEv]
   return . Compose $ AccSuccess . from <$> res
 
 showKeyEditVal :: (FormInstanceC t m, VFormBuilderBoth t m k v)=>ElemWidget t m k v
 showKeyEditVal k vDyn = do
-  let showKey k = toReadOnly $ buildVForm Nothing (constDynMaybe (Just k))
+  let showKey k = toReadOnly $ buildVForm Nothing (constFormValue k)
   fRow $ do
     fItem . fFill LayoutRight . unF $ showKey k
-    fItem . fFill LayoutLeft . unF $ buildVForm Nothing (Compose $ Just <$> vDyn)
+    fItem . fFill LayoutLeft . unF $ buildVForm Nothing (Compose $ AccSuccess <$> dynamicToWidgetResult vDyn)
 
 hideKeyEditVal :: (FormInstanceC t m, VFormBuilderC t m v)=>ElemWidget t m k v
 hideKeyEditVal _ vDyn = do
-  fItem . unF $ buildVForm Nothing (Compose $ Just <$> vDyn)
+  fItem . unF $ buildVForm Nothing (Compose $ dynamicToWidgetResult $ AccSuccess <$> vDyn)
 
 -- TODO: review dynamics vs WidgetResults here
 editAndDeleteElemWidget :: ( FormInstanceC t m

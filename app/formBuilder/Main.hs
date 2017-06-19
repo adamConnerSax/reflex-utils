@@ -240,10 +240,10 @@ instance FormInstanceC t m=>FormBuilder t m BRec where
 buildDateOrDateTime::FormInstanceC t m
   =>FormValidator DateOrDateTime
   -> Maybe FieldName
-  -> DynMaybe t DateOrDateTime
+  -> FormValue t DateOrDateTime
   -> Form t m DateOrDateTime
-buildDateOrDateTime va mFN dma =
-  let mdWrapped = buildFMDWrappedList mFN dma
+buildDateOrDateTime va mFN fvma =
+  let mdWrapped = buildFMDWrappedList mFN fvma
       customizeWidget (MDWrapped hd (cn,mfn) w) = case cn of
         "Date"     -> MDWrapped hd (cn,mfn) w
         "DateTime" -> MDWrapped hd (cn,mfn) w
