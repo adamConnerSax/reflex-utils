@@ -213,9 +213,9 @@ dynReadMaybeEditor va = Editor . buildDynReadMaybe va
 
 -- NB this will handle Dynamic t (Dynamic t a)) inputs
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (R.Dynamic t a) where
-  buildForm va mFN fvda = do
-    fva <- Compose <$> widgetResultOfDynamicToWidgetResult $ getCompose fvda
-    validateForm va . fmap R.constDyn $ buildVForm mFN fva
+  buildForm va mFN fvda = makeForm $ do
+    fva <- widgetResultOfDynamicToWidgetResult $ fmap sequenceA $ getCompose fvda
+    unF . validateForm va . fmap R.constDyn $ buildVForm mFN (Compose fva)
 
 -- | String and Text
 instance FormInstanceC t m => FormBuilder t m T.Text where

@@ -87,8 +87,7 @@ import           Reflex.Dom.Contrib.FormBuilder.Editor
 
 --import qualified Data.Dependent.Map                           as DM
 import qualified Data.Dependent.Map                           as DM
-import           DataBuilder                                  as BExport (Builder (..),
-                                                                          FieldName,
+import           DataBuilder                                  as BExport (FieldName,
                                                                           GBuilder (..),
                                                                           MDWrapped (..))
 import qualified DataBuilder                                  as B
@@ -157,8 +156,8 @@ distributeDMapOverWidgetResult = dynamicToWidgetResult . R.distributeDMapOverDyn
 
 class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
   buildForm :: FormValidator a -> Maybe FieldName -> FormValue t a -> Form t m a
-  default buildForm::(B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
-                   => FormValidator a -> Maybe FieldName -> FormValue t a -> Form t m a
+  default buildForm :: (B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
+    => FormValidator a -> Maybe FieldName -> FormValue t a -> Form t m a
   buildForm va mFN = makeForm . fmap Compose . B.unFGV . B.gBuildValidatedCS (npSequenceViaDMap distributeDMapOverWidgetResult) va mFN . formValueToGBuildInput
 
 
@@ -204,14 +203,16 @@ labelForm label title placeHolder classes =
   in liftF (setInputConfig inputCfg)
 
 -- utilities to use the sum-split facilities from dataBuilder
+
 buildFMDWrappedList::( RD.DomBuilder t m
                      , RD.MonadHold t m
                      , RD.PostBuild t m
                      , B.Generic a
                      , B.HasDatatypeInfo a
-                     , B.All2 (B.And (Builder (FR t m) (WidgetResult t) FValidation) (B.Validatable FValidation)) (B.Code a))
+                     , B.All2 (B.And (B.Builder (FR t m) (WidgetResult t) FValidation) (B.Validatable FValidation)) (B.Code a))
   => Maybe FieldName -> FormValue t a -> [FMDWrapped t m a]
 buildFMDWrappedList mFN = B.buildMDWrappedList mFN . formValueToGBuildInput
+
 
 makeSubformData :: (R.Reflex t, Functor m)
   => Maybe FieldName -> (a -> Bool) -> FormEditor t m a a -> B.ConName -> FormValue t a -> FMDWrapped t m a
@@ -270,7 +271,6 @@ dynamicFormOfDynamic cfg da = runForm cfg $ buildVForm Nothing (Compose . dynami
 dynamicFormOfDynMaybe :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> DynMaybe t a -> m (FormValue t a)
 dynamicFormOfDynMaybe cfg dma = runForm cfg $ buildVForm Nothing (Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose $ dma)
 
-
 --TODO: is attachPromptlyDynWithMaybe the right thing here?
 formWithSubmitAction :: ( RD.DomBuilder t m
                         , VFormBuilderC t m a)
@@ -296,7 +296,6 @@ observeDynamic cfg aDyn = do
 observeWidget :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> m a -> m (FormValue t a)
 observeWidget cfg wa =
   runForm (setToObserve cfg) . makeForm $ lift wa >>= unF . buildVForm Nothing . constFormValue
-
 
 observeFlow :: ( RD.DomBuilder t m
                , R.MonadHold t m

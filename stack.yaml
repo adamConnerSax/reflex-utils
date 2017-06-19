@@ -10,10 +10,10 @@ packages:
     git: https://github.com/adamConnerSax/perConstructor-sop
     commit: "0ad25c04cbf4010752f07ca8291ce7ddb684ec5f"
   extra-dep: true 
-- location:
-    git: https://github.com/adamConnerSax/dataBuilder
-    commit: "e6a84e66bcb4afbd7ea7a1035b06c722b4efa617"
-  extra-dep: true
+#- location:
+#    git: https://github.com/adamConnerSax/dataBuilder
+#    commit: "e6a84e66bcb4afbd7ea7a1035b06c722b4efa617"
+#  extra-dep: true
 - location:
     git: https://github.com/adamConnerSax/reflex-sumType-utilities
     commit: "ae53680dde9babeea3b1760fce7c4a60a3e58c2e"
@@ -33,7 +33,7 @@ packages:
     git: https://github.com/reflex-frp/reflex-dom-contrib
     commit: "904fc9915c3de995a3084df50243400337ddd1f8"
   extra-dep: true
-#- '../dataBuilder'  
+- '../dataBuilder'  
 - '.'
 
 allow-newer: true

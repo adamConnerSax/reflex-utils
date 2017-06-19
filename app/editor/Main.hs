@@ -126,7 +126,7 @@ simpleEditorW cfg = flexCol $ do
   flexItem $ dynText $ T.pack . show <$> (getCompose $ formResultToDynMaybe $ frp3)
   return ()
 
--- of course, since we are sedning the result of one into the other we could just use categorical composition here as well
+-- of course, since we are sending the result of one into the other we could just use categorical composition here as well
 categoricalEditorW :: FormInstanceC t m => FormConfiguration t m -> m ()
 categoricalEditorW cfg = flexCol $ do
   let frpIn = dynMaybeToFormResult $ constDynMaybe $ Just $ Prod 1 2 "Prod"
