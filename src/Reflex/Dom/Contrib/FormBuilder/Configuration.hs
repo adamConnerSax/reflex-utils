@@ -25,6 +25,7 @@ module Reflex.Dom.Contrib.FormBuilder.Configuration
   , maybeMapFormValue
   , dynMaybeToFormValue
   , formValueToDynMaybe
+  , addFormValueDefault
   , FRW
   , FLayoutF
   , liftLF
@@ -78,7 +79,8 @@ import           Control.Monad.Morph                          (hoist)
 import           Control.Monad.Reader                         (ReaderT, ask,
                                                                local)
 import           Data.ByteString                              (ByteString)
-import           Data.Functor.Compose                         (Compose (Compose), getCompose)
+import           Data.Functor.Compose                         (Compose (Compose),
+                                                               getCompose)
 import           Data.Map                                     (Map)
 import           Data.Text                                    (Text)
 import           Reflex.Dom.Contrib.CssUtils                  (CssLinks)
@@ -111,7 +113,7 @@ formValueNothing :: Reflex t => FormValue t a
 formValueNothing = formValueError FNothing
 
 dynamicToFormValue :: Reflex t => Dynamic t a -> FormValue t a
-dynamicToFormValue = Compose . dynamicToWidgetResult . fmap AccSuccess 
+dynamicToFormValue = Compose . dynamicToWidgetResult . fmap AccSuccess
 
 fvMapFormValue :: Reflex t => (a -> FValidation b) -> FormValue t a -> FormValue t b
 fvMapFormValue f = Compose . fmap (mergeAccValidation . fmap f) . getCompose
@@ -124,6 +126,9 @@ dynMaybeToFormValue = Compose . dynamicToWidgetResult . fmap maybeToAV . getComp
 
 formValueToDynMaybe :: Reflex t => FormValue t a -> DynMaybe t a
 formValueToDynMaybe = Compose . widgetResultToDynamic . fmap avToMaybe . getCompose
+
+addFormValueDefault :: Reflex t => a -> FormValue t a -> FormValue t a
+addFormValueDefault x = Compose . fmap (accValidation (const $ AccSuccess x) AccSuccess) . getCompose
 
 type FRW t m a = FR t m (FormValue t a)
 

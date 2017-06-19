@@ -169,10 +169,11 @@ modalEditorEither :: forall t m e a. ( RD.DomBuilder t m
   -> m (ModalEditor t e a)
 modalEditorEither editW aEDyn config = do
   let newInputEv = R.updated aEDyn
-      (closeOnChangeEv, switchToDefaultEv) = case config ^. modalEditor_onChange of
-        Close             -> (newInputEv, R.never)
-        UpdateIfRight     -> (R.fmapMaybe (either (const Nothing) (Just . Right)) newInputEv, R.never)
-        UpdateOrDefault a -> (R.never, R.fmapMaybe (either (const $ Just $ Right a) (const Nothing)) newInputEv)
+      (newInputValEv, closeOnChangeEv) = case config ^. modalEditor_onChange of
+        Close             -> (R.fmapMaybe (either (const Nothing) (Just . Right)) newInputEv, () <$ newInputEv)
+        UpdateIfRight     -> ( R.fmapMaybe (either (const Nothing) (Just . Right)) newInputEv
+                             , R.fmapMaybe (either (const $ Just ()) (const Nothing)) newInputEv)
+        UpdateOrDefault a -> (either (const $ Right a) Right <$> newInputEv, R.never)
       header eaDyn = maybe (return R.never) (\f -> L.flexFill L.LayoutLeft $ dynamicButton $ f <$> eaDyn) $ (config ^. modalEditor_XButton)
       footer eaDyn = L.flexRow $ do
         okEv <- L.flexFill L.LayoutRight $ dynamicButton ((config ^. modalEditor_OkButton) <$> eaDyn)
@@ -184,19 +185,19 @@ modalEditorEither editW aEDyn config = do
             closeOnOkEv okEv = if config ^. modalEditor_closeOnOk then okEv else R.never
         rec let modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
                 closingValueEv = R.leftmost [ R.tag (R.current valueAtCancel) cancelEv -- when cancelled, we revert to the value we had when opened
-                                            , closeOnChangeEv -- when the input changes, we switch to that value
+                                            , newInputValEv -- when the input changes, we switch to that value
                                             , closeOnOkEv okAEEv -- when okay is pressed and that closes, we switch to the new value
                                             ]
-            modalVisAttrs <- showAttrs closingValueEv R.never -- we don't need to reshow because we build the widget anew each time the button is pressed.
+                closingEv = R.leftmost [cancelEv, () <$ closeOnOkEv okAEEv, closeOnChangeEv]
+            modalVisAttrs <- showAttrs closingEv R.never -- we don't need to reshow because we build the widget anew each time the button is pressed.
             (newAEEv', okAEEv, cancelEv) <- RD.elDynAttr "div" modalAttrsDyn $ L.flexCol $ mkModalBodyUpdateAlways (header eaDyn) footer body
             valueAtCancel <- R.holdDyn inputWhenOpened okAEEv
         let updateAEEv = case config ^. modalEditor_updateOutput of
                            Always -> newAEEv'
                            OnOk   -> okAEEv
-
             updateBodyAEEv = R.leftmost [okAEEv, closingValueEv] -- in case we don't close on okay
             retAEEv = R.leftmost [updateAEEv, inputWhenOpened <$ cancelEv]
-        return $ InnerModal retAEEv (() <$ closingValueEv) updateBodyAEEv
+        return $ InnerModal retAEEv closingEv updateBodyAEEv
   rec let openButtonConfigOrig = (config ^. modalEditor_openButton) <$> aeForBody
           openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
       openButtonVisAttrs <- showAttrs openButtonEv modalCloseEv
@@ -206,11 +207,10 @@ modalEditorEither editW aEDyn config = do
       let updateOutputEv = R.switch (updateOutput <$> evOfInnerModal)
           modalCloseEv = R.switch (modalClosed <$> evOfInnerModal)
           updateModalInputEv = R.switch (updateInput <$> evOfInnerModal)
-      aeForBody <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [ switchToDefaultEv
-                                                                            , newInputEv -- this order matters since modalClose will carry inputWhenOpened
+      aeForBody <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [ newInputValEv -- this order matters since modalClose will carry inputWhenOpened
                                                                             , updateModalInputEv
                                                                             ]
-  newAEDyn <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [switchToDefaultEv, newInputEv, updateOutputEv] -- auth value
+  newAEDyn <- R.buildDynamic (R.sample $ R.current aEDyn) $ R.leftmost [newInputEv, updateOutputEv] -- auth value
   return $ ModalEditor newAEDyn (R.fmapMaybe e2m updateOutputEv)
 
 
@@ -230,7 +230,7 @@ modalEditor editW aMDyn config = modalEditorEither (fmap (fmap m2e) . editW) (m2
 
 -- | Template for a modal with a header, body, and footer where the header has
 -- a close icon and the footer has a cancel and save button.
--- this version, copied From reflex-dom-contrib and modified.
+-- This version, copied From reflex-dom-contrib and modified,
 -- passes through all updates on its output so it can be wrapped to require "ok" or not.
 -- It has 3 event outputs:
 -- 1. all updates that come from the body and
