@@ -239,10 +239,10 @@ actOnDBWidget f = B.FGV . fmap getCompose . f . fmap Compose . B.unFGV
 toReadOnly :: Monad m => Form t m a -> Form t m a
 toReadOnly form = makeForm . local setToObserve $ unF form
 
-{-
+-- We need this, but why?
 instance (RD.DomBuilder t m, FormBuilder t m a) => B.Builder (FR t m) (WidgetResult t) FValidation a where
-  buildValidated va mFN = B.FGV . fmap getCompose . unF . buildForm va mFN . Compose . fmap avToMaybe . view wrDyn . B.unGV
--}
+  buildValidated va mFN = B.FGV . fmap getCompose . unF . buildForm va mFN . Compose . B.unGV
+
 
 runForm :: Monad m => FormConfiguration t m -> Form t m a -> m (FormValue t a)
 runForm cfg sfra = runForm' cfg sfra return
