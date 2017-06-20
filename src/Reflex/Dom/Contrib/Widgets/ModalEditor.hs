@@ -64,7 +64,7 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult,
                                                           updatedWidgetResult,
                                                           widgetResultToDynamic)
 
-import           Control.Lens                            (makeLenses, view,
+import           Control.Lens                            (makeLenses, makePrisms, view,
                                                           (%~), (&), (^.))
 import           Control.Monad                           (join)
 import           Control.Monad.Fix                       (MonadFix)
@@ -153,7 +153,26 @@ instance Reflex t => Default (ModalEditorConfig t e a) where
         (const $ ButtonConfig "OK" M.empty Nothing) -- simple OK button in footer
         (const $ ButtonConfig "Close" M.empty Nothing) -- simple Cancel button in footer
 
-data InnerModal t a = InnerModal { updateOutput :: Event t a, modalClosed :: Event t (), updateInput :: Event t a }
+data EditorUpdate e a = OpenPressed | Edited (Either e a) | OkPressed (Either e a) | ClosePressed
+
+makePrisms ''EditorUpdate
+
+--data InnerModalEvs t a = InnerModal { updateOutput :: Event t a, modalClosed :: Event t (), updateInput :: Event t a }
+
+data ViewState = Button | Editor
+data WidgetState t e a = WidgetState { viewState :: Dynamic t ViewState, editorInputValue :: Dynamic t (Either e a), widgetOutput :: WidgetResult t (Either e a) }
+
+modalEditorFrame :: (Reflex t, MonadHold t m) => ModalEditorConfig t e a -> Event t (EditorUpdate e a) -> Dynamic t (Either e a) -> m (WidgetState t e a)
+modalEditorFrame cfg euEv eitherDyn = do  
+  let newInputEv = R.updated eitherDyn -- this only happens on input change so we don't put it in EditorUpdate
+      openEv = R.fmapMaybe (preview _OpenPressed) euEv
+      editedEv = R.fmapMaybe (preview _NewBodyValue) euEv
+      okPressedEv = R.fmapMaybe (preview _OkPressed) euEv
+      closeEv = R.fmapMaybe (preview _Close) euEv
+  edInVal <- dynamicStartingFrom eitherDyn $ R.leftmost [inputValEv, okPressedValEv]
+  outputWR <- buildWidgetResult eitherDyn $ R.leftmost [
+
+updateModalEditorState :: ModalEditorEv t e a -> ModalEditorState t e a
 
 -- | Modal Editor for a Dynamic a
 -- | Widget as input takes an Event t () which will be fired when the modal is opened. This allows the widget to tag things.
