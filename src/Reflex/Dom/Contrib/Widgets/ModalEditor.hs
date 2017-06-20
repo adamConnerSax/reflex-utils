@@ -63,13 +63,15 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult,
                                                           WrappedWidgetResult,
                                                           buildWidgetResult,
                                                           currentWidgetResult,
+                                                          dynamicToWidgetResult,
                                                           unsafeBuildWrappedWidgetResult,
                                                           updatedWidgetResult,
                                                           widgetResultToDynamic)
 
 import           Control.Lens                            (makeLenses,
                                                           makePrisms, preview,
-                                                          view, (%~), (&), (^.))
+                                                          view, (%~), (&), (^.),
+                                                          _Left, _Right)
 import           Control.Monad                           (join)
 import           Control.Monad.Fix                       (MonadFix)
 import           Data.Bool                               (bool)
@@ -177,7 +179,7 @@ modalEditorFrame cfg euEv eitherDyn = do
   let newInputEv = R.updated eitherDyn -- this only happens on input change so we don't put it in EditorUpdate
       newInputToEditorEv = case cfg ^. modalEditor_onChange of
         Close -> newInputEv -- or R.ffilter isRight newInputEv filter for only valid values?
-        UpdateIfRight -> R.ffilter isRight newInputEv
+        UpdateIfRight -> Right <$> R.fmapMaybe (preview _Right) newInputEv
         UpdateOrDefault a -> R.fmapMaybe (either (const $ Just $ Right a) (Just . Right)) newInputEv
       openEv = R.fmapMaybe (preview _OpenPressed) euEv
       editedEv = R.fmapMaybe (preview _Edited) euEv
@@ -185,10 +187,14 @@ modalEditorFrame cfg euEv eitherDyn = do
       closeOnOkEv = if cfg ^. modalEditor_closeOnOk then okPressedEv else R.never
       closeOnChangeEv = case cfg ^. modalEditor_onChange of
         Close             -> () <$ newInputEv
-        UpdateIfRight     -> () <$ R.ffilter isLeft newInputEv
+        UpdateIfRight     -> () <$ R.fmapMaybe (preview _Left) newInputEv
         UpdateOrDefault _ -> R.never
       closeEv = R.leftmost [R.fmapMaybe (preview _ClosePressed) euEv, closeOnOkEv, closeOnChangeEv]
+
+
   viewDyn <- R.holdDyn Button $ R.leftmost [Button <$ closeEv, Editor <$ openEv]
+
+
   rec editorVal <- dynPlusEvent editorInput editedEv
       editorInput <- dynStartingFrom eitherDyn $ R.leftmost [ newInputToEditorEv
                                                             , (R.tag (R.current editorVal) okPressedEv)
@@ -197,12 +203,11 @@ modalEditorFrame cfg euEv eitherDyn = do
                                   , if cfg ^. modalEditor_updateOutput == Always then editedEv else R.never
                                   , R.tag (R.current editorInput) closeEv
                                   ]
-  outputWR <- buildWidgetResult eitherDyn R.never -- updateOutputEv
+  outputWR <- buildWidgetResult eitherDyn updateOutputEv
   return $ WidgetState viewDyn editorInput outputWR
---  return $ WidgetState (constDyn Button) eitherDyn outputWR
 
 -- | Modal Editor for a Dynamic a
-modalEditorEither' :: forall t m e a. ( Reflex t
+modalEditorEither :: forall t m e a. (  Reflex t
                                       , RD.DomBuilder t m
                                       , MonadWidgetExtraC t m
                                       , RD.PostBuild t m
@@ -213,9 +218,12 @@ modalEditorEither' :: forall t m e a. ( Reflex t
   -> Dynamic t (Either e a)
   -> ModalEditorConfig t e a
   -> m (ModalEditor t e a)
-modalEditorEither' editW aEDyn config = mdo
-  (WidgetState viewDyn editorWidgetInputDyn outputWR) <- modalEditorFrame config R.never aEDyn
-  let editorUpdateEvs = R.leftmost [OpenPressed <$ openButtonEv, editorUpdateEv]
+modalEditorEither editW aEDyn config = mdo
+  (WidgetState viewDyn editorWidgetInputDyn outputWR) <- modalEditorFrame config editorUpdateEvs aEDyn
+{-  let viewDyn = R.constDyn Button
+      editorWidgetInputDyn = aEDyn
+      outputWR = dynamicToWidgetResult aEDyn -}
+  let editorUpdateEvs = R.leftmost [OpenPressed <$ openButtonEv{-, editorUpdateEv-}]
       (showButtonEv, showEditorEv) = fanBool $ (== Editor) <$> R.updated viewDyn -- this requires initial states to be handled below
 
       openButtonConfigOrig = (config ^. modalEditor_openButton) <$> editorWidgetInputDyn
@@ -225,26 +233,65 @@ modalEditorEither' editW aEDyn config = mdo
   openButtonVisAttrs <- showAttrs visibleCSS showEditorEv showButtonEv
   modalVisAttrs <- showAttrs hiddenCSS showButtonEv showEditorEv
 
-  let header eaDyn = maybe (return R.never) (\f -> L.flexFill L.LayoutLeft $ dynamicButton $ f <$> eaDyn) $ (config ^. modalEditor_XButton)
-
-      footer eaDyn = L.flexRow $ do
-        okEv <- L.flexFill L.LayoutRight $ dynamicButton ((config ^. modalEditor_OkButton) <$> eaDyn)
-        cancelEv' <- L.flexFill L.LayoutLeft $ dynamicButton ((config ^. modalEditor_CancelButton) <$> eaDyn)
-        return (cancelEv', okEv)
-
-      body eaDyn = L.flexItem $ editW $ e2m <$> eaDyn
-
-      modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
-
   openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
-  editorUpdateEv <- RD.elDynAttr "div" modalAttrsDyn $ L.flexCol $ mkModalBodyUpdateAlways' (header editorWidgetInputDyn) footer (body editorWidgetInputDyn)
+  --editorUpdateEv <- configuredModalWidget config editW modalVisAttrs editorWidgetInputDyn
 
   return $ ModalEditor (widgetResultToDynamic outputWR) (R.fmapMaybe e2m $ updatedWidgetResult outputWR)
 
 
+configuredModalWidget :: forall t m e a. ( Reflex t
+                                         , RD.DomBuilder t m
+                                         , MonadWidgetExtraC t m
+                                         , RD.PostBuild t m
+                                         , MonadFix m
+                                         , RD.MonadHold t m
+                                         )
+  => ModalEditorConfig t e a
+  -> (Dynamic t (Maybe a) -> m (WidgetResult t (Either e a)))
+  -> Dynamic t (M.Map T.Text T.Text)
+  -> Dynamic t (Either e a)
+  -> m (Event t (EditorUpdate e a))
+configuredModalWidget config editW modalVisAttrs eaDyn =
+  let header d = maybe (return R.never) (\f -> L.flexFill L.LayoutLeft $ dynamicButton $ f <$> d) $ (config ^. modalEditor_XButton)
+      footer d = L.flexRow $ do
+        okEv <- L.flexFill L.LayoutRight $ dynamicButton ((config ^. modalEditor_OkButton) <$> d)
+        cancelEv' <- L.flexFill L.LayoutLeft $ dynamicButton ((config ^. modalEditor_CancelButton) <$> d)
+        return (cancelEv', okEv)
+      body d = L.flexItem $ editW $ e2m <$> d
+      modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
+  in RD.elDynAttr "div" modalAttrsDyn $ L.flexCol $ mkModalBodyUpdateAlwaysEU (header eaDyn) footer (body eaDyn)
+
+mkModalBodyUpdateAlwaysEU
+    :: ( RD.DomBuilder t m
+       , MonadWidgetExtraC t m
+       , RD.PostBuild t m
+       , MonadFix m
+       , RD.MonadHold t m
+       )
+    => m (R.Event t ())
+    -- ^ A header widget returning an event that closes the modal.
+    -> (R.Dynamic t (Either e a) -> m (R.Event t (), R.Event t ()))
+    -- ^ Footer widget that takes the current state of the body and returns
+    -- a pair of a cancel event and an ok event.
+    -> m (WidgetResult t (Either e a))
+    -> m (R.Event t (EditorUpdate e a))
+mkModalBodyUpdateAlwaysEU header footer body = do
+  RD.divClass "modal-dialog" $ RD.divClass "modal-content" $ do
+    dismiss <- header
+    bodyRes <- RD.divClass "modal-body" body
+    (cancel, ok) <- footer $ widgetResultToDynamic bodyRes
+    let resE1 = R.tag (currentWidgetResult bodyRes) ok
+        closem1 = R.leftmost [dismiss, cancel]
+    return $ R.leftmost [ ClosePressed <$ closem1
+                        , OkPressed <$ R.ffilter isRight resE1 -- only fire OK when value is valid.  We could handle this above?
+                        , Edited <$> updatedWidgetResult bodyRes
+                        ]
+--    return (updatedWidgetResult bodyRes, R.ffilter isRight resE1, closem1)
+
+
 -- | Modal Editor for a Dynamic a
 -- | Widget as input takes an Event t () which will be fired when the modal is opened. This allows the widget to tag things.
-modalEditorEither :: forall t m e a. ( RD.DomBuilder t m
+modalEditorEither' :: forall t m e a. ( RD.DomBuilder t m
                                      , MonadWidgetExtraC t m
                                      , RD.PostBuild t m
                                      , MonadFix m
@@ -254,7 +301,7 @@ modalEditorEither :: forall t m e a. ( RD.DomBuilder t m
   -> Dynamic t (Either e a)
   -> ModalEditorConfig t e a
   -> m (ModalEditor t e a)
-modalEditorEither editW aEDyn config = do
+modalEditorEither' editW aEDyn config = do
   let newInputEv = R.updated aEDyn
       (newInputValEv, closeOnChangeEv) = case config ^. modalEditor_onChange of
         Close             -> (R.fmapMaybe (either (const Nothing) (Just . Right)) newInputEv, () <$ newInputEv)
@@ -346,32 +393,6 @@ mkModalBodyUpdateAlways header footer body = do
         closem1 = R.leftmost [dismiss, cancel]
     return (updatedWidgetResult bodyRes, R.ffilter isRight resE1, closem1)
 
-mkModalBodyUpdateAlways'
-    :: ( RD.DomBuilder t m
-       , MonadWidgetExtraC t m
-       , RD.PostBuild t m
-       , MonadFix m
-       , RD.MonadHold t m
-       )
-    => m (R.Event t ())
-    -- ^ A header widget returning an event that closes the modal.
-    -> (R.Dynamic t (Either e a) -> m (R.Event t (), R.Event t ()))
-    -- ^ Footer widget that takes the current state of the body and returns
-    -- a pair of a cancel event and an ok event.
-    -> m (WidgetResult t (Either e a))
-    -> m (R.Event t (EditorUpdate e a))
-mkModalBodyUpdateAlways' header footer body = do
-  RD.divClass "modal-dialog" $ RD.divClass "modal-content" $ do
-    dismiss <- header
-    bodyRes <- RD.divClass "modal-body" body
-    (cancel, ok) <- footer $ widgetResultToDynamic bodyRes
-    let resE1 = R.tag (currentWidgetResult bodyRes) ok
-        closem1 = R.leftmost [dismiss, cancel]
-    return $ R.leftmost [ ClosePressed <$ closem1
-                        , OkPressed <$ R.ffilter isRight resE1 -- only fire OK when value is valid.  We could handle this above?
-                        , Edited <$> updatedWidgetResult bodyRes
-                        ]
---    return (updatedWidgetResult bodyRes, R.ffilter isRight resE1, closem1)
 
 
 hiddenCSS :: M.Map T.Text T.Text
