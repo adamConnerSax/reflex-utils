@@ -287,12 +287,10 @@ setString = Set.fromList ["a","b"]
 setInt :: Set.Set Int
 setInt = Set.fromList [1,2]
 
-
-testComplexForm :: FormInstanceC t m=>FormConfiguration t m -> m ()
-testComplexForm cfg = do
+testForm :: (FormInstanceC t m, VFormBuilderC t m a, Show a) => FormConfiguration t m -> a -> m ()
+testForm cfg x = do
   el "p" $ text ""
-  el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  fv <- flexFill LayoutRight $ dynamicForm cfg (Just c)
+  fv <- flexFill LayoutRight $ dynamicForm cfg (Just x)
   el "p" $ text "dynText:"
   dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose fv))
   el "p" $ text "Input into new form:"
@@ -303,8 +301,21 @@ testComplexForm cfg = do
   _ <- flexFill LayoutRight $ observeDynamic cfg (widgetResultToDynamic $ avToMaybe <$> getCompose fv')
   return ()
 
-complexFormTab::FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
-complexFormTab cfg = TabInfo "complexFormTab" (constDyn ("Complex Example", M.empty))  $ testComplexForm cfg
+
+testContainers :: FormInstanceC t m => FormConfiguration t m -> m ()
+testContainers cfg = do
+  let tests = [ ("List of A", testForm cfg lOfA1)
+              , ("Map Text Int", testForm cfg testMap)
+              , ("Map Text (Map Text Text)", testForm cfg testMap2)
+              , ("HashSet String", testForm cfg hs)
+              , ("Seq String", testForm cfg hseq)
+              ]
+      tabs = (\(n,w) -> TabInfo n (constDyn (n,M.empty)) w) <$> tests
+  _ <- staticTabbedLayout def (head tabs) tabs
+  return ()
+
+containersTab::FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
+containersTab cfg = TabInfo "containersTab" (constDyn ("Container Forms", M.empty))  $ testContainers cfg
 
 flowTestWidget::(DomBuilder t m, HasDocument m, MonadWidgetExtraC t m, MonadFix m, MonadHold t m, PostBuild t m)=>Int->m (Dynamic t String)
 flowTestWidget n = do
@@ -329,10 +340,10 @@ test :: FormInstanceC t m => FormConfiguration t m -> m ()
 test cfg = do
   el "p" (text "")
   el "br" blank
-  staticTabbedLayout def (complexFormTab cfg)
+  staticTabbedLayout def (containersTab cfg)
     [
       userFormTab cfg
-    , complexFormTab cfg
+    , containersTab cfg
     , flowTestTab cfg
     ]
   return ()
