@@ -356,7 +356,7 @@ instance (FormInstanceC t m
 -- Can't do plain HashSet since we need (Eq a) for fromList. So we may as well take advantage in the diffing
 
 hashSetEqML :: (Eq a, Hashable a) => MapLike HS.HashSet IM.IntMap a
-hashSetEqML = MapLike (IM.fromList . zip [0..] . HS.toList) (HS.fromList . fmap snd . IM.toList) LHF.lhfMapDiff
+hashSetEqML = MapLike (IM.fromList . zip [0..] . HS.toList) (HS.fromList . fmap snd . IM.toList) LHF.lhfMapDiffNoEq
 
 buildEqHashSet :: (FormInstanceC t m,Hashable a, Eq a, VFormBuilderC t m a) => BuildForm t m (HS.HashSet a)
 buildEqHashSet = buildAdjustableContainer hashSetEqML setEqWidgets
@@ -423,7 +423,7 @@ buildLBAddDelete :: ContainerForm t m g k v
   -> Maybe FieldName
   -> FormValue t (f v)
   -> Form t m (f v)
-buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN fvfa = makeForm $ fCol $ mdo
+buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN fvfa = makeForm $ fCol $ do
   let eW' k v0 vEv = R.holdDyn v0 vEv >>= editAndDeleteElemWidget eW (R.constDyn True) k
       mapDyn0 = widgetResultToDynamic $ fmap fValMapToMap . getCompose $ to <$> fvfa
       mapDynAV0 = fmap AccSuccess <$> mapDyn0
@@ -431,15 +431,14 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN fvfa = m
         AccSuccess old -> diffMapF old new
         AccFailure _   -> Just <$> new
   newInputMapEv <- dynAsEv mapDyn0
-  updateMapDyn <- fItem $ LHF.listWithKeyShallowDiffLHFMap lhfEmptyMap diffMapEv eW' -- Dynamic t (Map k (WidgetResult t (Maybe (FValidation v))))
-
-  insertDiffEv <- fRow $ newItemWidget nWF mapDyn
-  let mapAfterInsertEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) (fmap (fmap AccSuccess) <$> insertDiffEv)
-      newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv --newInputMapEv -- Event t (Map k (Maybe v))
-      diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
-      mapEditsFVEv = R.updated . join $ LHF.distributeLHFMapOverDynPure . fmap widgetResultToDynamic <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v))) ??
-      editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
-  mapDyn <- dynPlusEvent mapDynAV0 editedMapEv
+  rec updateMapDyn <- fItem $ LHF.listWithKeyShallowDiffLHFMap lhfEmptyMap diffMapEv eW' -- Dynamic t (Map k (WidgetResult t (Maybe (FValidation v))))
+      insertDiffEv <- fRow $ newItemWidget nWF mapDyn
+      let mapAfterInsertEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) (fmap (fmap AccSuccess) <$> insertDiffEv)
+          newInputDiffEv = R.attachWith diffMap' (R.current $ sequenceA <$> mapDyn) newInputMapEv --newInputMapEv -- Event t (Map k (Maybe v))
+          diffMapEv = R.leftmost [newInputDiffEv, insertDiffEv]
+          mapEditsFVEv = R.updated . join $ LHF.distributeLHFMapOverDynPure . fmap widgetResultToDynamic <$> updateMapDyn -- Event t (Map k (Maybe (FValidation v))) ??
+          editedMapEv = R.attachWith (flip LHF.lhfMapApplyDiff) (R.current mapDyn) mapEditsFVEv -- Event t (Map k (FValidation v))
+      mapDyn <- dynPlusEvent mapDynAV0 editedMapEv
   wr <- fmap (fmap from . sequenceA) <$> (buildWidgetResult mapDynAV0 $ R.leftmost [mapAfterInsertEv, editedMapEv])
   return $ Compose wr
 

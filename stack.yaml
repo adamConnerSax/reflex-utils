@@ -2,8 +2,8 @@
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
 resolver: 
-  name: jsaddle-snapshot
-  location: ../jsaddle-snapshot.yaml
+  name: jsaddle8-snapshot
+  location: ../jsaddle8-snapshot.yaml
 
 packages:
 - location:
@@ -24,7 +24,8 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex-dom
-    commit: "c86fee7a7d731f50aa100b32e79010dd69e11409"
+#    commit: "c86fee7a7d731f50aa100b32e79010dd69e11409" # jsaddle family 0.9
+    commit: "706ab47df9729bdc5c4ac3f4d8dfd4661d9f6e1a" # jsaddle family 0.8
   extra-dep: true
   subdirs:
   - reflex-dom-core

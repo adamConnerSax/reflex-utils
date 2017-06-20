@@ -54,7 +54,8 @@ import           Reflex.Dynamic                          (constDyn, current,
 
 import           Reflex.Dom.Contrib.DynamicUtils         (dynAsEv, dynPlusEvent,
                                                           dynStartingFrom)
-import           Reflex.Dom.Contrib.EventUtils           (leftWhenNotRight)
+import           Reflex.Dom.Contrib.EventUtils           (fanBool,
+                                                          leftWhenNotRight)
 import qualified Reflex.Dom.Contrib.Layout.FlexLayout    as L
 import qualified Reflex.Dom.Contrib.Layout.Types         as L
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
@@ -183,8 +184,8 @@ modalEditorFrame cfg euEv eitherDyn = do
       okPressedEv = R.fmapMaybe (preview _OkPressed) euEv
       closeOnOkEv = if cfg ^. modalEditor_closeOnOk then okPressedEv else R.never
       closeOnChangeEv = case cfg ^. modalEditor_onChange of
-        Close -> () <$ newInputEv
-        UpdateIfRight -> () <$ R.ffilter isLeft newInputEv
+        Close             -> () <$ newInputEv
+        UpdateIfRight     -> () <$ R.ffilter isLeft newInputEv
         UpdateOrDefault _ -> R.never
       closeEv = R.leftmost [R.fmapMaybe (preview _ClosePressed) euEv, closeOnOkEv, closeOnChangeEv]
   viewDyn <- R.holdDyn Button $ R.leftmost [Button <$ closeEv, Editor <$ openEv]
@@ -197,11 +198,12 @@ modalEditorFrame cfg euEv eitherDyn = do
                                   , R.tag (R.current editorInput) closeEv
                                   ]
   outputWR <- buildWidgetResult eitherDyn R.never -- updateOutputEv
---  return $ WidgetState viewDyn editorInput outputWR
-  return $ WidgetState (constDyn Button) eitherDyn outputWR
+  return $ WidgetState viewDyn editorInput outputWR
+--  return $ WidgetState (constDyn Button) eitherDyn outputWR
 
 -- | Modal Editor for a Dynamic a
-modalEditorEither' :: forall t m e a. (  RD.DomBuilder t m
+modalEditorEither' :: forall t m e a. ( Reflex t
+                                      , RD.DomBuilder t m
                                       , MonadWidgetExtraC t m
                                       , RD.PostBuild t m
                                       , MonadFix m
@@ -211,20 +213,18 @@ modalEditorEither' :: forall t m e a. (  RD.DomBuilder t m
   -> Dynamic t (Either e a)
   -> ModalEditorConfig t e a
   -> m (ModalEditor t e a)
-modalEditorEither' editW aEDyn config = do
+modalEditorEither' editW aEDyn config = mdo
   (WidgetState viewDyn editorWidgetInputDyn outputWR) <- modalEditorFrame config R.never aEDyn
-{-
-  let editorUpdateEvs = R.leftmost [{-OpenPressed <$ openButtonEv, editorUpdateEv-}]
-      showButtonEv = bool Nothing (Just ()) . (== Button) <$> R.updated viewDyn
-      showEditorEv = bool Nothing (Just ()) . (== Editor) <$> R.updated viewDyn
+  let editorUpdateEvs = R.leftmost [OpenPressed <$ openButtonEv, editorUpdateEv]
+      (showButtonEv, showEditorEv) = fanBool $ (== Editor) <$> R.updated viewDyn -- this requires initial states to be handled below
 
       openButtonConfigOrig = (config ^. modalEditor_openButton) <$> editorWidgetInputDyn
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
       showAttrs startCss hideEv showEv = R.holdDyn startCss $ R.leftmost [hiddenCSS <$ hideEv, visibleCSS <$ showEv]
--}
---  openButtonVisAttrs <- showAttrs visibleCSS showEditorEv showButtonEv
---  modalVisAttrs <- showAttrs hiddenCSS showButtonEv showEditorEv
-{--
+
+  openButtonVisAttrs <- showAttrs visibleCSS showEditorEv showButtonEv
+  modalVisAttrs <- showAttrs hiddenCSS showButtonEv showEditorEv
+
   let header eaDyn = maybe (return R.never) (\f -> L.flexFill L.LayoutLeft $ dynamicButton $ f <$> eaDyn) $ (config ^. modalEditor_XButton)
 
       footer eaDyn = L.flexRow $ do
@@ -235,9 +235,9 @@ modalEditorEither' editW aEDyn config = do
       body eaDyn = L.flexItem $ editW $ e2m <$> eaDyn
 
       modalAttrsDyn = R.zipDynWith M.union modalVisAttrs (config ^. modalEditor_attributes)
---}
---  openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
-  --editorUpdateEv <- RD.elDynAttr "div" modalAttrsDyn $ L.flexCol $ mkModalBodyUpdateAlways' (header editorWidgetInputDyn) footer (body editorWidgetInputDyn)
+
+  openButtonEv <- dynamicButton $ openButtonConfig openButtonVisAttrs
+  editorUpdateEv <- RD.elDynAttr "div" modalAttrsDyn $ L.flexCol $ mkModalBodyUpdateAlways' (header editorWidgetInputDyn) footer (body editorWidgetInputDyn)
 
   return $ ModalEditor (widgetResultToDynamic outputWR) (R.fmapMaybe e2m $ updatedWidgetResult outputWR)
 

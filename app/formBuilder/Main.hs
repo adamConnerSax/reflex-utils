@@ -168,7 +168,7 @@ instance FormInstanceC t m=>FormBuilder t m ReadableType where
 --We'll put these all in a Sum type to show how the form building handles that
 data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType | AA Age deriving (Show,GHC.Generic)
 
-newtype ListOfA = ListOfA [A] deriving (Show, GHC.Generic)
+newtype ListOfA = ListOfA { unListOfA :: [A] } deriving (Show, GHC.Generic)
 
 --And then put those sum types in some other containerized contexts
 data B = B { int::Int, listOfA::ListOfA } deriving (Show,GHC.Generic)
@@ -287,6 +287,12 @@ setString = Set.fromList ["a","b"]
 setInt :: Set.Set Int
 setInt = Set.fromList [1,2]
 
+seqA :: Seq.Seq A
+seqA = Seq.fromList (unListOfA lOfA2)
+
+bRec :: BRec
+bRec = BRec b1 (Seq.fromList (unListOfA lOfA2)) hs
+
 testForm :: (FormInstanceC t m, VFormBuilderC t m a, Show a) => FormConfiguration t m -> a -> m ()
 testForm cfg x = do
   el "p" $ text ""
@@ -305,10 +311,15 @@ testForm cfg x = do
 testContainers :: FormInstanceC t m => FormConfiguration t m -> m ()
 testContainers cfg = do
   let tests = [ ("List of A", testForm cfg lOfA1)
+              , ("Seq of A", testForm cfg seqA)
               , ("Map Text Int", testForm cfg testMap)
               , ("Map Text (Map Text Text)", testForm cfg testMap2)
               , ("HashSet String", testForm cfg hs)
               , ("Seq String", testForm cfg hseq)
+              , ("SelectView Map", testForm cfg sm)
+              , ("Record with Container", testForm cfg b1)
+              , ("Record of Containers", testForm cfg bRec)
+              , ("Combo", testForm cfg c)
               ]
       tabs = (\(n,w) -> TabInfo n (constDyn (n,M.empty)) w) <$> tests
   _ <- staticTabbedLayout def (head tabs) tabs
