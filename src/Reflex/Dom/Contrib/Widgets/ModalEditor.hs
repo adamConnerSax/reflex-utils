@@ -184,35 +184,42 @@ data WidgetState t e a = WidgetState { viewState       :: Dynamic t ViewState
                                      , widgetOutput    :: WidgetResult t (Either e a) }
 
 modalEditorFrame :: (Reflex t, MonadHold t m, MonadFix m) => ModalEditorConfig t e a -> Event t (EditorUpdate e a) -> Dynamic t (Either e a) -> m (WidgetState t e a)
-modalEditorFrame cfg euEv eitherDyn = do
-  let newInputEv = R.updated eitherDyn -- this only happens on input change so we don't put it in EditorUpdate
-      newInputToEditorEv = case cfg ^. modalEditor_onChange of
-        Close -> newInputEv -- or R.ffilter isRight newInputEv filter for only valid values?
-        UpdateIfRight -> Right <$> R.fmapMaybe (preview _Right) newInputEv
-        UpdateOrDefault a -> R.fmapMaybe (either (const $ Just $ Right a) (Just . Right)) newInputEv
-      openEv = R.fmapMaybe (preview _OpenPressed) euEv
-      editedEv = R.fmapMaybe (preview _Edited) euEv
-      okPressedEv = R.fmapMaybe (preview _OkPressed) euEv
-      closeOnOkEv = if cfg ^. modalEditor_closeOnOk then okPressedEv else R.never
+modalEditorFrame cfg euEv valueDyn = do
+  let inputValueEv = R.updated valueDyn -- this only happens on input change so we don't put it in EditorUpdate
+      editedValueEv = R.fmapMaybe (preview _Edited) euEv
+      openButtonEv = R.fmapMaybe (preview _OpenPressed) euEv
+      okButtonEv = R.fmapMaybe (preview _OkPressed) euEv
+      closeButtonEv = R.fmapMaybe (preview _ClosePressed) euEv
+
+      closeOnOkEv = if cfg ^. modalEditor_closeOnOk then okButtonEv else R.never
+
       closeOnChangeEv = case cfg ^. modalEditor_onChange of
-        Close             -> () <$ newInputEv
-        UpdateIfRight     -> () <$ R.fmapMaybe (preview _Left) newInputEv
+        Close             -> () <$ inputValueEv
+        UpdateIfRight     -> () <$ R.fmapMaybe (preview _Left) inputValueEv -- i.e., close if Left
         UpdateOrDefault _ -> R.never
-      closeEv = R.leftmost [R.fmapMaybe (preview _ClosePressed) euEv, closeOnOkEv, closeOnChangeEv]
 
-  viewDyn <- R.holdDyn Button $ R.leftmost [Button <$ closeEv, Editor <$ openEv]
+      closeEv = R.leftmost [closeButtonEv, closeOnOkEv, closeOnChangeEv]
 
-  rec let okValueEv = R.tag (R.current editorVal) okPressedEv
-          openValueEv = R.tag (R.current editorInput) openEv
-      editorVal <- dynPlusEvent editorInput editedEv
-      editorInput <- dynStartingFrom eitherDyn $ R.leftmost [newInputToEditorEv, okValueEv]
-      valueAtCancelDyn <- dynStartingFrom eitherDyn $ R.leftmost [okValueEv, openValueEv]
+      inputToEditorValueEv = case cfg ^. modalEditor_onChange of
+        Close -> R.never
+        UpdateIfRight -> Right <$> R.fmapMaybe (preview _Right) inputValueEv
+        UpdateOrDefault a -> either (const $ Right a) Right <$> inputValueEv
+
+  viewDyn <- R.holdDyn Button $ R.leftmost [Button <$ closeEv, Editor <$ openButtonEv]
+
+  rec editorInput <- dynStartingFrom valueDyn $ R.leftmost [R.never, closeValueEv]
+      editorVal <- dynStartingFrom valueDyn $ R.leftmost [closeValueEv, editedValueEv] -- value at open + edits
+      let okValueEv = R.tag (R.current editorVal) okButtonEv
+          closeValueEv = R.tag (R.current valueAtClose) closeEv
+          openValueEv = R.tag (R.current valueAtOpen) openButtonEv
+      valueAtClose <- dynStartingFrom valueDyn $ R.leftmost [openValueEv, okValueEv]
+      valueAtOpen <- dynPlusEvent valueDyn closeValueEv
 
   let updateOutputEv = R.leftmost [ okValueEv -- order matters.  okPressedEv can also fire closeEv
-                                  , if cfg ^. modalEditor_updateOutput == Always then editedEv else R.never
-                                  , R.tag (R.current valueAtCancelDyn) closeEv
+                                  , if cfg ^. modalEditor_updateOutput == Always then editedValueEv else R.never
+                                  , closeValueEv
                                   ]
-  outputWR <- buildWidgetResult eitherDyn updateOutputEv
+  outputWR <- buildWidgetResult valueDyn updateOutputEv
   return $ WidgetState viewDyn editorInput outputWR
 
 
