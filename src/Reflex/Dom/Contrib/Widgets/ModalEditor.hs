@@ -200,17 +200,17 @@ modalEditorFrame cfg euEv eitherDyn = do
         UpdateOrDefault _ -> R.never
       closeEv = R.leftmost [R.fmapMaybe (preview _ClosePressed) euEv, closeOnOkEv, closeOnChangeEv]
 
-
   viewDyn <- R.holdDyn Button $ R.leftmost [Button <$ closeEv, Editor <$ openEv]
 
+  rec let okValueEv = R.tag (R.current editorVal) okPressedEv
+          openValueEv = R.tag (R.current editorInput) openEv
+      editorVal <- dynPlusEvent editorInput editedEv
+      editorInput <- dynStartingFrom eitherDyn $ R.leftmost [newInputToEditorEv, okValueEv]
+      valueAtCancelDyn <- dynStartingFrom eitherDyn $ R.leftmost [okValueEv, openValueEv]
 
-  rec editorVal <- dynPlusEvent editorInput editedEv
-      editorInput <- dynStartingFrom eitherDyn $ R.leftmost [ newInputToEditorEv
-                                                            , (R.tag (R.current editorVal) okPressedEv)
-                                                            ]
-  let updateOutputEv = R.leftmost [ R.tag (R.current editorVal) okPressedEv -- order matters.  okPressedEv can also fire closeEv
+  let updateOutputEv = R.leftmost [ okValueEv -- order matters.  okPressedEv can also fire closeEv
                                   , if cfg ^. modalEditor_updateOutput == Always then editedEv else R.never
-                                  , R.tag (R.current editorInput) closeEv
+                                  , R.tag (R.current valueAtCancelDyn) closeEv
                                   ]
   outputWR <- buildWidgetResult eitherDyn updateOutputEv
   return $ WidgetState viewDyn editorInput outputWR
