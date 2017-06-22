@@ -193,25 +193,22 @@ modalEditorFrame cfg edEvs valueDyn = do
       closeButtonValueEv = view closePressed edEvs
 
       closeOnOkValueEv = if cfg ^. modalEditor_closeOnOk then okButtonValueEv else R.never
-
-      closeValueEv = R.leftmost [closeButtonValueEv, closeOnOkValueEv, inputValueEv]
-
 -- This version does not support changes flowing into the editor when open. So it's always Close on change.
-{-
+
       closeOnChangeValueEv = case cfg ^. modalEditor_onChange of
         Close             -> inputValueEv
         UpdateIfRight     -> Left <$> R.fmapMaybe (preview _Left) inputValueEv -- i.e., close if Left
         UpdateOrDefault _ -> R.never
 
+      closeValueEv = R.leftmost [closeButtonValueEv, closeOnOkValueEv, closeOnChangeValueEv]
+
       inputToEditorValueEv = case cfg ^. modalEditor_onChange of
-        Close -> inputValueEv
-        UpdateIfRight -> Right <$> R.fmapMaybe (preview _Right) inputValueEv
+        Close             -> inputValueEv
+        UpdateIfRight     -> Right <$> validInputValueEv
         UpdateOrDefault a -> either (const $ Right a) Right <$> inputValueEv
--}
+
   viewDyn <- R.holdDyn Button $ R.leftmost [Button <$ closeValueEv, Editor <$ openButtonEv]
-
-
-  editorInput <- dynStartingFrom valueDyn $ R.leftmost [Right <$> validInputValueEv, closeValueEv]
+  editorInput <- dynStartingFrom valueDyn $ R.leftmost [inputToEditorValueEv, closeValueEv]
   let updateOutputEv = R.leftmost [ closeValueEv -- order matters.  closeOnOk should fire close
                                   , if cfg ^. modalEditor_updateOutput == Always then editedValueEv else okButtonValueEv
                                   ]
@@ -231,13 +228,12 @@ modalEditorEither :: forall t m e a. (  Reflex t
   -> ModalEditorConfig t e a
   -> m (ModalEditor t e a)
 modalEditorEither editW aEDyn config = do
-  let selF buttonDyn vs ea = case vs of
-        Button -> modalEditorOpenButton config buttonDyn
-        Editor -> configuredModalWidget config editW ea
+  let selF eaDyn vs = case vs of
+        Button -> modalEditorOpenButton config eaDyn
+        Editor -> configuredModalWidget config editW eaDyn
 
   rec (WidgetState viewDyn editorWidgetInputDyn modalValue modalChange) <- modalEditorFrame config editorEvs aEDyn
-      let widgetUpdateEv = R.attachWith (\ea view -> (view, ea)) (R.current editorWidgetInputDyn) (R.updated viewDyn)
-      res <- R.current <$> widgetSwitcher (selF editorWidgetInputDyn) (modalEditorOpenButton config aEDyn) widgetUpdateEv
+      res <- R.current <$> RD.widgetHold (modalEditorOpenButton config aEDyn) (selF editorWidgetInputDyn <$> R.updated viewDyn)
       let editorEvs = EditorEvs
                       (R.switch $ view openPressed <$> res)
                       (R.switch $ view okPressed <$> res)
@@ -255,7 +251,6 @@ modalEditorOpenButton config eaDyn =
       openButtonConfig = R.zipDynWith (\bc va -> bc & button_attributes %~ M.union va) openButtonConfigOrig
   in openOnlyEvs <$> (dynamicButton $ openButtonConfig (constDyn M.empty))
 
-
 configuredModalWidget :: forall t m e a. ( Reflex t
                                          , RD.DomBuilder t m
                                          , MonadWidgetExtraC t m
@@ -265,9 +260,9 @@ configuredModalWidget :: forall t m e a. ( Reflex t
                                          )
   => ModalEditorConfig t e a
   -> (Dynamic t (Maybe a) -> m (WidgetResult t (Either e a)))
-  -> Either e a
+  -> Dynamic t (Either e a)
   -> m (EditorEvs t e a)
-configuredModalWidget config editW ea = do
+configuredModalWidget config editW eaDyn = do
   let header d = maybe (return R.never) (\f -> L.flexFill L.LayoutLeft $ dynamicButton $ f <$> d) $ (config ^. modalEditor_XButton)
       footer d = L.flexRow $ do
         okEv <- L.flexFill L.LayoutRight $ dynamicButton ((config ^. modalEditor_OkButton) <$> d)
@@ -276,20 +271,20 @@ configuredModalWidget config editW ea = do
       modalAttrsDyn = R.zipDynWith (M.unionWith (\c1 c2 -> c1 <> " " <> c2)) (config ^. modalEditor_attributes) (R.constDyn ("class" RD.=: "modal-dialog"))
   RD.elDynAttr "div" modalAttrsDyn $ RD.divClass "modal-content" $ do
     rec dismiss <- header $ widgetResultToDynamic bodyWR
-        bodyWR <- L.flexItem $ RD.divClass "modal-body" $ editW $ e2m <$> (R.constDyn ea)
+        bodyWR <- L.flexItem $ RD.divClass "modal-body" $ editW $ e2m <$> eaDyn
     (cancel, ok) <- footer $ widgetResultToDynamic bodyWR
     let okValueEv = Right <$> R.attachWithMaybe (\e _ -> preview _Right e)  (currentWidgetResult bodyWR) ok
-    valueIfClosed <- R.holdDyn ea okValueEv
+    valueIfClosed <- dynPlusEvent eaDyn okValueEv
     let closeValueEv = R.tag (R.current valueIfClosed) $ R.leftmost [dismiss, cancel]
     return $ EditorEvs R.never okValueEv closeValueEv (updatedWidgetResult bodyWR)
 
-
+{-
 widgetSwitcher :: (Reflex t, RD.DomBuilder t m, R.MonadHold t m)
-  => (a -> b -> m c) -- function to produce a widget from the a given in the update event
-  -> m c -- starting widget
-  -> Event t (a, b) -- use a to choose widget function and give it b as an argument to produce
-  -> m (R.Dynamic t c) -- the resulting widget with dynamic output to account for switching
-widgetSwitcher selFunction startW updateEv =
+  => (a -> m b) -- function to produce a widget from the a given in the update event
+  -> m b -- starting widget
+  -> Event t a -- use a to choose widget function and give it b as an argument to produce
+  -> m (R.Dynamic t b) -- the resulting widget with dynamic output to account for switching
+widgetSwitcher selFunction startW updateEv = RD.widgetHold startW (selF <$> updateEv)
   let toWidget (a, b) = selFunction a b
       widgetEv = toWidget <$> updateEv
   in RD.widgetHold startW widgetEv
@@ -300,7 +295,7 @@ widgetSwitcherEv :: (Reflex t, RD.DomBuilder t m, R.MonadHold t m)
   -> Event t (a, b) -- use a to choose widget function and give it b as an argument to produce
   -> m (Event t c) -- the resulting widget with dynamic output to account for switching
 widgetSwitcherEv selFunction startW updateEv = R.switch . R.current <$> widgetSwitcher selFunction startW updateEv
-
+-}
 
 
 --  editorUpdateEv <- RD.elDynAttr "div" modalAttrsDyn $ L.flexCol $ mkModalBodyUpdateAlwaysEU (header eaDyn) footer (body eaDyn)
