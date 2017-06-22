@@ -444,6 +444,7 @@ buildLBAddDelete (MapLike to from diffMapF) (MapElemWidgets eW nWF) mFN fvfa = m
 
 newItemEditorConfig :: R.Reflex t => MW.ModalEditorConfig t FormErrors a
 newItemEditorConfig = RD.def
+                      & MW.modalEditor_updateOutput .~ MW.OnOk
                       & MW.modalEditor_closeOnOk .~ True
                       & MW.modalEditor_openButton .~ const (MW.ButtonConfig "Add" M.empty (Just "fa fa-plus"))
                       & MW.modalEditor_XButton .~ Nothing
