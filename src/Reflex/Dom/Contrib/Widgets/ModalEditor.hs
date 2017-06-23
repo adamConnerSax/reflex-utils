@@ -193,7 +193,6 @@ modalEditorFrame cfg edEvs valueDyn = do
       closeButtonValueEv = view closePressed edEvs
 
       closeOnOkValueEv = if cfg ^. modalEditor_closeOnOk then okButtonValueEv else R.never
--- This version does not support changes flowing into the editor when open. So it's always Close on change.
 
       closeOnChangeValueEv = case cfg ^. modalEditor_onChange of
         Close             -> inputValueEv
@@ -209,7 +208,7 @@ modalEditorFrame cfg edEvs valueDyn = do
 
   viewDyn <- R.holdDyn Button $ R.leftmost [Button <$ closeValueEv, Editor <$ openButtonEv]
   editorInput <- dynStartingFrom valueDyn $ R.leftmost [inputToEditorValueEv, closeValueEv]
-  let updateOutputEv = R.leftmost [ closeValueEv -- order matters.  closeOnOk should fire close
+  let updateOutputEv = R.leftmost [ closeValueEv -- order matters.  closeOnOkValueEv should fire rather than okButtonValueEv
                                   , if cfg ^. modalEditor_updateOutput == Always then editedValueEv else okButtonValueEv
                                   ]
   dynOut <- dynPlusEvent valueDyn updateOutputEv
