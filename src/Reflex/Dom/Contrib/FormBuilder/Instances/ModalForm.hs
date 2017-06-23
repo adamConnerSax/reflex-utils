@@ -49,10 +49,10 @@ instance ( HasModalFormConfig t a
          , FormInstanceC t m
          , FormBuilder t m a
          ) => FormBuilder t m (ModalForm a) where
-  buildForm vMFA mFN dmMF  =
+  buildForm vMFA mFN fvMF  =
     let va = fmap unModalForm . vMFA . ModalForm
-        modalWidget = fmap (fmap avToEither . getCompose) . unF . buildForm va mFN . Compose  -- FIXME
-        aEDyn = maybeToEitherFE <$> (getCompose $ unModalForm <$> dmMF)
+        modalWidget = fmap (fmap avToEither . getCompose) . unF . buildForm va mFN . dynMaybeToFormValue . Compose -- FIXME
+        aEDyn = widgetResultToDynamic $ fValToEitherFE <$> (getCompose $ unModalForm <$> fvMF)
     in makeForm $ fmap ModalForm . Compose . fmap eitherToAV . getCompose . modalEditor_WidgetResult <$> modalEditorEither modalWidget aEDyn modalConfig
 
 
@@ -63,10 +63,10 @@ modalizeWidget ::  ( RD.DomBuilder t m
                    , RD.PostBuild t m
                    , MonadFix m
                    , RD.MonadHold t m
-                   ) => ModalEditorConfig t FormErrors a -> (DynMaybe t a -> m (FormResult t a)) -> DynMaybe t a -> m (FormResult t a)
-modalizeWidget cfg w dma =
-  let matchedWidget = fmap (fmap avToEither . getCompose) . w . Compose
-      matchedInput = maybeToEitherFE <$> getCompose dma
+                   ) => ModalEditorConfig t FormErrors a -> (FormValue t a -> m (FormValue t a)) -> FormValue t a -> m (FormValue t a)
+modalizeWidget cfg w fva =
+  let matchedWidget = fmap (fmap avToEither . getCompose) . w . dynMaybeToFormValue . Compose
+      matchedInput = widgetResultToDynamic $ fValToEitherFE <$> getCompose fva
       matchOutput = transformWrappedWidgetResult eitherToAV . modalEditor_WidgetResult
   in matchOutput <$> modalEditorEither matchedWidget matchedInput cfg
 
@@ -75,14 +75,17 @@ modalizeEditor ::  ( RD.DomBuilder t m
                    , RD.PostBuild t m
                    , MonadFix m
                    , RD.MonadHold t m
-                 ) => ModalEditorConfig t FormErrors a -> DynEditor t m a a -> DynEditor t m a a
+                 ) => ModalEditorConfig t FormErrors a -> FormEditor t m a a -> FormEditor t m a a
 modalizeEditor cfg e = Editor $ makeForm . modalizeWidget cfg (unF . runEditor e)
 
-modalEditField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t FormErrors a -> DynEditor t m a a
+modalEditField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t FormErrors a -> FormEditor t m a a
 modalEditField cfg = modalizeEditor cfg (editField Nothing)
 
 maybeToEitherFE :: Maybe a -> Either FormErrors a
 maybeToEitherFE = maybe (Left [FNothing]) Right
+
+fValToEitherFE :: FValidation a -> Either FormErrors a
+fValToEitherFE = accValidation Left Right
 
 {-
 modalizeFormField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t a -> DynMaybe t a -> Form t m a

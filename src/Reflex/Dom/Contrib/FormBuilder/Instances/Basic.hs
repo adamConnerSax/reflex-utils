@@ -65,6 +65,7 @@ import qualified DataBuilder                                  as B
 import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv,
                                                                dynamicMaybeAsEv)
 import           Reflex.Dom.Contrib.FormBuilder.Builder
+import           Reflex.Dom.Contrib.FormBuilder.Configuration (formValueToDynMaybe)
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynMaybe,
                                                                dynMaybeAsEv)
 import           Reflex.Dom.Contrib.Layout.Types              (emptyCss,
@@ -72,7 +73,8 @@ import           Reflex.Dom.Contrib.Layout.Types              (emptyCss,
 import           Reflex.Dom.Contrib.ReflexConstraints
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult, buildReadOnlyWidgetResult,
                                                                buildWidgetResult,
-                                                               unsafeBuildWidgetResult)
+                                                               unsafeBuildWidgetResult,
+                                                               widgetResultOfDynamicToWidgetResult)
 -- instances
 
 --some helpers
@@ -129,12 +131,12 @@ formWidget' :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m, MonadFix m
   -> Maybe FieldName -- field name ?
   -> Maybe T.Text -- type name ?
   -> (WidgetConfig t b -> m (WidgetResult t b)) -- underlying reflex-dom-contrib widget
-  -> FR t m (FormResult t a)
+  -> FR t m (FormValue t a)
 formWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = mdo
-  attrsDyn <- fAttrs fra mFN mTypeName
+  attrsDyn <- fAttrs fva mFN mTypeName
   let wc = WidgetConfig (toWT <$> updateEv) initialWV attrsDyn
-  fra <- item $ Compose <$> formWidget validateWT showWT mFN wc widget
-  return fra
+  fva <- item $ Compose <$> formWidget validateWT showWT mFN wc widget
+  return fva
 
 item :: Monad m => FLayoutF t m
 item = fItem
@@ -179,51 +181,52 @@ parseAndValidate mFN parse va t =
 buildDynReadable :: (FormInstanceC t m, Readable a, Show a)
   => FormValidator a
   -> Maybe FieldName
-  -> DynMaybe t a
+  -> FormValue t a
   -> Form t m a
-buildDynReadable va mFN dma = makeForm $ do
+buildDynReadable va mFN fva = makeForm $ do
   let vfwt = parseAndValidate mFN fromText va
-  inputEv <- dynMaybeAsEv dma
+  inputEv <- dynMaybeAsEv $ formValueToDynMaybe fva
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetResult mFN
 
 dynReadableEditor :: (FormInstanceC t m, Readable a, Show a)
   => FormValidator a
   -> Maybe FieldName
-  -> DynEditor t m a a
+  -> FormEditor t m a a
 dynReadableEditor va = Editor . buildDynReadable va
 
 buildDynReadMaybe :: (FormInstanceC t m, Read a, Show a)
   => FormValidator a
   -> Maybe FieldName
-  -> DynMaybe t a
+  -> FormValue t a
   -> Form t m a
-buildDynReadMaybe va mFN dma = makeForm $ do
+buildDynReadMaybe va mFN fva = makeForm $ do
   let vfwt = parseAndValidate mFN (readMaybe . T.unpack) va
-  inputEv <- dynMaybeAsEv dma
+  inputEv <- dynMaybeAsEv $ formValueToDynMaybe fva
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetResult mFN
 
 dynReadMaybeEditor :: (FormInstanceC t m, Read a, Show a)
   => FormValidator a
   -> Maybe FieldName
-  -> DynEditor t m a a
+  -> FormEditor t m a a
 dynReadMaybeEditor va = Editor . buildDynReadMaybe va
 
 
 -- NB this will handle Dynamic t (Dynamic t a)) inputs
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (R.Dynamic t a) where
-  buildForm va mFN = validateForm va . fmap R.constDyn . buildVForm mFN . Compose . join . fmap sequenceA . getCompose
+  buildForm va mFN fvda = makeForm $ do
+    fva <- widgetResultOfDynamicToWidgetResult $ fmap sequenceA $ getCompose fvda
+    unF . validateForm va . fmap R.constDyn $ buildVForm mFN (Compose fva)
 
 -- | String and Text
 instance FormInstanceC t m => FormBuilder t m T.Text where
-  buildForm va mFN initialMDyn = makeForm $ do
-    inputEv <- dynamicMaybeAsEv (getCompose initialMDyn) -- traceDynMAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")") (getCompose initialMDyn) -- FIXTrace
---    inputEv <- maybe (return R.never) (traceDynAsEv (\t->T.unpack $ "FormBuilder t m T.Text (val=" <> t <> ")")) mInitialDyn  -- mDynAsEv mInitialDyn
+  buildForm va mFN initialFV = makeForm $ do
+    inputEv <- dynamicMaybeAsEv (getCompose $ formValueToDynMaybe initialFV)
     formWidget' inputEv "" id va id mFN Nothing $ textWidgetResult mFN
 
 instance {-# OVERLAPPING #-} FormInstanceC t m => FormBuilder t m String where
-  buildForm va mFN initialMDyn =
+  buildForm va mFN initialFV =
     let va' t = T.pack <$> va (T.unpack t)
-    in T.unpack <$> buildForm va' mFN (T.pack <$> initialMDyn)
+    in T.unpack <$> buildForm va' mFN (T.pack <$> initialFV)
 
 
 {- Not clear what to do here! Default behavior is bad since Char is a huge enum.
@@ -243,8 +246,8 @@ htmlWidgetResult hw =
 
 -- We don't need this.  If we leave it out, the Enum instance will work and we get a dropdown instead of a checkbox.  Which might be better...
 instance FormInstanceC t m => FormBuilder t m Bool where
-  buildForm va mFN initialMDyn = makeForm $ do
-    inputEv <- dynMaybeAsEv initialMDyn
+  buildForm va mFN initialFV = makeForm $ do
+    inputEv <- dynMaybeAsEv (formValueToDynMaybe initialFV)
     formWidget' inputEv False id va showText mFN Nothing (\c -> htmlWidgetResult <$> htmlCheckbox c)
 
 instance FormInstanceC t m => FormBuilder t m Double where
@@ -288,22 +291,22 @@ instance FormInstanceC t m => FormBuilder t m ByteString where
 
 --dateTime and date
 instance FormInstanceC t m => FormBuilder t m UTCTime where
-  buildForm va mFN initialMDyn = makeForm $ do
+  buildForm va mFN initialFV = makeForm $ do
     let vfwt x = case x of
           Nothing -> AccFailure [FNoParse "Couldn't parse as UTCTime."]
           Just y  -> va y
         initialDateTime = Just $ UTCTime (fromGregorian 1971 1 1) (secondsToDiffTime 0)
-    inputEv <- dynMaybeAsEv initialMDyn
+    inputEv <- dynMaybeAsEv (formValueToDynMaybe initialFV)
     formWidget' inputEv initialDateTime Just vfwt (maybe "" showText) mFN Nothing (\c -> htmlWidgetResult <$> restrictWidget blurOrEnter dateTimeWidget c)
 
 
 instance FormInstanceC t m => FormBuilder t m Day where
-  buildForm va mFN initialMDyn = makeForm $ do
+  buildForm va mFN initialFV = makeForm $ do
     let vfwt x = case x of
           Nothing -> AccFailure [FNoParse "Couldn't parse as Day."]
           Just y  -> va y
         initialDay = Just $ fromGregorian 1971 1 1
-    inputEv <- dynMaybeAsEv initialMDyn
+    inputEv <- dynMaybeAsEv (formValueToDynMaybe initialFV)
     formWidget' inputEv initialDay Just vfwt (maybe "" showText) mFN Nothing (\c -> htmlWidgetResult <$> restrictWidget blurOrEnter dateWidget c)
 
 
@@ -314,11 +317,12 @@ deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b) 
 
 -- if two things are Isomorphic, we can use one to build the other
 -- NB: Isomorphic sum types will end up using the constructors, etc. of the one used to bootstrap
-buildFormIso::(FormInstanceC t m, VFormBuilderC t m a) => Iso' a b->FormValidator b->Maybe FieldName->DynMaybe t b->Form t m b
-buildFormIso isoAB vb mFN dmb = makeForm $ do
+buildFormIso::(FormInstanceC t m, VFormBuilderC t m a)
+  => Iso' a b -> FormValidator b -> Maybe FieldName -> FormValue t b -> Form t m b
+buildFormIso isoAB vb mFN fvb = makeForm $ do
   let a2b = view isoAB
       b2a = view $ from isoAB
-  unF $ a2b <$> buildForm (fmap b2a . vb . a2b) mFN (b2a <$> dmb)
+  unF $ a2b <$> buildForm (fmap b2a . vb . a2b) mFN (b2a <$> fvb)
 
 -- NB: Here, AccSuccess will appear as Right and AccFailure as Left in the forms.  To Avoid this we need to build a specific instance.
 instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b) => FormBuilder t m (AccValidation a b) where
@@ -330,19 +334,21 @@ widget0Result w0 =
       chg = _widget0_change w0
   in unsafeBuildWidgetResult val chg
 
-buildEnumDropdown :: (FormInstanceC t m, Enum a, Bounded a, Eq a) => (a -> T.Text) -> FormValidator a -> Maybe FieldName -> DynMaybe t a -> Form t m a
-buildEnumDropdown printF vF mFN dma = makeForm $ do
+buildEnumDropdown :: (FormInstanceC t m, Enum a, Bounded a, Eq a)
+  => (a -> T.Text) -> FormValidator a -> Maybe FieldName -> FormValue t a -> Form t m a
+buildEnumDropdown printF vF mFN fva = makeForm $ do
     let values = [minBound..]
         initial = head values
-    inputEv <- dynMaybeAsEv dma
+    inputEv <- dynMaybeAsEv (formValueToDynMaybe fva)
     formWidget' inputEv initial id vF printF mFN Nothing (\c -> widget0Result <$> htmlDropdownStatic values printF Prelude.id c)
 
-enumDropdownEditor :: (FormInstanceC t m, Enum a, Bounded a, Eq a) => (a -> T.Text) -> FormValidator a -> Maybe FieldName -> DynEditor t m a a
+enumDropdownEditor :: (FormInstanceC t m, Enum a, Bounded a, Eq a)
+  => (a -> T.Text) -> FormValidator a -> Maybe FieldName -> FormEditor t m a a
 enumDropdownEditor printF v = Editor . buildEnumDropdown printF v
 
 -- | Enums become dropdowns
 instance {-# OVERLAPPABLE #-} (FormInstanceC t m, Enum a, Show a, Bounded a, Eq a) => FormBuilder t m a where
-  buildForm va mFN initialMDyn = buildEnumDropdown showText va mFN initialMDyn
+  buildForm va mFN initialFV = buildEnumDropdown showText va mFN initialFV
 {-    let values = [minBound..] :: [a]
         initial = head values
     inputEv <- dynMaybeAsEv initialMDyn

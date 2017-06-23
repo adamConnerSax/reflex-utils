@@ -18,7 +18,7 @@ module Reflex.Dom.Contrib.Layout.TabLayout
 
 import Reflex.Dom.Contrib.Layout.ClayUtils
 import Reflex.Dom.Contrib.Layout.FlexLayout
-import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..),toCssString)
+import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..),toCssString, LayoutDirection(LayoutRight))
 import qualified Reflex as R
 import Reflex.Dynamic ()
 import qualified Reflex.Dom as RD
@@ -153,7 +153,7 @@ staticTabbedLayout config curTab tabs = do
       tabControlClasses = CssClasses [tabSpecificClass config, tabControlClass config]
   RD.divClass (toCssString tabControlClasses) $ flexCol $ mdo
     let tabRowClasses = CssClasses [tabSpecificClass config, tabRowClass config]
-    curTabEv <- RD.leftmost . F.toList <$> (RD.divClass (toCssString tabRowClasses) $ flexRow (traverse (`tabEv` curTabDyn) tabs)) -- make the tab bar
+    curTabEv <- flexFill LayoutRight $ RD.leftmost . F.toList <$> (RD.divClass (toCssString tabRowClasses) $ flexRow (traverse (`tabEv` curTabDyn) tabs)) -- make the tab bar
     curTabDyn <- R.foldDyn const curTab curTabEv 
     flexRow $ traverse (contentDiv curTabDyn) tabs -- and now the tabs
 

@@ -169,7 +169,7 @@ instance FormInstanceC t m=>FormBuilder t m ReadableType where
 --We'll put these all in a Sum type to show how the form building handles that
 data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType | AA Age deriving (Show,GHC.Generic)
 
-newtype ListOfA = ListOfA [A] deriving (Show)
+newtype ListOfA = ListOfA { unListOfA :: [A] } deriving (Show, GHC.Generic)
 
 --And then put those sum types in some other containerized contexts
 data B = B { int::Int, listOfA::ListOfA } deriving (Show,GHC.Generic)
@@ -183,7 +183,6 @@ data BRec = BRec { oneB::B, seqOfA::Seq.Seq A, hashSetOfString::HS.HashSet Strin
 
 data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Generic)
 
-
 -- generic instances
 -- NB: "Generic" below is the Generics.SOP sort.
 -- NB: You don't need the "buildA .. = .. gBuildA .. " lines if the default formatting is okay.  But this allows you to insert layout on a per type basis.
@@ -193,17 +192,23 @@ instance HasDatatypeInfo A
 instance FormInstanceC t m=>FormBuilder t m A where
   buildForm va mFN = liftF fRow . gBuildFormValidated va mFN
 
+{-
+instance Generic ListOfA
+instance HasDatatypeInfo ListOfA
+instance FormInstanceC t m => FormBuilder t m ListOfA
+-}
+
 convertValidator::FormValidator ListOfA -> FormValidator [A]
 convertValidator vLA = fmap (\(ListOfA x) -> x) . vLA . ListOfA
 
 instance (FormInstanceC t m, VFormBuilderC t m A)=>FormBuilder t m ListOfA where
   buildForm va mFN = fmap ListOfA . buildListWithSelect (convertValidator va) mFN . fmap (\(ListOfA x)->x)
 
+
 instance Generic B
 instance HasDatatypeInfo B
 instance FormInstanceC t m=>FormBuilder t m B where
   buildForm va mFN = liftF (fieldSet "B" . fRow) . gBuildFormValidated va mFN
-
 
 --instance Generic MyMap
 --instance HasDatatypeInfo MyMap
@@ -215,11 +220,9 @@ instance HasDatatypeInfo (SMap a)
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (SMap a) where
   buildForm va mFN = fmap SMap . buildMapWithSelect (fmap unSMap . va . SMap) mFN . fmap unSMap
 
-
 instance Generic (LMap a)
 instance HasDatatypeInfo (LMap a)
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (LMap a)
-
 
 instance Generic C
 instance HasDatatypeInfo C
@@ -241,10 +244,10 @@ instance FormInstanceC t m=>FormBuilder t m BRec where
 buildDateOrDateTime::FormInstanceC t m
   =>FormValidator DateOrDateTime
   -> Maybe FieldName
-  -> DynMaybe t DateOrDateTime
+  -> FormValue t DateOrDateTime
   -> Form t m DateOrDateTime
-buildDateOrDateTime va mFN dma =
-  let mdWrapped = buildFMDWrappedList mFN dma
+buildDateOrDateTime va mFN fvma =
+  let mdWrapped = buildFMDWrappedList mFN fvma
       customizeWidget (MDWrapped hd (cn,mfn) w) = case cn of
         "Date"     -> MDWrapped hd (cn,mfn) w
         "DateTime" -> MDWrapped hd (cn,mfn) w
@@ -285,24 +288,45 @@ setString = Set.fromList ["a","b"]
 setInt :: Set.Set Int
 setInt = Set.fromList [1,2]
 
+seqA :: Seq.Seq A
+seqA = Seq.fromList (unListOfA lOfA2)
 
-testComplexForm :: FormInstanceC t m=>FormConfiguration t m -> m ()
-testComplexForm cfg = do
+bRec :: BRec
+bRec = BRec b1 (Seq.fromList (unListOfA lOfA2)) hs
+
+testForm :: (FormInstanceC t m, VFormBuilderC t m a, Show a) => FormConfiguration t m -> a -> m ()
+testForm cfg x = do
   el "p" $ text ""
-  el "h2" $ text "From a nested data structure, one with sum types and containers. Output is a Dynamic, rather than event based via a \"submit\" button."
-  fr <- flexFill LayoutRight $ dynamicForm cfg (Just c)
+  fv <- flexFill LayoutRight $ dynamicForm cfg (Just x)
   el "p" $ text "dynText:"
-  dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose fr))
-  el "p" $ text "As input:"
+  dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose fv))
+  el "p" $ text "Input into new form:"
   el "p" blank
-  fr' <- flexFill LayoutRight $ dynamicFormOfDynamic cfg $ Compose $ fmap avToMaybe $ widgetResultToDynamic $ getCompose fr
+  fv' <- flexFill LayoutRight $ dynamicFormOfFormValue cfg fv
   el "p" $ text "Observed:"
   el "p" blank
-  _ <- flexFill LayoutRight $ observeDynamic cfg (widgetResultToDynamic $ avToMaybe <$> getCompose fr')
+  _ <- flexFill LayoutRight $ observeDynamic cfg (widgetResultToDynamic $ avToMaybe <$> getCompose fv')
   return ()
 
-complexFormTab::FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
-complexFormTab cfg = TabInfo "complexFormTab" (constDyn ("Complex Example", M.empty))  $ testComplexForm cfg
+testContainers :: FormInstanceC t m => FormConfiguration t m -> m ()
+testContainers cfg = do
+  let tests = [ ("List of A", testForm cfg lOfA1)
+              , ("Seq of A", testForm cfg seqA)
+              , ("Map Text Int", testForm cfg testMap)
+              , ("Map Text (Map Text Text)", testForm cfg testMap2)
+              , ("HashSet String", testForm cfg hs)
+              , ("Seq String", testForm cfg hseq)
+              , ("SelectView Map", testForm cfg sm)
+              , ("Record with Container", testForm cfg b1)
+              , ("Record of Containers", testForm cfg bRec)
+              , ("Combo", testForm cfg c)
+              ]
+      tabs = (\(n,w) -> TabInfo n (constDyn (n,M.empty)) w) <$> tests
+  _ <- staticTabbedLayout def (head tabs) tabs
+  return ()
+
+containersTab::FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
+containersTab cfg = TabInfo "containersTab" (constDyn ("Container Forms", M.empty))  $ testContainers cfg
 
 flowTestWidget::(DomBuilder t m, HasDocument m, MonadWidgetExtraC t m, MonadFix m, MonadHold t m, PostBuild t m)=>Int->m (Dynamic t String)
 flowTestWidget n = do
@@ -327,10 +351,10 @@ test :: FormInstanceC t m => FormConfiguration t m -> m ()
 test cfg = do
   el "p" (text "")
   el "br" blank
-  staticTabbedLayout def (complexFormTab cfg)
+  staticTabbedLayout def (containersTab cfg)
     [
       userFormTab cfg
-    , complexFormTab cfg
+    , containersTab cfg
     , flowTestTab cfg
     ]
   return ()

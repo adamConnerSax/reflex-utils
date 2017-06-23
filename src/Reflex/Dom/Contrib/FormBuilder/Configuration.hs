@@ -15,11 +15,17 @@ module Reflex.Dom.Contrib.FormBuilder.Configuration
   , FormType(..)
   , CollapsibleInitialState(..)
   , FR
-  , FormResult
-  , formResultErrors
-  , formResultError
-  , formResultNothing
-  , dynamicToFormResult
+  , FormValue
+  , formValueErrors
+  , formValueError
+  , constFormValue
+  , formValueNothing
+  , dynamicToFormValue
+  , fvMapFormValue
+  , maybeMapFormValue
+  , dynMaybeToFormValue
+  , formValueToDynMaybe
+  , addFormValueDefault
   , FRW
   , FLayoutF
   , liftLF
@@ -60,18 +66,21 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation
 import           Reflex.Dom.Contrib.Layout.Types              (CssClasses, LayoutDirection (..),
                                                                LayoutOrientation (..))
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WrappedWidgetResult,
-                                                               constWidgetResult, dynamicToWidgetResult)
+                                                               constWidgetResult,
+                                                               dynamicToWidgetResult,
+                                                               widgetResultToDynamic)
 
 import qualified DataBuilder                                  as B
 import           Reflex                                       (Dynamic, Event,
-                                                               Reflex)
+                                                               Reflex, constDyn)
 
 import           Control.Lens.TH
 import           Control.Monad.Morph                          (hoist)
 import           Control.Monad.Reader                         (ReaderT, ask,
                                                                local)
 import           Data.ByteString                              (ByteString)
-import           Data.Functor.Compose                         (Compose (Compose))
+import           Data.Functor.Compose                         (Compose (Compose),
+                                                               getCompose)
 import           Data.Map                                     (Map)
 import           Data.Text                                    (Text)
 import           Reflex.Dom.Contrib.CssUtils                  (CssLinks)
@@ -89,21 +98,39 @@ data FormType = Interactive | ObserveOnly deriving (Eq)
 data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)
 
 type FR t m = ReaderT (FormConfiguration t m) m
-type FormResult t = WrappedWidgetResult t FValidation
+type FormValue t = WrappedWidgetResult t FValidation
 
-formResultErrors :: Reflex t => FormErrors -> FormResult t a
-formResultErrors = Compose . constWidgetResult . AccFailure
+constFormValue :: Reflex t => a -> FormValue t a
+constFormValue = dynamicToFormValue . constDyn
 
-formResultError :: Reflex t => FormError -> FormResult t a
-formResultError = formResultErrors . pure
+formValueErrors :: Reflex t => FormErrors -> FormValue t a
+formValueErrors = Compose . constWidgetResult . AccFailure
 
-formResultNothing :: Reflex t => FormResult t a
-formResultNothing = formResultError FNothing
+formValueError :: Reflex t => FormError -> FormValue t a
+formValueError = formValueErrors . pure
 
-dynamicToFormResult :: Reflex t => Dynamic t a -> FormResult t a
-dynamicToFormResult = Compose . dynamicToWidgetResult . fmap AccSuccess 
+formValueNothing :: Reflex t => FormValue t a
+formValueNothing = formValueError FNothing
 
-type FRW t m a = FR t m (FormResult t a)
+dynamicToFormValue :: Reflex t => Dynamic t a -> FormValue t a
+dynamicToFormValue = Compose . dynamicToWidgetResult . fmap AccSuccess
+
+fvMapFormValue :: Reflex t => (a -> FValidation b) -> FormValue t a -> FormValue t b
+fvMapFormValue f = Compose . fmap (mergeAccValidation . fmap f) . getCompose
+
+maybeMapFormValue :: Reflex t => (a -> Maybe b) -> FormValue t a -> FormValue t b
+maybeMapFormValue f = fvMapFormValue (maybeToAV . f)
+
+dynMaybeToFormValue :: Reflex t => DynMaybe t a -> FormValue t a
+dynMaybeToFormValue = Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
+
+formValueToDynMaybe :: Reflex t => FormValue t a -> DynMaybe t a
+formValueToDynMaybe = Compose . widgetResultToDynamic . fmap avToMaybe . getCompose
+
+addFormValueDefault :: Reflex t => a -> FormValue t a -> FormValue t a
+addFormValueDefault x = Compose . fmap (accValidation (const $ AccSuccess x) AccSuccess) . getCompose
+
+type FRW t m a = FR t m (FormValue t a)
 
 type FLayoutF t m = forall a.(FR t m a -> FR t m a)
 

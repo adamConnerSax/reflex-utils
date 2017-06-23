@@ -1,6 +1,7 @@
 module Reflex.Dom.Contrib.DynamicUtils
   (
-    dynBasedOn
+    dynStartingFrom
+  , dynPlusEvent
   , dynAsEv
   , traceDynAsEv
   , mDynAsEv
@@ -13,8 +14,12 @@ import qualified Reflex as R
 import qualified Reflex.Dom as RD
 
 
-dynBasedOn :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
-dynBasedOn d e = R.buildDynamic (R.sample $ R.current d) e
+dynStartingFrom :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
+dynStartingFrom d e = R.buildDynamic (R.sample $ R.current d) e
+
+-- NB: This means that is d is updated and e fires in the same frame, the update to d will be the result here.
+dynPlusEvent :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
+dynPlusEvent d e = dynStartingFrom d $ R.leftmost [R.updated d, e]
 
 -- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
 -- that's the value we want not the tagged current value.

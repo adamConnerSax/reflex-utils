@@ -13,7 +13,9 @@ module Reflex.Dom.Contrib.Widgets.WidgetResult
   , currentWidgetResult
   , constWidgetResult
   , buildWidgetResult
+--  , updateWidgetResult
   , dynamicWidgetResultToWidgetResult
+  , widgetResultOfDynamicToWidgetResult
   , dynamicToWidgetResult
   , buildReadOnlyWidgetResult
   , conservativeRetrofitWidgetResult
@@ -66,11 +68,26 @@ buildWidgetResult d0 updateEv = do
   d <- buildDynamic (sample $ current d0) $ leftmost [d0Ev, updateEv] -- order reversed
   return $ WidgetResult d (() <$ leftWhenNotRight updateEv d0Ev)
 
+{-
+-- this adds events to the WidgetResult, keeping the old
+updateWidgetResult :: (Reflex t, MonadHold t m) => WidgetResult t a -> Event t a -> m (WidgetResult t a)
+updateWidgetResult (WidgetResult d0 e0) e = do
+  let updatedEv = leftmost [e0, () <$ e]
+  updatedDyn <- buildDynamic (sample $ current d0) $ leftmost [updated d0, e]
+  return $ WidgetResult updatedDyn updatedEv
+-}
+
 dynamicWidgetResultToWidgetResult :: Reflex t => Dynamic t (WidgetResult t a) -> WidgetResult t a
 dynamicWidgetResultToWidgetResult dwr =
   let d = join $ _wrDyn <$> dwr
       e = switch $ current $ _wrInternalEv <$> dwr
   in WidgetResult d e
+
+widgetResultOfDynamicToWidgetResult :: (Reflex t, MonadHold t m) => WidgetResult t (Dynamic t a) -> m (WidgetResult t a)
+widgetResultOfDynamicToWidgetResult wrd = do
+  let d = join $ _wrDyn wrd
+  ed <- buildDynamic (sample $ current $ _wrDyn wrd) $ updatedWidgetResult wrd
+  return $ WidgetResult d (() <$ updated ed) -- ??
 
 -- here so a widget which returns just a Dynamic can return a WidgetResult
 dynamicToWidgetResult :: Reflex t => Dynamic t a -> WidgetResult t a
