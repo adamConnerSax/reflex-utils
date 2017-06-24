@@ -108,13 +108,13 @@ safeDropdownOfLabelKeyedValue :: forall m t v l. (RD.DomBuilder t m
                                                  , R.MonadHold t m
                                                  , RD.PostBuild t m
                                                  , Ord l)
-  => (l -> T.Text)
+  => (l -> v -> T.Text)
   -> Maybe l
   -> Dynamic t (M.Map l v)
   -> SafeDropdownConfig t l
   -> m (SafeDropdown t v)
 safeDropdownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
-  let sdOptionsDyn = M.mapWithKey (\l _ -> labelToText l) <$> optionsDyn
+  let sdOptionsDyn = M.mapWithKey (\l v -> labelToText l v) <$> optionsDyn
       maybeLookup opts ml = ml >>= flip M.lookup opts
       mapEvent = R.attachWith maybeLookup (current optionsDyn) 
       mapDynamic = R.zipDynWith maybeLookup optionsDyn 

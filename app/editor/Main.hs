@@ -32,8 +32,11 @@ import           Reflex.Dom.Contrib.Layout.Types                     (CssClass (
                                                                       emptyCss,
                                                                       oneClass)
 import           Reflex.Dom.Contrib.ReflexConstraints                (MonadWidgetExtraC)
-import           Reflex.Dom.Contrib.Widgets.WidgetResult             (widgetResultToDynamic)
-
+import           Reflex.Dom.Contrib.Widgets.SafeDropdown             (SafeDropdown (..),
+                                                                      SafeDropdownConfig (..),
+                                                                      safeDropdownOfLabelKeyedValue)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult             (dynamicWidgetResultToWidgetResult,
+                                                                      widgetResultToDynamic)
 
 #ifdef USE_WKWEBVIEW
 import           Language.Javascript.JSaddle.WKWebView               (run)
@@ -62,7 +65,8 @@ import           Reflex.Dom.Contrib.CssUtils                         (CssLink, C
 
 --import           Css
 
-import           Control.Lens                                        (Traversal,
+import           Control.Lens                                        (Prism,
+                                                                      Traversal,
                                                                       makeLenses,
                                                                       makePrisms,
                                                                       view,
@@ -155,11 +159,33 @@ instance FormInstanceC t m => FormBuilder t m Sum
 
 makePrisms ''Sum
 
+-- simple generic dropdown of sum constructors.  The default.
 editSum1 :: FormInstanceC t m => FormEditor t m Sum Sum
 editSum1 = editField Nothing
 
+-- this one allows editing of the incoming sum but cannot change which constructor is in play.  But you could also select which are
+-- editable, etc.
 editSum2 :: FormInstanceC t m => FormEditor t m Sum Sum
 editSum2 = (wander _A $ editField Nothing) |>| (wander _B $ editField Nothing) |>| (wander _C $ editField Nothing)
+
+data ConstructorChoice t m s = ConstructorChoice { conName :: T.Text, conEd :: FormEditor t m s s }
+
+chooseAmong :: FormInstanceC t m => [ConstructorChoice t m s] -> FormEditor t m s s
+chooseAmong choices =
+  let chooserMap = M.fromList $ zip [0..] choices
+      runMaybeEditorOn x =  maybe (Compose $ return formValueNothing) (flip runEditor x)
+  in Editor $ \ga -> makeForm $ flexRow $ do
+    choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> conName cc) Nothing (constDyn chooserMap) def)
+    x <- dyn (getCompose . runMaybeEditorOn ga . fmap conEd <$> choice) -- Event t (FormResult t s)
+    y <- holdDyn formValueNothing x
+    return $ Compose $ dynamicWidgetResultToWidgetResult $ getCompose <$> y
+
+
+editSum3 :: FormInstanceC t m => FormEditor t m Sum Sum
+editSum3 = chooseAmong [ ConstructorChoice "A" (wander _A $ editField Nothing)
+                       , ConstructorChoice "B" (wander _B $ editField Nothing)
+                       , ConstructorChoice "C" (wander _C $ editField Nothing)
+                        ]
 
 sumEditW :: FormInstanceC t m => FormConfiguration t m -> m ()
 sumEditW cfg = do
@@ -167,6 +193,7 @@ sumEditW cfg = do
       ed = liftE flexCol $
            liftE (flexItem' (oneClass "sf-outline-black")) editSum1
            |>| liftE (flexItem' (oneClass "sf-outline-black")) editSum2
+           |>| liftE (flexItem' (oneClass "sf-outline-black")) editSum3
   fvpOut <- runForm cfg $ runEditor ed fvpIn
   flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvpOut)
 
