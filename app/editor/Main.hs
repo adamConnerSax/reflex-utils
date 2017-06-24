@@ -1,3 +1,4 @@
+{-# LANGUAGE Arrows                    #-}
 {-# LANGUAGE CPP                       #-}
 {-# LANGUAGE DataKinds                 #-}
 {-# LANGUAGE DeriveGeneric             #-}
@@ -46,7 +47,7 @@ import           Language.Javascript.JSaddle.Warp                    (run)
 import           DataBuilder                                         as B
 import           Reflex.Dom.Contrib.FormBuilder
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
-import           Reflex.Dom.Contrib.FormBuilder.Editor
+import           Reflex.Dom.Contrib.FormBuilder.FormEditor
 import           Reflex.Dom.Contrib.FormBuilder.Instances            (FormInstanceC)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (buildList, buildListWithSelect,
                                                                       buildMapWithSelect)
@@ -63,6 +64,7 @@ import           Reflex.Dom.Contrib.CssUtils                         (CssLink, C
 
 import           Control.Lens                                        (Traversal,
                                                                       makeLenses,
+                                                                      makePrisms,
                                                                       view,
                                                                       (^.))
 import           Control.Monad.Fix                                   (MonadFix)
@@ -91,13 +93,9 @@ instance FormInstanceC t m => FormBuilder t m Prod
 
 makeLenses ''Prod
 
-data Sum = A Int | B T.Text | C Char deriving (Show, GHC.Generic)
-instance B.Generic Sum
-
 -- using the generic instance
 editProd1 :: FormInstanceC t m => FormEditor t m Prod Prod
 editProd1 = editField Nothing
-
 
 -- using applicative composition
 editProd2 :: FormInstanceC t m => FormEditor t m Prod Prod
@@ -108,14 +106,16 @@ editProd2 = Prod
 
 -- using categorical composition
 
---editFieldFR :: (FormInstanceC t m, VFormBuilderC t m a) => Maybe FieldName -> FormEditor t m a a
---editFieldFR mFN = toFormEditor $ editField mFN
-
 -- NB: we could change the order here and it would all still work.
 -- The widgets do not need to be in the order of the structure.  This is different from the applicative case.
--- The point in (|>|) or (|<|) indicates the flow of data through the widgets
+-- The point in (|>|) or (|<|) indicates the directional flow of data through the widgets
+-- We need a synonym for wander.  "focusEditor"? "zoomEditor"?
 editProd3 :: FormInstanceC t m => FormEditor t m Prod Prod
 editProd3 = (wander f1 $ editField Nothing) |>| (wander f2 $ editField Nothing) |>| (wander f3 $ editField Nothing)
+
+-- arrows!
+--editProd4 :: FormInstanceC t m => FormEditor t m Prod Prod
+--editProd4 = proc <- do
 
 simpleEditorW :: FormInstanceC t m => FormConfiguration t m -> m ()
 simpleEditorW cfg = flexCol $ do
@@ -137,20 +137,51 @@ categoricalEditorW cfg = flexCol $ do
   fvpOut <- runForm cfg $ runEditor ed fvpIn
   flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvpOut)
 
-simpleEditorTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
-simpleEditorTab cfg = TabInfo "Simple Editor" (constDyn ("Simple Editor Example", M.empty)) $ simpleEditorW cfg
+simpleProdEditorTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
+simpleProdEditorTab cfg = TabInfo "Simple Editor" (constDyn ("Simple Editor Example", M.empty)) $ simpleEditorW cfg
 
 categoricalEditorTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 categoricalEditorTab cfg = TabInfo "Categorical Editor" (constDyn ("Categorical Editor Example", M.empty)) $ categoricalEditorW cfg
+
+data Color = Red | Black | Blue | Green deriving (Enum, Bounded, Show, GHC.Generic)
+instance B.Generic Color
+instance B.HasDatatypeInfo Color
+instance FormInstanceC t m => FormBuilder t m Color
+
+data Sum = A Int | B T.Text | C Color deriving (Show, GHC.Generic)
+instance B.Generic Sum
+instance B.HasDatatypeInfo Sum
+instance FormInstanceC t m => FormBuilder t m Sum
+
+makePrisms ''Sum
+
+editSum1 :: FormInstanceC t m => FormEditor t m Sum Sum
+editSum1 = editField Nothing
+
+editSum2 :: FormInstanceC t m => FormEditor t m Sum Sum
+editSum2 = (wander _A $ editField Nothing) |>| (wander _B $ editField Nothing) |>| (wander _C $ editField Nothing)
+
+sumEditW :: FormInstanceC t m => FormConfiguration t m -> m ()
+sumEditW cfg = do
+  let fvpIn = dynMaybeToFormValue $ constDynMaybe $ Just $ A 12
+      ed = liftE flexCol $
+           liftE (flexItem' (oneClass "sf-outline-black")) editSum1
+           |>| liftE (flexItem' (oneClass "sf-outline-black")) editSum2
+  fvpOut <- runForm cfg $ runEditor ed fvpIn
+  flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvpOut)
+
+sumEditTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
+sumEditTab cfg = TabInfo "Simple Sum" (constDyn ("Simple Sum Example", M.empty)) $ sumEditW cfg
 
 test :: FormInstanceC t m => FormConfiguration t m -> m ()
 test cfg = do
   el "p" (text "")
   el "br" blank
-  staticTabbedLayout def (simpleEditorTab cfg)
+  staticTabbedLayout def (simpleProdEditorTab cfg)
     [
-      simpleEditorTab cfg
+      simpleProdEditorTab cfg
     , categoricalEditorTab cfg
+    , sumEditTab cfg
     ]
   return ()
 

@@ -12,7 +12,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        (
          module Reflex.Dom.Contrib.FormBuilder.DynValidation
        , module Reflex.Dom.Contrib.FormBuilder.Configuration
-       , module Reflex.Dom.Contrib.FormBuilder.Editor
+       , module Reflex.Dom.Contrib.FormBuilder.FormEditor
        , BuildForm
        , BuildEditor
        , buildFormToEditor
@@ -84,7 +84,7 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult,
 
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation
-import           Reflex.Dom.Contrib.FormBuilder.Editor
+import           Reflex.Dom.Contrib.FormBuilder.FormEditor
 
 --import qualified Data.Dependent.Map                           as DM
 import qualified Data.Dependent.Map                           as DM

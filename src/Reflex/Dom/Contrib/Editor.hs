@@ -6,109 +6,48 @@
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
-module Reflex.Dom.Contrib.FormBuilder.Editor
+module Reflex.Dom.Contrib.Editor
   (
-    Form
-  , Editor (Editor)
+    Editor (Editor)
   , runEditor
   , transformEditor
-  , FormEditor
   , (|<|)
   , (|>|)
+  , DynMaybe
+  , Combinable (..)
+  , Distributable (..)
   ) where
 
-
-import           Reflex.Dom.Contrib.FormBuilder.Configuration (FR, FormValue, dynMaybeToFormValue)
-import           Reflex.Dom.Contrib.FormBuilder.DynValidation (AccValidation (AccSuccess, AccFailure),
-                                                               DynMaybe,
-                                                               FormError (FNothing), FormErrors,
-                                                               avToMaybe,
-                                                               dynValidationErr,
-                                                               maybeToAV,
-                                                               mergeAccValidation, accValidation)
-import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult,
-                                                               dynamicToWidgetResult,
-                                                               dynamicWidgetResultToWidgetResult,
-                                                               widgetResultToDynamic)
 import           Reflex.Dynamic.FactorDyn (factorDyn')
-
 
 import qualified Generics.SOP  as SOP
 import           GHC.Generics (Generic)
 import qualified Control.Category                             as C
-import           Control.Lens                                 (Lens)
 import           Control.Monad                                (join)
 import           Control.Monad.Fix (MonadFix)
-import           Control.Monad.Trans                          (lift)
-import           Control.Monad.Trans.Reader                   (ask, runReaderT)
 import           Data.Bifunctor                               (bimap)
 import           Data.Functor.Compose                         (Compose (Compose),
                                                                getCompose)
 import           Data.Profunctor                              (Choice (..), Profunctor (dimap),
                                                                Strong (..))
 import           Data.Profunctor.Traversing                   (Traversing (..))
+import           Control.Arrow                                (Arrow(..), ArrowChoice (..))
 
-
-import           Reflex                                       (Dynamic, Event,
+import           Reflex                                       (Dynamic,
                                                                MonadHold,
                                                                Reflex,
                                                                buildDynamic,
-                                                               constDyn,
-                                                               holdDyn)
+                                                               constDyn)
 import           Reflex.Dom                                   (DomBuilder,
                                                                PostBuild, dyn)
 
 
--- This is necessary because this functor and applicative are different from that of SFRW
--- NB: Form is *not* a Monad. So we do all the monadic widget building in (FRW t m a) and then wrap with makeForm
-type Form t m = Compose (FR t m) (FormValue t)
-
-type FormEditor t m a b = Editor (FormValue t) (Form t m) a b
-
-instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m, Combinable h (Compose m h)) => Combinable (Compose m h) (Compose m h) where
-  combine :: Compose m h (Compose m h a) -> Compose m h a
-  combine x = Compose $ getCompose x >>= getCompose . combine
-
--- | This gives all the powers (Choice, Category, Traversing) to Editors.
--- but to do so, a dyn happens.  So this is not efficient.  Compositions (categorical or uses of Profunctor Choice, e.g., wander) will need to redraw the widget (when?)
--- Can we do a factorDyn somehow, when the common/Left type has a generics-sop.Generic instance?
-
--- Ditto for DynMaybe t m -> Form t m
--- NB: This one uses the instance for (FormValue t m) (Form t m) by upgrading the DynMaybe to a FormValue.
-instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Form t m) where
-  combine :: DynMaybe t (Form t m a) -> Form t m a
-  combine = combine . dynMaybeToFormValue
-
-instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Compose m (DynMaybe t)) where
-  combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
-  combine x =  Compose $ do
-    let mdm2dm = Compose . fmap join . sequenceA . fmap getCompose  
-        x1 = fmap (fmap mdm2dm . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t (m (DynMaybe t a))
-    x2 <- dyn x1 -- Event t (DynMaybe t a)
-    dmd <- buildDynamic (return $ constDyn Nothing) (getCompose <$> x2)
-    return $ Compose $ join dmd
-
--- Ditto for FormValue t m -> Form t m
-instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (FormValue t) (Form t m) where
-  combine :: FormValue t (Form t m a) -> Form t m a
-  combine x = Compose $ do
-    let fvfr2fr = Compose . fmap mergeAccValidation . sequenceA . fmap getCompose
-    let x1 = widgetResultToDynamic . fmap (fmap fvfr2fr . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t ((FR t m) (FormValue t a))
-    x2 <- dyn x1 -- Event t (FormValue t a)
-    x4 <- holdDyn (constWidgetResult $ AccFailure [FNothing]) (getCompose <$> x2) -- Dynamic t (WidgetResult t (FValidation a))
-    return $ Compose $ dynamicWidgetResultToWidgetResult x4
-
-{-
-instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (h t) (Compose m (h t)) where
-  combine :: h t (Compose m (h t) a) -> Compose m (h t) a
--}
 
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }
 
 transformEditor :: (q a -> g a) -> (f b -> h b) -> Editor g f a b -> Editor q h a b
-transformEditor inNat outNat e = Editor $ outNat . runEditor e . inNat
+transformEditor inF outF e = Editor $ outF . runEditor e . inF
 
 instance Functor f => Functor (Editor g f a) where
   fmap h (Editor e) = Editor $ fmap h . e
@@ -127,6 +66,30 @@ instance (Applicative f, Functor g, f ~ Compose m g, Applicative m) => Strong (E
 -- | An odd thing which can be extract (for comonad g) or join (for Monad f => Combinable f f)
 class Combinable g f where
   combine :: g (f a) -> f a
+
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m, Combinable h (Compose m h)) => Combinable (Compose m h) (Compose m h) where
+  combine :: Compose m h (Compose m h a) -> Compose m h a
+  combine x = Compose $ getCompose x >>= getCompose . combine
+
+-- | This gives all the powers (Choice, Category, Traversing) to Editors.
+-- but to do so, a dyn happens.  So this is not efficient.  Compositions (categorical or uses of Profunctor Choice, e.g., wander) will need to redraw the widget (when?)
+-- Can we do a factorDyn somehow, when the common/Left type has a generics-sop.Generic instance?
+
+type DynMaybe t = Compose (Dynamic t) Maybe
+
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Compose m (DynMaybe t)) where
+  combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
+  combine x =  Compose $ do
+    let mdm2dm = Compose . fmap join . sequenceA . fmap getCompose  
+        x1 = fmap (fmap mdm2dm . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t (m (DynMaybe t a))
+    x2 <- dyn x1 -- Event t (DynMaybe t a)
+    dmd <- buildDynamic (return $ constDyn Nothing) (getCompose <$> x2)
+    return $ Compose $ join dmd
+
+{-
+instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (h t) (Compose m (h t)) where
+  combine :: h t (Compose m (h t) a) -> Compose m (h t) a
+-}
 
 -- Applicative (Pointed) is the obvious way to do this but there are others, 
 class Monad m => Distributable g m where
@@ -149,43 +112,11 @@ factorMaybeEither = factorDyn'
 instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (DynMaybe t) m where
   distribute :: forall t a b m. (Reflex t, MonadHold t m, MonadFix m) => DynMaybe t (Either a b) -> m (DynMaybe t (Either (DynMaybe t a) (DynMaybe t b)))
   distribute x = do
-    let x1 :: Dynamic t (MaybeEither a b)
-        x1 = fmap toMaybeEither $ getCompose x
-    x2 :: Dynamic t (MaybeEither (Dynamic t a) (Dynamic t b)) <- factorMaybeEither x1 
+    let x1 = toMaybeEither <$> getCompose x
+    x2 <- factorMaybeEither x1 
     return $ fmap (bimap (Compose . fmap pure) (Compose . fmap pure)) $ Compose . fmap fromMaybeEither $ x2 
 
-
-data AccValEither e a b = F e | SL a | SR b deriving (Generic)
-instance SOP.Generic (AccValEither e a b)
-
-toAccValEither :: AccValidation e (Either a b) -> AccValEither e a b
-toAccValEither = accValidation F (either SL SR)
-
-fromAccValEither :: AccValEither e a b -> AccValidation e (Either a b)
-fromAccValEither (F x) = AccFailure x
-fromAccValEither (SL x) = AccSuccess $ Left x
-fromAccValEither (SR x) = AccSuccess $ Right x
-
-factorAccValEither :: (Reflex t, MonadHold t m, MonadFix m) => Dynamic t (AccValEither e a b) -> m (Dynamic t (AccValEither (Dynamic t e) (Dynamic t a) (Dynamic t b)))
-factorAccValEither = factorDyn'
-
-instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormValue t) m where
-  distribute :: forall t a b m. (Reflex t, MonadHold t m, MonadFix m) => FormValue t (Either a b) -> m (FormValue t (Either (FormValue t a) (FormValue t b)))
-  distribute x = do
-    let x1 :: Dynamic t (AccValEither FormErrors a b)
-        x1 = widgetResultToDynamic . fmap toAccValEither $ getCompose x
-    x2 :: Dynamic t (AccValEither (Dynamic t FormErrors) (Dynamic t a) (Dynamic t b)) <- factorAccValEither x1
-    let x3 :: Dynamic t (AccValidation (Dynamic t FormErrors) (Either (Dynamic t a) (Dynamic t b)))
-        x3 = fmap fromAccValEither $ x2
-        f :: AccValidation (Dynamic t e) (Either c d) -> Dynamic t (AccValidation e (Either c d))  
-        f x = case x of
-          AccFailure de -> fmap AccFailure de
-          AccSuccess y -> constDyn $ AccSuccess y
-        x4 :: FormValue t (Either (Dynamic t a) (Dynamic t b))
-        x4 = Compose $ dynamicToWidgetResult $ join $ fmap f x3
-    return $ fmap (bimap (dynMaybeToFormValue . Compose . fmap pure) (dynMaybeToFormValue . Compose . fmap pure)) x4 
-
-instance (Applicative f
+instance ( Applicative f
          , Functor g
          , Monad m
          , f ~ Compose m g
@@ -194,13 +125,11 @@ instance (Applicative f
   left' :: forall g f a b c m. (Applicative f, Functor g, Monad m, f ~ Compose m g, Distributable g m, Combinable g f) => Editor g f a b -> Editor g f (Either a c) (Either b c)
   left' ed = Editor $ \geac -> Compose $ do
     dist_geac :: g (Either (g a) (g c)) <- distribute geac    
-    let x1 :: g (Either (f b) (f c))
-        x1 = fmap (bimap (runEditor ed) (Compose . pure)) dist_geac
-        x2 :: g (f (Either b c))
+    let x1 = fmap (bimap (runEditor ed) (Compose . pure)) dist_geac
         x2 = fmap (either (fmap Left) (fmap Right)) x1
     getCompose $ combine x2
 
-instance (Applicative g
+instance ( Applicative g
          , Applicative f
          , f ~ Compose m g
          , Monad m
@@ -222,10 +151,25 @@ instance (Monad m, f ~ Compose m g) => C.Category (Editor g f) where
   id = Editor $ Compose . pure -- Editor g f a a
   ebc . eab = ebc |<| eab
 
-
 instance Monad f => Monad (Editor g f a) where
   return = pure
   eab >>= h = Editor $ \ga -> runEditor eab ga >>= flip runEditor ga . h
+
+instance (Applicative f, Functor g, Monad m, f ~ Compose m g) => Arrow (Editor g f) where
+  arr :: (b -> c) -> Editor g f b c
+  arr h = Editor $ Compose . return . fmap h 
+  first = first' -- this is from Strong
+
+instance ( Applicative f
+         , Functor g
+         , Monad m
+         , f ~ Compose m g
+         , Distributable g m
+         , Combinable g f) => ArrowChoice (Editor g f) where
+  left = left'  -- from Profunctor.Choice
+
+  
+  
 
 {-    
 -- | This makes any Editor with a (m (DynMaybe t)) result into a Category.

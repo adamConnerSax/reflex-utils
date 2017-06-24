@@ -34,6 +34,7 @@ library
                   Reflex.Dom.Contrib.EventUtils
                   Reflex.Dom.Contrib.ReflexConstraints
                   Reflex.Dom.Contrib.CssUtils
+                  Reflex.Dom.Contrib.Editor
                   Reflex.Dom.Contrib.Widgets.WidgetResult
                   Reflex.Dom.Contrib.Widgets.SafeDropdown
                   Reflex.Dom.Contrib.Widgets.ModalEditor
@@ -54,7 +55,7 @@ library
                   Reflex.Dom.Contrib.FormBuilder
                   Reflex.Dom.Contrib.FormBuilder.DynValidation
                   Reflex.Dom.Contrib.FormBuilder.Configuration
-                  Reflex.Dom.Contrib.FormBuilder.Editor                  
+                  Reflex.Dom.Contrib.FormBuilder.FormEditor                  
                   Reflex.Dom.Contrib.FormBuilder.Builder
                   Reflex.Dom.Contrib.FormBuilder.Instances
                   Reflex.Dom.Contrib.FormBuilder.AllDefault

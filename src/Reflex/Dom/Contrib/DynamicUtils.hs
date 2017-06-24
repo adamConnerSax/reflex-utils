@@ -15,7 +15,7 @@ import qualified Reflex.Dom as RD
 
 
 dynStartingFrom :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
-dynStartingFrom d e = R.buildDynamic (R.sample $ R.current d) e
+dynStartingFrom d = R.buildDynamic (R.sample $ R.current d)
 
 -- NB: This means that is d is updated and e fires in the same frame, the update to d will be the result here.
 dynPlusEvent :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
@@ -37,14 +37,14 @@ traceDynAsEv f dyn = do
 
 -- turn a Maybe (Dynamic t a) into an Event with an initial firing to represent the value at postbuild.  Nothing -> never fire
 mDynAsEv :: (R.Reflex t, RD.PostBuild t m) => Maybe (R.Dynamic t a) -> m (R.Event t a)
-mDynAsEv mDyn = maybe (return R.never) dynAsEv mDyn
+mDynAsEv = maybe (return R.never) dynAsEv 
 
 -- turn a Dynamic t (Maybe a) into an Event with an initial firing to represent the value at postbuild. Only fires on values.
 dynamicMaybeAsEv :: (R.Reflex t, RD.PostBuild t m) => R.Dynamic t (Maybe a) -> m (R.Event t a)
 dynamicMaybeAsEv dma = R.fmapMaybe id <$> dynAsEv dma
 
 traceMDynAsEv :: (R.Reflex t, RD.PostBuild t m) => (a -> String) -> Maybe (R.Dynamic t a) -> m (R.Event t a)
-traceMDynAsEv f mDyn = maybe (return R.never) (traceDynAsEv f) mDyn
+traceMDynAsEv f = maybe (return R.never) (traceDynAsEv f)
 
 
 traceDynMAsEv :: RD.PostBuild t m => (a -> String) -> R.Dynamic t (Maybe a) -> m (R.Event t a)

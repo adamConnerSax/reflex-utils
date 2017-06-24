@@ -7,6 +7,7 @@ module Reflex.Dom.Contrib.FormBuilder.DynValidation
  (
    module Reflex.Dom.Contrib.FormBuilder.DynValidation
  , module Data.Validation
+ , DynMaybe
  )
 where
 
@@ -24,9 +25,8 @@ import           Reflex                          (Dynamic, Event, Reflex,
 import           Reflex.Dom                      (PostBuild)
 
 import           Reflex.Dom.Contrib.DynamicUtils (dynamicMaybeAsEv)
+import           Reflex.Dom.Contrib.Editor       (DynMaybe)
 
-
-type DynMaybe t = Compose (Dynamic t) Maybe
 
 constDynMaybe :: Reflex t => Maybe a -> DynMaybe t a
 constDynMaybe = Compose . constDyn
