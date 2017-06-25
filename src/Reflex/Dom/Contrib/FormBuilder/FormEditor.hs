@@ -34,7 +34,7 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation (AccValidation (Ac
                                                                accValidation,
                                                                avToMaybe,
                                                                dynValidationErr,
-                                                               maybeToAV,
+                                                               maybeToFV,
                                                                mergeAccValidation)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult,
                                                                dynamicToWidgetResult,

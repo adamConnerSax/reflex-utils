@@ -65,9 +65,9 @@ avToMaybe :: AccValidation e a -> Maybe a
 avToMaybe (AccFailure _) = Nothing
 avToMaybe (AccSuccess a) = Just a
 
-maybeToAV :: Maybe a -> AccValidation FormErrors a
-maybeToAV Nothing  = AccFailure [FNothing]
-maybeToAV (Just a) = AccSuccess a
+maybeToFV :: Maybe a -> AccValidation FormErrors a
+maybeToFV Nothing  = AccFailure [FNothing]
+maybeToFV (Just a) = AccSuccess a
 
 avToEither :: AccValidation e a -> Either e a
 avToEither = accValidation Left Right
@@ -93,7 +93,7 @@ makeDynValidation = Compose
 -}
 
 dynMaybeToDynValidation :: Reflex t => DynMaybe t a -> DynValidation t a
-dynMaybeToDynValidation = DynValidation . fmap maybeToAV . getCompose
+dynMaybeToDynValidation = DynValidation . fmap maybeToFV . getCompose
 
 dynValidationToDynMaybe :: Reflex t => DynValidation t a -> DynMaybe t a
 dynValidationToDynMaybe = Compose . fmap avToMaybe . unDynValidation
@@ -122,5 +122,5 @@ instance MonadLike FValidation where
   joinLike = mergeAccValidation
 
 instance MaybeLike FValidation where
-  absorbMaybe = mergeAccValidation . fmap maybeToAV
+  absorbMaybe = mergeAccValidation . fmap maybeToFV
   toMaybe = avToMaybe

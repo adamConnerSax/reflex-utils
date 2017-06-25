@@ -46,7 +46,7 @@ import           Reflex.Dom                                   (DomBuilder,
 
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }
 
-transformEditor :: (q a -> g a) -> (f b -> h b) -> Editor g f a b -> Editor q h a b
+transformEditor :: (q a -> g a') -> (f b -> h b') -> Editor g f a' b -> Editor q h a b'
 transformEditor inF outF e = Editor $ outF . runEditor e . inF
 
 instance Functor f => Functor (Editor g f a) where

@@ -119,10 +119,10 @@ fvMapFormValue :: Reflex t => (a -> FValidation b) -> FormValue t a -> FormValue
 fvMapFormValue f = Compose . fmap (mergeAccValidation . fmap f) . getCompose
 
 maybeMapFormValue :: Reflex t => (a -> Maybe b) -> FormValue t a -> FormValue t b
-maybeMapFormValue f = fvMapFormValue (maybeToAV . f)
+maybeMapFormValue f = fvMapFormValue (maybeToFV . f)
 
 dynMaybeToFormValue :: Reflex t => DynMaybe t a -> FormValue t a
-dynMaybeToFormValue = Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose
+dynMaybeToFormValue = Compose . dynamicToWidgetResult . fmap maybeToFV . getCompose
 
 formValueToDynMaybe :: Reflex t => FormValue t a -> DynMaybe t a
 formValueToDynMaybe = Compose . widgetResultToDynamic . fmap avToMaybe . getCompose

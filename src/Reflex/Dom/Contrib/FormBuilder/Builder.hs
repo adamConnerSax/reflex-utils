@@ -261,7 +261,7 @@ switchingForm widgetGetter widgetHolder0 newWidgetHolderEv = makeForm $ do
   lift $ joinDynOfFormValues <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)
 
 dynamicForm :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> Maybe a -> m (FormValue t a)
-dynamicForm cfg ma = runForm cfg $ buildVForm Nothing (Compose $ constWidgetResult $ maybeToAV ma)
+dynamicForm cfg ma = runForm cfg $ buildVForm Nothing (Compose $ constWidgetResult $ maybeToFV ma)
 
 dynamicFormOfFormValue :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> FormValue t a -> m (FormValue t a)
 dynamicFormOfFormValue cfg fva = runForm cfg $ buildVForm Nothing fva
@@ -270,7 +270,7 @@ dynamicFormOfDynamic :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfigur
 dynamicFormOfDynamic cfg da = runForm cfg $ buildVForm Nothing (Compose . dynamicToWidgetResult . fmap AccSuccess $ da)
 
 dynamicFormOfDynMaybe :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> DynMaybe t a -> m (FormValue t a)
-dynamicFormOfDynMaybe cfg dma = runForm cfg $ buildVForm Nothing (Compose . dynamicToWidgetResult . fmap maybeToAV . getCompose $ dma)
+dynamicFormOfDynMaybe cfg dma = runForm cfg $ buildVForm Nothing (Compose . dynamicToWidgetResult . fmap maybeToFV . getCompose $ dma)
 
 --TODO: is attachPromptlyDynWithMaybe the right thing here?
 formWithSubmitAction :: ( RD.DomBuilder t m
@@ -283,7 +283,7 @@ formWithSubmitAction cfg ma submitWidget = do
   let f fra = do
         submitEv <- submitWidget
         return $ RD.attachPromptlyDynWithMaybe const (widgetResultToDynamic $ avToMaybe <$> getCompose fra) submitEv -- fires when control does but only if form entries are valid
-  runForm' cfg (buildVForm Nothing (Compose $ constWidgetResult $ maybeToAV ma)) f
+  runForm' cfg (buildVForm Nothing (Compose $ constWidgetResult $ maybeToFV ma)) f
 
 
 observeDynamic :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> R.Dynamic t a -> m (FormValue t a)

@@ -69,9 +69,11 @@ import           Control.Lens                                        (Prism,
                                                                       Traversal,
                                                                       makeLenses,
                                                                       makePrisms,
+                                                                      preview,
                                                                       view,
                                                                       (^.))
 import           Control.Monad.Fix                                   (MonadFix)
+import           Data.Bool                                           (bool)
 import           Data.Functor.Compose                                (Compose (Compose),
                                                                       getCompose)
 import qualified Data.Map                                            as M
@@ -130,12 +132,14 @@ simpleEditorW cfg = flexCol $ do
   flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvp3)
   return ()
 
+boxEditor = liftE (flexItem' (oneClass "sf-outline-black"))
+
 -- of course, since we are sending the result of one into the other we could just use categorical composition here as well
 categoricalEditorW :: FormInstanceC t m => FormConfiguration t m -> m ()
 categoricalEditorW cfg = flexCol $ do
   let fvpIn = dynMaybeToFormValue $ constDynMaybe $ Just $ Prod 1 2 "Prod"
       ed = liftE flexCol $
-           liftE (flexItem' (oneClass "sf-outline-black")) editProd1
+           boxEditor editProd1
            |>| liftE (flexItem' (oneClass "sf-outline-black")) editProd2
            |>| liftE (flexItem' (oneClass "sf-outline-black")) editProd3
   fvpOut <- runForm cfg $ runEditor ed fvpIn
@@ -164,28 +168,57 @@ editSum1 :: FormInstanceC t m => FormEditor t m Sum Sum
 editSum1 = editField Nothing
 
 -- this one allows editing of the incoming sum but cannot change which constructor is in play.  But you could also select which are
--- editable, etc.
+-- editable by including only some of constructors
 editSum2 :: FormInstanceC t m => FormEditor t m Sum Sum
 editSum2 = (wander _A $ editField Nothing) |>| (wander _B $ editField Nothing) |>| (wander _C $ editField Nothing)
 
-data ConstructorChoice t m s = ConstructorChoice { conName :: T.Text, conEd :: FormEditor t m s s }
+data ConstructorChoice t m s = ConstructorChoice { conName :: T.Text
+                                                 , isCon   :: FormValue t s -> FormValue t Bool
+                                                 , conEd   :: FormEditor t m s s
+                                                 }
 
 chooseAmong :: FormInstanceC t m => [ConstructorChoice t m s] -> FormEditor t m s s
 chooseAmong choices =
-  let chooserMap = M.fromList $ zip [0..] choices
+  let chooserList = zip [0..] choices
+      chooserMap = M.fromList chooserList
       runMaybeEditorOn x =  maybe (Compose $ return formValueNothing) (flip runEditor x)
-  in Editor $ \ga -> makeForm $ flexRow $ do
-    choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> conName cc) Nothing (constDyn chooserMap) def)
-    x <- dyn (getCompose . runMaybeEditorOn ga . fmap conEd <$> choice) -- Event t (FormResult t s)
+  in Editor $ \fva -> makeForm $ flexRow $ do
+    let fValBoolToMaybe = accValidation (const Nothing) (bool Nothing (Just ()))
+        fvBoolToMaybeEv fvb = updated $ widgetResultToDynamic $ fmap fValBoolToMaybe (getCompose fvb)
+        chooserListItemToIntEvent (k, ConstructorChoice _ ic _) = k <$ (fmapMaybe id $ fvBoolToMaybeEv $ ic fva)
+        changeToEv = leftmost $ chooserListItemToIntEvent <$> chooserList
+        ddConfig = def { _safeDropdownConfig_setValue = Just <$> changeToEv }
+    choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> conName cc) Nothing (constDyn chooserMap) ddConfig)
+    x <- dyn (getCompose . runMaybeEditorOn fva . fmap conEd <$> choice) -- Event t (FormResult t s)
     y <- holdDyn formValueNothing x
     return $ Compose $ dynamicWidgetResultToWidgetResult $ getCompose <$> y
 
-
+-- This one allows you to choose which you want to be able to edit but can only edit if it matches the input
 editSum3 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum3 = chooseAmong [ ConstructorChoice "A" (wander _A $ editField Nothing)
-                       , ConstructorChoice "B" (wander _B $ editField Nothing)
-                       , ConstructorChoice "C" (wander _C $ editField Nothing)
-                        ]
+editSum3 = chooseAmong [ ConstructorChoice "Is A" (const $ constFormValue False) (wander _A $ editField Nothing)
+                       , ConstructorChoice "Is B" (const $ constFormValue False) (wander _B $ editField Nothing)
+                       , ConstructorChoice "Is C" (const $ constFormValue False) (wander _C $ editField Nothing)
+                       ]
+
+maybeEditor :: Reflex t => FormEditor t m a b -> FormEditor t m (Maybe a) b
+maybeEditor ed = Editor $ \fvma -> (runEditor ed . Compose . (fmap mergeAccValidation) . getCompose . fmap maybeToFV $ fvma)
+
+-- this one lets you choose which to edit, forces the output to match.
+-- If the input is the same constructor, then this can also be set by the input.
+editSum4 :: FormInstanceC t m => FormEditor t m Sum Sum
+editSum4 = chooseAmong [ ConstructorChoice "A" (const $ constFormValue False) (A <$> (lmap $ preview _A) (maybeEditor (editField Nothing)))
+                       , ConstructorChoice "B" (const $ constFormValue False) (B <$> (lmap $ preview _B) (maybeEditor (editField Nothing)))
+                       , ConstructorChoice "C" (const $ constFormValue False) (C <$> (lmap $ preview _C) (maybeEditor (editField Nothing)))
+                       ]
+
+-- this one lets you choose which to edit, forces the output to match.
+-- Switches on input
+editSum5 :: FormInstanceC t m => FormEditor t m Sum Sum
+editSum5 = chooseAmong [ ConstructorChoice "A" (fmap (maybe False (const True) . preview _A)) (A <$> (lmap $ preview _A) (maybeEditor (editField Nothing)))
+                       , ConstructorChoice "B" (fmap (maybe False (const True) . preview _B)) (B <$> (lmap $ preview _B) (maybeEditor (editField Nothing)))
+                       , ConstructorChoice "C" (fmap (maybe False (const True) . preview _C)) (C <$> (lmap $ preview _C) (maybeEditor (editField Nothing)))
+                       ]
+
 
 sumEditW :: FormInstanceC t m => FormConfiguration t m -> m ()
 sumEditW cfg = do
@@ -194,6 +227,8 @@ sumEditW cfg = do
            liftE (flexItem' (oneClass "sf-outline-black")) editSum1
            |>| liftE (flexItem' (oneClass "sf-outline-black")) editSum2
            |>| liftE (flexItem' (oneClass "sf-outline-black")) editSum3
+           |>| liftE (flexItem' (oneClass "sf-outline-black")) editSum4
+           |>| liftE (flexItem' (oneClass "sf-outline-black")) editSum5
   fvpOut <- runForm cfg $ runEditor ed fvpIn
   flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvpOut)
 
