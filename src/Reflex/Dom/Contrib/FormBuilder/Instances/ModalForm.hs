@@ -21,21 +21,16 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.ModalForm
 --import qualified DataBuilder                           as B
 
 import           Reflex.Dom.Contrib.FormBuilder.Builder
-import           Reflex.Dom.Contrib.FormBuilder.Configuration   (getFC)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.ReflexConstraints           (MonadWidgetExtraC)
 import           Reflex.Dom.Contrib.Widgets.ModalEditor         (ModalEditorConfig,
-                                                                 modalEditor,
                                                                  modalEditorEither,
                                                                  modalEditor_WidgetResult)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult        (transformWrappedWidgetResult,
                                                                  widgetResultToDynamic)
 
-import qualified Reflex                                         as R
 import qualified Reflex.Dom                                     as RD
 
-import           Control.Lens                                   (view)
-import           Control.Monad                                  (join)
 import           Control.Monad.Fix                              (MonadFix)
 import           Data.Functor.Compose                           (Compose (Compose),
                                                                  getCompose)
@@ -81,8 +76,8 @@ modalizeEditor cfg e = Editor $ makeForm . modalizeWidget cfg (unF . runEditor e
 modalEditField :: (FormInstanceC t m, VFormBuilderC t m a) => ModalEditorConfig t FormErrors a -> FormEditor t m a a
 modalEditField cfg = modalizeEditor cfg (editField Nothing)
 
-maybeToEitherFE :: Maybe a -> Either FormErrors a
-maybeToEitherFE = maybe (Left [FNothing]) Right
+--maybeToEitherFE :: Maybe a -> Either FormErrors a
+--maybeToEitherFE = maybe (Left [FNothing]) Right
 
 fValToEitherFE :: FValidation a -> Either FormErrors a
 fValToEitherFE = accValidation Left Right

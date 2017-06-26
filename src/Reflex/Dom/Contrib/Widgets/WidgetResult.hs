@@ -5,7 +5,7 @@
 module Reflex.Dom.Contrib.Widgets.WidgetResult
   (
     WidgetResult
-  , WrappedWidgetResult (..)
+  , WrappedWidgetResult
   , wrDyn
 --  , wrInternalEv,
   , widgetResultToDynamic
@@ -28,8 +28,8 @@ module Reflex.Dom.Contrib.Widgets.WidgetResult
 
 import           Reflex                        (Behavior, Dynamic, Event,
                                                 MonadHold, Reflex, buildDynamic,
-                                                constDyn, current, fmapMaybe,
-                                                leftmost, never, sample, switch,
+                                                constDyn, current, leftmost,
+                                                never, sample, switch,
                                                 tagPromptlyDyn, updated)
 
 import           Reflex.Dom.Contrib.EventUtils (leftWhenNotRight)

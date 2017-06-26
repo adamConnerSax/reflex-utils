@@ -15,11 +15,9 @@ module Reflex.Dom.Contrib.FormBuilder.AllDefault (DefaultConfigurationC) where
 import           Reflex.Dom.Contrib.Layout.FlexLayout           (flexCenter,
                                                                  flexCol,
                                                                  flexFill,
-                                                                 flexItem,
                                                                  flexItem',
                                                                  flexRow)
-import           Reflex.Dom.Contrib.Layout.Types                (CssClasses (..),
-                                                                 LayoutDirection (..),
+import           Reflex.Dom.Contrib.Layout.Types                (LayoutDirection (..),
                                                                  LayoutOrientation (..),
                                                                  emptyCss,
                                                                  oneClass,
@@ -27,33 +25,22 @@ import           Reflex.Dom.Contrib.Layout.Types                (CssClasses (..)
 
 import           Reflex.Dom.Contrib.CssUtils                    (CssLinks (..))
 import           Reflex.Dom.Contrib.FormBuilder.Builder
-import           Reflex.Dom.Contrib.FormBuilder.Configuration
-import           Reflex.Dom.Contrib.FormBuilder.Instances       (formWidget)
+import           Reflex.Dom.Contrib.FormBuilder.Instances       ()
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.Layout.ClayUtils            (cssToBS)
-import           Reflex.Dom.Contrib.ReflexConstraints           (MonadWidgetExtraC)
-import           Reflex.Dom.Contrib.Widgets.WidgetResult        (WidgetResult, dynamicWidgetResultToWidgetResult)
 
 import qualified DataBuilder                                    as B
 
 import qualified Reflex                                         as R
 import qualified Reflex.Dom                                     as RD
-import           Reflex.Dom.Contrib.Widgets.Common              (Widget0 (..), WidgetConfig (..),
-                                                                 htmlDropdownStatic)
-import qualified Reflex.Dom.Widget.Basic                        as RD
 
 import           Clay                                           hiding (head,
-                                                                 id)
+                                                                 id, summary)
 import qualified Clay                                           as C
 import qualified Clay.Flexbox                                   as Flexbox
 import           Control.Monad                                  (join)
-import           Control.Monad.Fix                              (MonadFix)
-import           Control.Monad.IO.Class                         (MonadIO)
-import           Control.Monad.Reader                           (ask, asks,
-                                                                 lift, local)
 import           Data.ByteString                                (ByteString)
 import           Data.Default                                   (Default (..))
-import           Data.Functor.Compose                           (Compose (Compose, getCompose))
 import           Data.List                                      (unzip4)
 import qualified Data.Map                                       as M
 import           Data.Maybe                                     (fromMaybe)
@@ -164,8 +151,8 @@ defSumF conWidgets = fRow $ do
 
   chosenIndexEv <- fItem $ selectionControl
   let newIndexEv = R.leftmost [inputIndexEv,chosenIndexEv]
-  curIndex <- R.holdDyn 0 newIndexEv
-  let switchWidgetEv = R.updated . R.uniqDyn $ curIndex
+  curIndex <- R.holdDyn 0 newIndexEv >>= R.holdUniqDyn
+  let switchWidgetEv = R.updated curIndex
       errorW msg = do
         RD.el "span" $ RD.text msg
         return $ formValueError $ FInvalid msg
@@ -174,19 +161,23 @@ defSumF conWidgets = fRow $ do
 
 -- The rest is css for the basic form and observer.  This can be customized by including a different style-sheet.
 
+boxMargin :: Double -> Css
 boxMargin m = sym margin (rem m)
 
+cssOutlineTextBox :: Double -> Color -> Color -> Css
 cssOutlineTextBox m cBox cText = do
   boxMargin m
   border solid (px 2) cBox
   fontColor cText
 
+cssSolidTextBox :: Double -> Color -> Color -> Css
 cssSolidTextBox m cBox cText = do
   boxMargin m
   background cBox
   fontColor cText
 
 -- some styles
+formBoxes :: Css
 formBoxes = do
   ".sf-outline-black" ? cssOutlineTextBox 0.1 black black
   ".sf-outline-red" ? cssOutlineTextBox 0.1 red black
@@ -210,14 +201,14 @@ isInvalidData = div # ".sf-invalid"
 isObservedConstructor :: Selector
 isObservedConstructor = div # ".sf-observed-constructor"
 
-
+formElements :: Css
 formElements = do
   isFormContainer ? do
     fontSize (rem 1)
     border solid (px 1) black
     sym borderRadius (rem 0.2)
     sym padding (rem 0.2)
-    summary ? cursor pointer
+    C.summary ? cursor pointer
     button ? do
       sym borderRadius (rem 0.2)
       cssSolidTextBox 0.1 whitesmoke black
@@ -247,6 +238,7 @@ formElements = do
       span |+ star ? do
         Flexbox.flex 2 0 auto --sfInputWidth
 
+formDefaultCss :: Css
 formDefaultCss = do
   formBoxes
   formElements
@@ -257,11 +249,11 @@ isObserver = C.div # ".sf-observer"
 isObserverItem :: Selector
 isObserverItem = C.div # ".sf-observer-item"
 
-
+observerDefaultCss :: Css
 observerDefaultCss = do
   isObserver ? do
     background ghostwhite
-    summary ? cursor pointer
+    C.summary ? cursor pointer
     isValidData ? do
       cssOutlineTextBox 0.1 black black
       sym padding (rem 0.1)

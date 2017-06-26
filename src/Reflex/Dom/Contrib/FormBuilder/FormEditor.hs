@@ -12,6 +12,11 @@ module Reflex.Dom.Contrib.FormBuilder.FormEditor
     Form
   , FormEditor
   , Editor (Editor)
+  , fValishFormEditor
+  , fValFormEditor
+  , maybeFormEditor
+  , BuilderChoice (..)
+  , chooseAmong
   -- reexports
   , runEditor
   , transformEditor
@@ -26,16 +31,21 @@ import           Reflex.Dom.Contrib.Editor                    (Combinable (..), 
                                                                transformEditor,
                                                                (|<|), (|>|))
 
-import           Reflex.Dom.Contrib.FormBuilder.Configuration (FR, FormValue, dynMaybeToFormValue)
+import           Reflex.Dom.Contrib.FormBuilder.Configuration (FR, FormValue, dynMaybeToFormValue,
+                                                               formValueNothing)
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (AccValidation (AccFailure, AccSuccess),
                                                                DynMaybe,
+                                                               FValidation,
                                                                FormError (FNothing),
                                                                FormErrors,
                                                                accValidation,
-                                                               avToMaybe,
-                                                               dynValidationErr,
                                                                maybeToFV,
                                                                mergeAccValidation)
+import           Reflex.Dom.Contrib.Layout.FlexLayout         (flexItem,
+                                                               flexRow)
+import           Reflex.Dom.Contrib.Widgets.SafeDropdown      (SafeDropdown (..),
+                                                               SafeDropdownConfig (..),
+                                                               safeDropdownOfLabelKeyedValue)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult,
                                                                dynamicToWidgetResult,
                                                                dynamicWidgetResultToWidgetResult,
@@ -43,28 +53,28 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult
 import           Reflex.Dynamic.FactorDyn                     (factorDyn')
 
 
-import           Control.Lens                                 (Lens)
 import           Control.Monad                                (join)
 import           Control.Monad.Fix                            (MonadFix)
-import           Control.Monad.Trans                          (lift)
-import           Control.Monad.Trans.Reader                   (ask, runReaderT)
 import           Data.Bifunctor                               (bimap)
+import           Data.Bool                                    (bool)
 import           Data.Functor.Compose                         (Compose (Compose),
                                                                getCompose)
-import           Data.Profunctor                              (Choice (..), Profunctor (dimap),
-                                                               Strong (..))
+import qualified Data.Map                                     as M
+import qualified Data.Text                                    as T
 import qualified Generics.SOP                                 as SOP
 import           GHC.Generics                                 (Generic)
 
 
-import           Reflex                                       (Dynamic, Event,
+import           Reflex                                       (Dynamic,
                                                                MonadHold,
-                                                               Reflex,
-                                                               buildDynamic,
-                                                               constDyn,
-                                                               holdDyn)
+                                                               Reflex, constDyn,
+                                                               fmapMaybe,
+                                                               holdDyn,
+                                                               leftmost,
+                                                               updated)
 import           Reflex.Dom                                   (DomBuilder,
-                                                               PostBuild, dyn)
+                                                               PostBuild, def,
+                                                               dyn)
 
 
 -- This is necessary because this functor and applicative are different from that of SFRW
@@ -120,7 +130,38 @@ instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormValue t) m 
         x4 = Compose $ dynamicToWidgetResult $ join $ fmap f x3
     return $ fmap (bimap (dynMaybeToFormValue . Compose . fmap pure) (dynMaybeToFormValue . Compose . fmap pure)) x4
 
+-- utilities
 
+fValishFormEditor :: Reflex t => (g a -> FValidation a) -> FormEditor t m a b -> FormEditor t m (g a) b
+fValishFormEditor toFVal ed = Editor $ runEditor ed . Compose . (fmap mergeAccValidation) . getCompose . fmap toFVal
+
+fValFormEditor :: Reflex t => FormEditor t m a b -> FormEditor t m (FValidation a) b
+fValFormEditor = fValishFormEditor id
+
+maybeFormEditor :: Reflex t => FormEditor t m a b -> FormEditor t m (Maybe a) b
+maybeFormEditor = fValishFormEditor maybeToFV -- $ runEditor ed . Compose . (fmap mergeAccValidation) . getCompose . fmap maybeToFV
+
+
+data BuilderChoice t m a b = BuilderChoice { bName :: T.Text -- name for display in chooser
+                                           , isA   :: a -> Bool -- switch To/include this builder if True
+                                           , edAB  :: FormEditor t m a b -- builder for this case
+                                           }
+
+chooseAmong :: (Reflex t, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => [BuilderChoice t m a b] -> FormEditor t m a b
+chooseAmong choices =
+  let chooserList = zip ([0..] :: [Int]) choices
+      chooserMap = M.fromList chooserList
+      runMaybeEditorOn x =  maybe (Compose $ return formValueNothing) (flip runEditor x)
+  in Editor $ \fva -> Compose $ flexRow $ do
+    let fValBoolToMaybe = accValidation (const Nothing) (bool Nothing (Just ()))
+        fvBoolToMaybeEv fvb = updated $ widgetResultToDynamic $ fmap fValBoolToMaybe (getCompose fvb)
+        chooserListItemToIntEvent (k, BuilderChoice _ ic _) = k <$ (fmapMaybe id $ fvBoolToMaybeEv $ fmap ic fva)
+        changeToEv = leftmost $ chooserListItemToIntEvent <$> chooserList
+        ddConfig = def { _safeDropdownConfig_setValue = Just <$> changeToEv }
+    choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> bName cc) Nothing (constDyn chooserMap) ddConfig)
+    x <- dyn (getCompose . runMaybeEditorOn fva . fmap edAB <$> choice) -- Event t (FormResult t s)
+    y <- holdDyn formValueNothing x
+    return $ Compose $ dynamicWidgetResultToWidgetResult $ getCompose <$> y
 
 
 

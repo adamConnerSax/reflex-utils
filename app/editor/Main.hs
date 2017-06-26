@@ -15,79 +15,75 @@
 {-# LANGUAGE UndecidableInstances      #-}
 module Main where
 
-import           Reflex.Dom.Contrib.Layout.ClayUtils                 (cssToBS)
-import           Reflex.Dom.Contrib.Layout.FlexLayout                (flexCol,
-                                                                      flexCol',
-                                                                      flexCssBS,
-                                                                      flexFill,
-                                                                      flexItem,
-                                                                      flexItem',
-                                                                      flexRow,
-                                                                      flexRow')
+import           Reflex.Dom.Contrib.Layout.ClayUtils          (cssToBS)
+import           Reflex.Dom.Contrib.Layout.FlexLayout         (flexCol,
+                                                               flexCol',
+                                                               flexCssBS,
+                                                               flexFill,
+                                                               flexItem,
+                                                               flexItem',
+                                                               flexRow,
+                                                               flexRow')
 import           Reflex.Dom.Contrib.Layout.TabLayout
-import           Reflex.Dom.Contrib.Layout.Types                     (CssClass (..),
-                                                                      CssClasses (..),
-                                                                      LayoutDirection (..),
-                                                                      LayoutOrientation (..),
-                                                                      emptyCss,
-                                                                      oneClass)
-import           Reflex.Dom.Contrib.ReflexConstraints                (MonadWidgetExtraC)
-import           Reflex.Dom.Contrib.Widgets.SafeDropdown             (SafeDropdown (..),
-                                                                      SafeDropdownConfig (..),
-                                                                      safeDropdownOfLabelKeyedValue)
-import           Reflex.Dom.Contrib.Widgets.WidgetResult             (dynamicWidgetResultToWidgetResult,
-                                                                      widgetResultToDynamic)
+import           Reflex.Dom.Contrib.Layout.Types              (CssClass (..),
+                                                               CssClasses (..),
+                                                               LayoutDirection (..),
+                                                               LayoutOrientation (..),
+                                                               emptyCss,
+                                                               oneClass)
+import           Reflex.Dom.Contrib.ReflexConstraints         (MonadWidgetExtraC)
+import           Reflex.Dom.Contrib.Widgets.SafeDropdown      (SafeDropdown (..),
+                                                               SafeDropdownConfig (..),
+                                                               safeDropdownOfLabelKeyedValue)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult      (dynamicWidgetResultToWidgetResult,
+                                                               widgetResultToDynamic)
 
 #ifdef USE_WKWEBVIEW
-import           Language.Javascript.JSaddle.WKWebView               (run)
+import           Language.Javascript.JSaddle.WKWebView        (run)
 #endif
 
 #ifdef USE_WARP
-import           Language.Javascript.JSaddle.Warp                    (run)
+import           Language.Javascript.JSaddle.Warp             (run)
 #endif
 
 
-import           DataBuilder                                         as B
+import           DataBuilder                                  as B
 import           Reflex.Dom.Contrib.FormBuilder
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.FormEditor
-import           Reflex.Dom.Contrib.FormBuilder.Instances            (FormInstanceC)
-import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (buildList, buildListWithSelect,
-                                                                      buildMapWithSelect)
+import           Reflex.Dom.Contrib.FormBuilder.Instances     (FormInstanceC)
 
 import           Reflex
-import           Reflex.Dom.Core                                     hiding (InputElementConfig)
+import           Reflex.Dom.Core                              hiding (InputElementConfig)
 
-import           GHCJS.DOM.Types                                     (JSM)
-import           Reflex.Dom.Contrib.CssUtils                         (CssLink, CssLinks (..),
-                                                                      headElt)
+import           GHCJS.DOM.Types                              (JSM)
+import           Reflex.Dom.Contrib.CssUtils                  (CssLink,
+                                                               CssLinks (..),
+                                                               headElt)
 
 
 --import           Css
 
-import           Control.Arrow                                       (returnA)
-import           Control.Lens                                        (Prism,
-                                                                      Traversal,
-                                                                      makeLenses,
-                                                                      makePrisms,
-                                                                      preview,
-                                                                      view,
-                                                                      (^.))
-import           Control.Monad.Fix                                   (MonadFix)
-import           Data.Bool                                           (bool)
-import           Data.Functor.Compose                                (Compose (Compose),
-                                                                      getCompose)
-import qualified Data.Map                                            as M
-import           Data.Monoid                                         ((<>))
-import           Data.Profunctor                                     (lmap,
-                                                                      rmap)
-import           Data.Profunctor.Traversing                          (wander)
-import qualified Data.Text                                           as T
-import qualified GHC.Generics                                        as GHC
-import           Prelude                                             hiding
-                                                                      (div, rem,
-                                                                      span)
-import qualified System.Process                                      as SP
+import           Control.Arrow                                (returnA)
+import           Control.Lens                                 (Prism, Traversal,
+                                                               makeLenses,
+                                                               makePrisms,
+                                                               preview, view,
+                                                               (^.))
+import           Control.Monad.Fix                            (MonadFix)
+import           Data.Bool                                    (bool)
+import           Data.Functor.Compose                         (Compose (Compose),
+                                                               getCompose)
+import qualified Data.Map                                     as M
+import           Data.Maybe                                   (isJust)
+import           Data.Monoid                                  ((<>))
+import           Data.Profunctor                              (lmap, rmap)
+import           Data.Profunctor.Traversing                   (wander)
+import qualified Data.Text                                    as T
+import qualified GHC.Generics                                 as GHC
+import           Prelude                                      hiding (div, rem,
+                                                               span)
+import qualified System.Process                               as SP
 
 -- some editor examples.  Using applicative and categorical composition as well as using VL lenses to transform.
 
@@ -173,27 +169,7 @@ editSum1 = editField Nothing
 editSum2 :: FormInstanceC t m => FormEditor t m Sum Sum
 editSum2 = (wander _A $ editField Nothing) |>| (wander _B $ editField Nothing) |>| (wander _C $ editField Nothing)
 
-data BuilderChoice t m a b = BuilderChoice { bName :: T.Text -- name for display in chooser
-                                           , isA   :: a -> Bool -- switch To/include this builder if True
-                                           , edAB  :: FormEditor t m a b -- builder for this case
-                                           }
-
-chooseAmong :: FormInstanceC t m => [BuilderChoice t m a b] -> FormEditor t m a b
-chooseAmong choices =
-  let chooserList = zip [0..] choices
-      chooserMap = M.fromList chooserList
-      runMaybeEditorOn x =  maybe (Compose $ return formValueNothing) (flip runEditor x)
-  in Editor $ \fva -> makeForm $ flexRow $ do
-    let fValBoolToMaybe = accValidation (const Nothing) (bool Nothing (Just ()))
-        fvBoolToMaybeEv fvb = updated $ widgetResultToDynamic $ fmap fValBoolToMaybe (getCompose fvb)
-        chooserListItemToIntEvent (k, BuilderChoice _ ic _) = k <$ (fmapMaybe id $ fvBoolToMaybeEv $ fmap ic fva)
-        changeToEv = leftmost $ chooserListItemToIntEvent <$> chooserList
-        ddConfig = def { _safeDropdownConfig_setValue = Just <$> changeToEv }
-    choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> bName cc) Nothing (constDyn chooserMap) ddConfig)
-    x <- dyn (getCompose . runMaybeEditorOn fva . fmap edAB <$> choice) -- Event t (FormResult t s)
-    y <- holdDyn formValueNothing x
-    return $ Compose $ dynamicWidgetResultToWidgetResult $ getCompose <$> y
-
+--
 -- This one allows you to choose which you want to be able to edit but can only edit if it matches the input
 editSum3 :: FormInstanceC t m => FormEditor t m Sum Sum
 editSum3 = chooseAmong [ BuilderChoice "Is A" (const False) (wander _A $ editField Nothing)
@@ -201,23 +177,21 @@ editSum3 = chooseAmong [ BuilderChoice "Is A" (const False) (wander _A $ editFie
                        , BuilderChoice "Is C" (const False) (wander _C $ editField Nothing)
                        ]
 
-maybeEditor :: Reflex t => FormEditor t m a b -> FormEditor t m (Maybe a) b
-maybeEditor ed = Editor $ \fvma -> (runEditor ed . Compose . (fmap mergeAccValidation) . getCompose . fmap maybeToFV $ fvma)
 
 -- this one lets you choose which to edit, forces the output to match.
--- If the input is the same constructor, then this can also be set by the input.
+-- If the input is the same constructor, then this will be set by the input.
 editSum4 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum4 = chooseAmong [ BuilderChoice "A" (const False) (A <$> (lmap $ preview _A) (maybeEditor (editField Nothing)))
-                       , BuilderChoice "B" (const False) (B <$> (lmap $ preview _B) (maybeEditor (editField Nothing)))
-                       , BuilderChoice "C" (const False) (C <$> (lmap $ preview _C) (maybeEditor (editField Nothing)))
+editSum4 = chooseAmong [ BuilderChoice "A" (const False) (A <$> (lmap $ preview _A) (maybeFormEditor (editField Nothing)))
+                       , BuilderChoice "B" (const False) (B <$> (lmap $ preview _B) (maybeFormEditor (editField Nothing)))
+                       , BuilderChoice "C" (const False) (C <$> (lmap $ preview _C) (maybeFormEditor (editField Nothing)))
                        ]
 
 -- this one lets you choose which to edit, forces the output to match.
 -- Switches on input
 editSum5 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum5 = chooseAmong [ BuilderChoice "A" (maybe False (const True) . preview _A) (A <$> (lmap $ preview _A) (maybeEditor (editField Nothing)))
-                       , BuilderChoice "B" (maybe False (const True) . preview _B) (B <$> (lmap $ preview _B) (maybeEditor (editField Nothing)))
-                       , BuilderChoice "C" (maybe False (const True) . preview _C) (C <$> (lmap $ preview _C) (maybeEditor (editField Nothing)))
+editSum5 = chooseAmong [ BuilderChoice "A" (isJust . preview _A) (A <$> (lmap $ preview _A) (maybeFormEditor (editField Nothing)))
+                       , BuilderChoice "B" (isJust . preview _B) (B <$> (lmap $ preview _B) (maybeFormEditor (editField Nothing)))
+                       , BuilderChoice "C" (isJust . preview _C) (C <$> (lmap $ preview _C) (maybeFormEditor (editField Nothing)))
                        ]
 
 sumEditW :: FormInstanceC t m => FormConfiguration t m -> m ()

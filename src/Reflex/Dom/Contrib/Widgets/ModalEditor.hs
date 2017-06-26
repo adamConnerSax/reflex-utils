@@ -38,52 +38,35 @@ module Reflex.Dom.Contrib.Widgets.ModalEditor
   , modalEditorEither
   ) where
 
-import           Reflex.Dom.Contrib.DynamicUtils         (dynAsEv)
-
 import           Reflex                                  (Dynamic, Event,
-                                                          MonadHold, Reflex,
-                                                          attachWithMaybe,
-                                                          leftmost, never)
+                                                          MonadHold, Reflex)
 import qualified Reflex                                  as R
-import           Reflex.Dom                              (DropdownConfig (..),
-                                                          dropdown, widgetHold)
+
 import qualified Reflex.Dom                              as RD
 --import qualified Reflex.Dom.Contrib.Widgets.Modal        as RDC
-import           Reflex.Dynamic                          (constDyn, current,
-                                                          tagPromptlyDyn,
-                                                          updated)
+import           Reflex.Dynamic                          (constDyn, current)
 
-import           Reflex.Dom.Contrib.DynamicUtils         (dynAsEv, dynPlusEvent,
+import           Reflex.Dom.Contrib.DynamicUtils         (dynPlusEvent,
                                                           dynStartingFrom)
-import           Reflex.Dom.Contrib.EventUtils           (fanBool,
-                                                          leftWhenNotRight)
 import qualified Reflex.Dom.Contrib.Layout.FlexLayout    as L
 import qualified Reflex.Dom.Contrib.Layout.Types         as L
 import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult,
                                                           WrappedWidgetResult,
-                                                          buildWidgetResult,
                                                           currentWidgetResult,
-                                                          dynamicToWidgetResult,
                                                           unsafeBuildWrappedWidgetResult,
                                                           updatedWidgetResult,
                                                           widgetResultToDynamic)
 
-import           Control.Lens                            (Lens', makeLenses,
-                                                          makePrisms, preview,
+import           Control.Lens                            (makeLenses, preview,
                                                           view, (%~), (&), (^.),
                                                           _Left, _Right)
-import           Control.Monad                           (join)
 import           Control.Monad.Fix                       (MonadFix)
-import           Data.Bool                               (bool)
 import           Data.Default
-import           Data.Either                             (isLeft, isRight)
-import           Data.Functor.Compose                    (Compose (Compose),
-                                                          getCompose)
+import           Data.Either                             (isRight)
 import qualified Data.Map                                as M
 import           Data.Monoid                             ((<>))
 import qualified Data.Text                               as T
-import           Safe                                    (headMay)
 
 e2m :: Either e a -> Maybe a
 e2m = either (const Nothing) Just

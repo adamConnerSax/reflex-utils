@@ -21,10 +21,7 @@ module Reflex.Dom.Contrib.Layout.FlexLayout
        , flexSizedItem'
        ) where
 
-import qualified Reflex as R
 import qualified Reflex.Dom as RD
-
-import Control.Monad.IO.Class (MonadIO)
 
 import Clay hiding (id)
 import qualified Clay.Flexbox as Flexbox
@@ -102,7 +99,7 @@ flexGridStyles = do
     flexContainerStyle
   let flexItemStyle n = (fromString (".gl-flex-item-" ++ show n)) <? do { "flex" -: fromString (show n ++ " 0 auto"); "-webkit-flex" -: fromString (show n ++ " 0 auto") }
   mapM_ flexItemStyle [1..numberFlexGrowOptions]
-  let flexJustifyStyle s = (fromString (".gl-justify-" ++ s)) ? do { ("display" -: "flex"); ("display" -: "-webkit-flex"); ("justify-content" -: fromString s); ("-webkit-justify-content" -: fromString s) }
+  let flexJustifyStyle x = (fromString (".gl-justify-" ++ x)) ? do { ("display" -: "flex"); ("display" -: "-webkit-flex"); ("justify-content" -: fromString x); ("-webkit-justify-content" -: fromString x) }
       flexJustifyStyles = ["flex-start","flex-end","center","space-between","space-around"]
   mapM_ flexJustifyStyle flexJustifyStyles
 
@@ -138,8 +135,8 @@ flexItem = flexItem' emptyCss
 flexSizedItem :: RD.DomBuilder t m => Int -> m a -> m a
 flexSizedItem = flexSizedItem' emptyCss
 
-wrapWidget :: RD.DomBuilder t m => m a -> m a
-wrapWidget = RD.divClass "fill-content" 
+--wrapWidget :: RD.DomBuilder t m => m a -> m a
+--wrapWidget = RD.divClass "fill-content" 
 
 flexFill :: RD.DomBuilder t m => LayoutDirection -> m a -> m a
 flexFill LayoutRight = RD.divClass "flexFillH" . RD.divClass "flex-fill-content-left" 

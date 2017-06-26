@@ -16,10 +16,10 @@ import Reflex.Dom.Core (DomBuilder,el,elAttr,text)
 import qualified Data.Text as T
 import qualified Data.Map as M
 import Data.Text.Encoding (decodeUtf8)
-import Data.Monoid (Monoid(..),(<>))
+import Data.Monoid (Monoid(..))
 
-cssPath::String->String->FilePath
-cssPath basePath cssFile = basePath ++ cssFile
+--cssPath::String->String->FilePath
+--cssPath basePath cssFile = basePath ++ cssFile
 
 type CssPathList = [FilePath]
 cssPrepend::String->CssPathList->CssPathList

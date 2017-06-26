@@ -22,6 +22,7 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        , dynReadMaybeEditor
        , buildDynReadable
        , dynReadableEditor
+       , FormWidget
        , FormInstanceC
        , buildFormIso
        , buildEnumDropdown
@@ -29,7 +30,6 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        ) where
 
 import           Control.Lens                                 (over, view)
-import           Control.Monad                                (join)
 import           Control.Monad.Fix                            (MonadFix)
 import           Control.Monad.Reader                         (lift)
 import           Data.Functor.Compose                         (Compose (Compose, getCompose))
@@ -66,8 +66,7 @@ import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv,
                                                                dynamicMaybeAsEv)
 import           Reflex.Dom.Contrib.FormBuilder.Builder
 import           Reflex.Dom.Contrib.FormBuilder.Configuration (formValueToDynMaybe)
-import           Reflex.Dom.Contrib.FormBuilder.DynValidation (DynMaybe,
-                                                               dynMaybeAsEv)
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation (dynMaybeAsEv)
 import           Reflex.Dom.Contrib.Layout.Types              (emptyCss,
                                                                toCssString)
 import           Reflex.Dom.Contrib.ReflexConstraints
@@ -81,9 +80,9 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult, bui
 showText :: Show a => a -> T.Text
 showText = T.pack . show
 
-type WidgetC t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
-type FormInstanceC t m = (RD.HasDocument m, WidgetC t m, MonadWidgetExtraC t m, RD.PostBuild t m)
---type VBuilderC t m a = (B.Builder (SFR t m) (DynValidation t) a, B.Validatable (DynValidation t) a)
+type FormWidgetBase t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
+type FormWidget t m = ({-RD.HasDocument m ,-} FormWidgetBase t m, MonadWidgetExtraC t m, RD.PostBuild t m)
+type FormInstanceC t m = FormWidget t m
 
 instance {-# OVERLAPPABLE #-} B.Validatable FValidation a where
   validator = AccSuccess
@@ -150,6 +149,7 @@ textWidgetResult mFN c = do
   changeEv <- _hwidget_change <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
   buildWidgetResult inputDyn changeEv
 
+{-
 textWidgetResult' :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (WidgetResult t T.Text)
 textWidgetResult' mFN c = do
   inputDyn <- R.holdDyn (_widgetConfig_initialValue c) (_widgetConfig_setValue c)
@@ -168,6 +168,7 @@ restrictWidget' restrictFunc wFunc cfg = do
   return $ w { _hwidget_value = v
              , _hwidget_change = e
              }
+-}
 
 parseError :: Maybe FieldName -> T.Text -> T.Text
 parseError mFN x = T.pack (fromMaybe "N/A" mFN) <> ": " <> x

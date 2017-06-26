@@ -18,6 +18,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , buildFormToEditor
        , dynamicForm
        , dynamicFormOfDynamic
+       , dynamicFormOfDynMaybe
        , dynamicFormOfFormValue
        , formWithSubmitAction
        , observeDynamic
@@ -41,6 +42,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , FMDWrapped
        , buildVForm
        , editField
+       , editValidatedField
        , readOnlyField
        , noFormField
        , labelForm
@@ -72,11 +74,9 @@ import           Reflex.Dom.Contrib.Layout.Types              (CssClasses (..),
                                                                IsCssClass (..),
                                                                LayoutOrientation (..))
 
-import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult,
                                                                constWidgetResult,
                                                                dynamicToWidgetResult,
-                                                               dynamicToWrappedWidgetResult,
                                                                dynamicWidgetResultToWidgetResult,
                                                                updatedWidgetResult,
                                                                widgetResultToDynamic,
@@ -111,7 +111,6 @@ import qualified Data.Map                                     as M
 import           Data.Maybe                                   (fromMaybe,
                                                                isJust)
 import           Data.Monoid                                  ((<>))
-import           Data.Profunctor                              (lmap)
 import qualified Data.Text                                    as T
 import           Data.Validation                              (AccValidation (..))
 --import           Language.Haskell.TH

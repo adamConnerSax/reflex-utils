@@ -42,17 +42,13 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
 
 
 import           Reflex.Dom.Contrib.DynamicUtils                (dynAsEv,
-                                                                 dynPlusEvent,
-                                                                 dynStartingFrom,
-                                                                 mDynAsEv,
-                                                                 traceDynAsEv)
+                                                                 dynPlusEvent)
 import           Reflex.Dom.Contrib.EventUtils                  (fanBool, leftWhenNotRight)
-import           Reflex.Dom.Contrib.FormBuilder.Builder         (BuildForm,
-                                                                 DynMaybe (..),
-                                                                 FR, FRW,
+import           Reflex.Dom.Contrib.FormBuilder.Builder         (BuildForm, FR,
+                                                                 FRW,
                                                                  FValidation,
                                                                  FieldName,
-                                                                 Form (..),
+                                                                 Form,
                                                                  FormBuilder (buildForm),
                                                                  FormType (..),
                                                                  FormValidator,
@@ -60,41 +56,29 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder         (BuildForm,
                                                                  VFormBuilderC,
                                                                  avToMaybe,
                                                                  buildVForm,
-                                                                 constDynMaybe,
                                                                  constFormValue,
-                                                                 dynamicToFormValue,
-                                                                 fCenter, fCol,
-                                                                 fFill, fItem,
-                                                                 fItemR, fRow,
+                                                                 fCol, fFill,
+                                                                 fItem, fRow,
                                                                  formValueNothing,
                                                                  getFormType,
-                                                                 joinDynOfFormValues,
                                                                  makeForm,
                                                                  toReadOnly,
                                                                  unF,
                                                                  validateForm)
-import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (DynValidation (..),
-                                                                 FormError (FNothing),
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FormError (FNothing),
                                                                  FormErrors,
-                                                                 accValidation,
                                                                  avToEither,
-                                                                 constDynValidation,
-                                                                 joinDynOfDynValidation,
                                                                  mergeAccValidation,
                                                                  printFormErrors)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
-import           Reflex.Dom.Contrib.Layout.Types                (LayoutDirection (..),
-                                                                 LayoutOrientation (..))
+import           Reflex.Dom.Contrib.Layout.Types                (LayoutDirection (..))
 import           Reflex.Dom.Contrib.ListHoldFunctions.Maps      (LHFMap (..))
 import qualified Reflex.Dom.Contrib.ListHoldFunctions.Maps      as LHF
-import           Reflex.Dom.Contrib.ReflexConstraints           (MonadWidgetExtraC)
 import qualified Reflex.Dom.Contrib.Widgets.ModalEditor         as MW
 import qualified Reflex.Dom.Contrib.Widgets.SafeDropdown        as SD
-import           Reflex.Dom.Contrib.Widgets.WidgetResult        (WidgetResult, buildReadOnlyWidgetResult,
-                                                                 buildWidgetResult,
+import           Reflex.Dom.Contrib.Widgets.WidgetResult        (WidgetResult, buildWidgetResult,
                                                                  currentWidgetResult,
                                                                  dynamicToWidgetResult,
-                                                                 dynamicWidgetResultToWidgetResult,
                                                                  updatedWidgetResult,
                                                                  widgetResultToDynamic)
 
@@ -102,24 +86,15 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult        (WidgetResult, b
 import qualified Reflex                                         as R
 import           Reflex.Dom                                     ((=:))
 import qualified Reflex.Dom                                     as RD
-import qualified Reflex.Dom.Contrib.Widgets.Modal               as RDC
 
 import           Control.Arrow                                  ((&&&))
 import           Control.Lens                                   (view, (&),
                                                                  (.~))
 import           Control.Monad                                  (join)
-import           Control.Monad.Fix                              (MonadFix)
-import           Control.Monad.Morph                            (hoist)
-import           Control.Monad.Reader                           (lift, local)
-import           Control.Monad.State                            (StateT, get,
-                                                                 put, runStateT)
 import qualified Data.Foldable                                  as F
 import           Data.Functor.Compose                           (Compose (Compose, getCompose))
 import qualified Data.Text                                      as T
 import           Data.Validation                                (AccValidation (..))
-import           Safe                                           (headMay)
-import           Text.Read                                      (readMaybe)
-
 
 -- imports only to make instances
 import           Data.Bool                                      (bool)
@@ -129,10 +104,7 @@ import qualified Data.HashSet                                   as HS
 import qualified Data.IntMap                                    as IM
 import qualified Data.List                                      as L
 import qualified Data.Map                                       as M
-import           Data.Maybe                                     (catMaybes,
-                                                                 fromJust,
-                                                                 fromMaybe,
-                                                                 isNothing)
+import           Data.Maybe                                     (isNothing)
 import           Data.Monoid                                    ((<>))
 import qualified Data.Sequence                                  as Seq
 import qualified Data.Set                                       as S
@@ -376,7 +348,7 @@ data MapLike f g v = MapLike { toMap   :: f v -> g v
                              , diffMap :: g v -> g v -> g (Maybe v)
                              }
 
-data MapElemWidgets g t m k v = MapElemWidgets { elemW :: ElemWidget t m k v
+data MapElemWidgets g t m k v = MapElemWidgets { elemW    :: ElemWidget t m k v
                                                , newOneWF :: R.Dynamic t (g (FValidation v)) -> FRW t m (k,v)
                                                }
 
@@ -575,7 +547,7 @@ showKeyEditVal :: (FormInstanceC t m, VFormBuilderBoth t m k v)=>ElemWidget t m 
 showKeyEditVal k vDyn = do
   let showKey k = toReadOnly $ buildVForm Nothing (constFormValue k)
   fRow $ do
-    fItem . fFill LayoutRight . unF $ showKey k
+    _<- fItem . fFill LayoutRight . unF $ showKey k
     fItem . fFill LayoutLeft . unF $ buildVForm Nothing (Compose $ AccSuccess <$> dynamicToWidgetResult vDyn)
 
 hideKeyEditVal :: (FormInstanceC t m, VFormBuilderC t m v)=>ElemWidget t m k v

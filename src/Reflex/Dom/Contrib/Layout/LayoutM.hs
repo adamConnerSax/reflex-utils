@@ -1,12 +1,12 @@
-{-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE UndecidableInstances  #-}
-
+{-# LANGUAGE AllowAmbiguousTypes        #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UndecidableInstances       #-}
 module Reflex.Dom.Contrib.Layout.LayoutM
        (
          emptyClassMap
@@ -17,34 +17,34 @@ module Reflex.Dom.Contrib.Layout.LayoutM
        , LayoutClassDynamicMap
        , mergeCssUpdates
        , emptyCss
+       , LayoutM (..)
+       , askLayoutConfig
+       , askClassMap
+       , askDynamicCssMap
        , SupportsLayoutM
        , runLayoutMain
        , runLayoutM
        , addNewLayoutNode
        ) where
 
-import           Data.Functor.Misc               (ComposeMaybe (..))
 import           GHCJS.DOM.Types                 (MonadJSM (liftJSM'))
 import qualified Reflex                          as R
-import qualified Reflex.Class                    as R
 import qualified Reflex.Dom                      as RD
 import qualified Reflex.Host.Class               as RC
 
 
 import           Control.Monad                   (sequence)
-import           Control.Monad.Exception         (MonadAsyncException)
+import           Control.Monad.Exception         (MonadAsyncException,
+                                                  MonadException)
 import           Control.Monad.Fix               (MonadFix)
 import           Control.Monad.IO.Class          (MonadIO)
-import           Control.Monad.Reader            (ask, runReaderT)
+import           Control.Monad.Reader            (ReaderT, ask, runReaderT)
 import           Control.Monad.Ref               (MonadRef (..), Ref)
 import           Control.Monad.State             (StateT (StateT), evalStateT,
                                                   get, lift, runStateT)
 import           Control.Monad.Trans             (MonadTrans)
 import           Control.Monad.Trans.Control     (MonadTransControl (..))
 import           Data.Coerce                     (coerce)
-import qualified Data.Dependent.Map              as DMap
-import           Data.List                       (foldl')
-import qualified Data.List.NonEmpty              as NE
 import qualified Data.Map                        as M
 import           Data.Maybe                      (catMaybes, fromMaybe)
 import qualified Data.Text                       as T
@@ -52,10 +52,9 @@ import           Reflex.Dom.Contrib.Layout.Types
 --import qualified Reflex.Dom.Old                  as RD
 
 
-import           Control.Lens                    ((^.))
+import           Control.Lens                    (use, (^.))
 
 import           Data.Monoid                     ((<>))
-import           Data.Traversable                (sequenceA)
 
 
 data LayoutNodeCss = LayoutNodeCss { _lncStatic::CssClasses, _lncDynamic::CssClasses }
@@ -79,8 +78,10 @@ emptyClassMap = M.empty
 emptyDynamicCssMap :: R.Reflex t => LayoutClassDynamicMap t
 emptyDynamicCssMap = M.empty
 
+{-
 newInfo :: R.Reflex t => LayoutDescription t -> LayoutInfo t
 newInfo ld = LayoutInfo ld (CssClasses []) Nothing
+-}
 
 --TODO: Figure out how to use "pull" here to make "sample" okay
 dynamicCss :: (R.Reflex t, R.MonadHold t m, MonadFix m) => LayoutDescription t -> LayoutClassDynamicMap t -> m (Maybe (R.Dynamic t CssClasses))
@@ -111,12 +112,14 @@ addNewLayoutNode desc child = LayoutM $ do
 cssToAttr :: IsCssClass c => c -> RD.AttributeMap
 cssToAttr cssClass = "class" RD.=: (toCssString cssClass)
 
+{-
 updateCss :: LayoutNodeCss -> CssUpdate -> LayoutNodeCss
 updateCss (LayoutNodeCss s _) (UpdateDynamic d) = LayoutNodeCss s d
 updateCss (LayoutNodeCss s d) (AddToDynamic d') = LayoutNodeCss s (d <> d')
 
 updateCssNE :: NE.NonEmpty CssUpdate -> LayoutNodeCss -> LayoutNodeCss
 updateCssNE cssUpdates nodeCss = foldl' updateCss nodeCss (NE.toList cssUpdates)
+-}
 
 classesToAttributesDyn :: R.Reflex t => CssClasses -> R.Dynamic t CssClasses -> R.Dynamic t (M.Map T.Text T.Text)
 classesToAttributesDyn staticCss dynamicCssDyn = (cssToAttr . LayoutNodeCss staticCss) <$> dynamicCssDyn
@@ -125,6 +128,7 @@ classesToAttributesDyn' :: R.Reflex t => CssClasses -> Maybe (R.Dynamic t CssCla
 classesToAttributesDyn' staticCss mDynamicCssDyn =
   let x = fromMaybe (R.constDyn emptyCss) mDynamicCssDyn in classesToAttributesDyn staticCss x
 
+{-
 -- utilities for map merging
 -- biased to 2nd argument for initial conditons
 mergeLayoutClassDynamic :: (R.Reflex t, R.MonadHold t m,MonadFix m) => LayoutClassDynamic t -> LayoutClassDynamic t -> m (LayoutClassDynamic t)
@@ -136,10 +140,23 @@ mergeLayoutClassDynamic (LayoutClassDynamic _ evA) (LayoutClassDynamic initialBD
 
 unionM :: (Monad m, Ord k) => (a->a->m a) -> M.Map k a -> M.Map k a -> m (M.Map k a)
 unionM f m1 m2 = sequenceA $ M.mergeWithKey (\_ a b -> Just $ f a b) (fmap return) (fmap return) m1 m2
+-}
 
+
+newtype LayoutM t m a = LayoutM { unLayoutM::StateT (LayoutS t) (ReaderT (LayoutConfig t) m) a } deriving (Functor,Applicative,Monad,MonadFix,MonadIO,MonadException,MonadAsyncException)
+
+askLayoutConfig::Monad m=>LayoutM t m (LayoutConfig t)
+askLayoutConfig = LayoutM $ lift ask
+
+askClassMap::Monad m=>LayoutM t m LayoutClassMap
+askClassMap = LayoutM $ use lsClassMap
+
+askDynamicCssMap::(R.Reflex t, Monad m)=>LayoutM t m (LayoutClassDynamicMap t)
+askDynamicCssMap = LayoutM $ use lsDynamicCssMap
 
 runLayoutMain :: (SupportsLayoutM t m, RD.PostBuild t m) => LayoutConfig t -> LayoutM t m a -> m a
 runLayoutMain lc lma = runLayoutM lma (LayoutS emptyClassMap emptyDynamicCssMap) lc
+
 
 -- Class Instances
 liftLM :: Monad m => m a -> LayoutM t m a
@@ -256,6 +273,7 @@ instance RD.HasJSContext m => RD.HasJSContext (LayoutM t m) where
 instance RD.HasJS js m => RD.HasJS js (LayoutM t m) where
   type JSX (LayoutM t m) = RD.JSX m
   liftJS = lift . RD.liftJS
+
 
 -- For debugging
 

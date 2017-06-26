@@ -10,7 +10,7 @@
 module Main where
 
 import Reflex.Dom.Contrib.Layout.All
-import Reflex.Dom.Contrib.Layout.LayoutM (SupportsLayoutM,runLayoutM)
+import Reflex.Dom.Contrib.Layout.LayoutM (SupportsLayoutM,runLayoutM, LayoutM (..))
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexSizedItem,flexRow,flexCol,flexItem,flexCssBS)
 import qualified Reflex.Dom.Contrib.Layout.OptimizedFlexLayout as OF
 import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$))

@@ -19,13 +19,13 @@ module Reflex.Dom.Contrib.Layout.TabLayout
 import Reflex.Dom.Contrib.Layout.ClayUtils
 import Reflex.Dom.Contrib.Layout.FlexLayout
 import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..),toCssString, LayoutDirection(LayoutRight))
+
 import qualified Reflex as R
-import Reflex.Dynamic ()
 import qualified Reflex.Dom as RD
+import Reflex.Dynamic ()
 
 import Reflex.Dom.Contrib.Widgets.DynTabs
 import Control.Monad.Fix (MonadFix)
-import Control.Monad.IO.Class (MonadIO)
 import qualified Data.ByteString as B
 import qualified Data.Map as M
 import qualified Data.Foldable as F

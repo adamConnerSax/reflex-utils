@@ -1,6 +1,7 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 module Reflex.Dom.Contrib.Layout.LayoutMFlex
   (
     lmFlexRow
@@ -13,16 +14,19 @@ module Reflex.Dom.Contrib.Layout.LayoutMFlex
   , lmFlexLayoutCol'
   ) where
 
-import Reflex.Dom.Contrib.Layout.LayoutM (SupportsLayoutM,addNewLayoutNode) 
-import Reflex.Dom.Contrib.Layout.Types (CssClass(..),CssClasses(..),LayoutDescription(..),LayoutM) 
-import Reflex.Dom.Contrib.Layout.FlexLayout (numberFlexGrowOptions) -- for re-export
+import           Reflex.Dom.Contrib.Layout.FlexLayout (numberFlexGrowOptions)
+import           Reflex.Dom.Contrib.Layout.LayoutM    (LayoutM, SupportsLayoutM,
+                                                       addNewLayoutNode)
+import           Reflex.Dom.Contrib.Layout.Types      (CssClass (..),
+                                                       CssClasses (..),
+                                                       LayoutDescription (..))
 
-import qualified Reflex as R
-import qualified Reflex.Dom as RD
+import qualified Reflex                               as R
+import qualified Reflex.Dom                           as RD
 
 --import qualified Data.Map as M
-import qualified Data.Text as T
-import Data.Monoid ((<>))
+import           Data.Monoid                          ((<>))
+import qualified Data.Text                            as T
 
 flexLayoutRowD::R.Reflex t=>[T.Text]->LayoutDescription t
 flexLayoutRowD tags =
@@ -32,7 +36,7 @@ flexLayoutRowD tags =
 lmFlexLayoutRow::(RD.PostBuild t m ,SupportsLayoutM t m)=>LayoutM t m a->LayoutM t m a
 lmFlexLayoutRow = addNewLayoutNode $ flexLayoutRowD []
 
-lmFlexLayoutRow'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[T.Text]->LayoutM t m a->LayoutM t m a 
+lmFlexLayoutRow'::(RD.PostBuild t m ,SupportsLayoutM t m)=>[T.Text]->LayoutM t m a->LayoutM t m a
 lmFlexLayoutRow' tags = addNewLayoutNode $ flexLayoutRowD tags
 
 flexColD::R.Reflex t=>[T.Text]->Int->LayoutDescription t
