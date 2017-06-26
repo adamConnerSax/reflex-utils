@@ -66,8 +66,8 @@ import           Reflex.Dom.Contrib.CssUtils                  (CssLink,
 
 import           Control.Arrow                                (returnA)
 import           Control.Lens                                 (Prism, Traversal,
-                                                               makeLenses,
-                                                               makePrisms,
+                                                               each, makeLenses,
+                                                               makePrisms, over,
                                                                preview, view,
                                                                (^.))
 import           Control.Monad.Fix                            (MonadFix)
@@ -204,6 +204,25 @@ sumEditW cfg = do
 sumEditTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 sumEditTab cfg = TabInfo "Simple Sum" (constDyn ("Simple Sum Example", M.empty)) $ sumEditW cfg
 
+-- traversals
+
+listOfS :: [Sum]
+listOfS = [A 12, A 22, B "abc", B "def", C Green, C Blue]
+
+editTraversable :: (FormInstanceC t m, Traversable q) => FormEditor t m a b -> FormEditor t m (q a) (q b)
+editTraversable editOne = wander traverse editOne
+
+listEditW :: FormInstanceC t m => FormConfiguration t m -> m ()
+listEditW cfg = do
+  let fvlIn = constFormValue listOfS
+      ed = editTraversable editSum5
+  fvlOut <- runForm cfg $ runEditor ed fvlIn
+  flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvlOut)
+
+listEditTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
+listEditTab cfg = TabInfo "List Of Sum" (constDyn ("List Of Sum Example", M.empty)) $ listEditW cfg
+
+
 test :: FormInstanceC t m => FormConfiguration t m -> m ()
 test cfg = do
   el "p" (text "")
@@ -213,6 +232,7 @@ test cfg = do
       simpleProdEditorTab cfg
     , categoricalEditorTab cfg
     , sumEditTab cfg
+    , listEditTab cfg
     ]
   return ()
 

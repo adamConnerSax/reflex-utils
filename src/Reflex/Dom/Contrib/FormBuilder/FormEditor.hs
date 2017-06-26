@@ -31,6 +31,7 @@ import           Reflex.Dom.Contrib.Editor                    (Combinable (..), 
                                                                transformEditor,
                                                                (|<|), (|>|))
 
+import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv)
 import           Reflex.Dom.Contrib.FormBuilder.Configuration (FR, FormValue, dynMaybeToFormValue,
                                                                formValueNothing)
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (AccValidation (AccFailure, AccSuccess),
@@ -153,11 +154,12 @@ chooseAmong choices =
       chooserMap = M.fromList chooserList
       runMaybeEditorOn x =  maybe (Compose $ return formValueNothing) (flip runEditor x)
   in Editor $ \fva -> Compose $ flexRow $ do
+    fvaEv <- dynAsEv $ widgetResultToDynamic $ getCompose $ fva
     let fValBoolToMaybe = accValidation (const Nothing) (bool Nothing (Just ()))
-        fvBoolToMaybeEv fvb = updated $ widgetResultToDynamic $ fmap fValBoolToMaybe (getCompose fvb)
-        chooserListItemToIntEvent (k, BuilderChoice _ ic _) = k <$ (fmapMaybe id $ fvBoolToMaybeEv $ fmap ic fva)
-        changeToEv = leftmost $ chooserListItemToIntEvent <$> chooserList
-        ddConfig = def { _safeDropdownConfig_setValue = Just <$> changeToEv }
+        fvBoolToMaybeEv fvb = dynAsEv $ widgetResultToDynamic $ fmap fValBoolToMaybe (getCompose fvb)
+        chooserListItemToIntEvent (k, BuilderChoice _ ic _) = fmap (const k) . fmapMaybe id <$> (fvBoolToMaybeEv $ fmap ic fva)
+    changeToEv <- leftmost <$> (sequenceA $ chooserListItemToIntEvent <$> chooserList)
+    let ddConfig = def { _safeDropdownConfig_setValue = Just <$> changeToEv }
     choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> bName cc) Nothing (constDyn chooserMap) ddConfig)
     x <- dyn (getCompose . runMaybeEditorOn fva . fmap edAB <$> choice) -- Event t (FormResult t s)
     y <- holdDyn formValueNothing x
