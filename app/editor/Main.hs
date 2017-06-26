@@ -65,6 +65,7 @@ import           Reflex.Dom.Contrib.CssUtils                         (CssLink, C
 
 --import           Css
 
+import           Control.Arrow                                       (returnA)
 import           Control.Lens                                        (Prism,
                                                                       Traversal,
                                                                       makeLenses,
@@ -87,8 +88,6 @@ import           Prelude                                             hiding
                                                                       (div, rem,
                                                                       span)
 import qualified System.Process                                      as SP
-
-
 
 -- some editor examples.  Using applicative and categorical composition as well as using VL lenses to transform.
 
@@ -119,17 +118,22 @@ editProd2 = Prod
 editProd3 :: FormInstanceC t m => FormEditor t m Prod Prod
 editProd3 = (wander f1 $ editField Nothing) |>| (wander f2 $ editField Nothing) |>| (wander f3 $ editField Nothing)
 
--- arrows!
---editProd4 :: FormInstanceC t m => FormEditor t m Prod Prod
---editProd4 = proc <- do
+-- arrows! This is acting...odd
+editProd4 :: FormInstanceC t m => FormEditor t m Prod Prod
+editProd4 = proc x -> do
+  p1 <- (wander f1 $ editField Nothing) -< x
+  p2 <- (wander f2 $ editField Nothing) -< p1
+  p3 <- (wander f3 $ editField Nothing) -< p2
+  returnA -< p3
 
 simpleEditorW :: FormInstanceC t m => FormConfiguration t m -> m ()
 simpleEditorW cfg = flexCol $ do
-  let dmp = constDynMaybe $ Just $ Prod 1 2 "Prod"
-  fvp1 <- flexItem $ runForm cfg $ runEditor editProd1 $ dynMaybeToFormValue dmp
+  let fvp0 = constFormValue $ Prod 1 2 "Prod"
+  fvp1 <- flexItem $ runForm cfg $ runEditor editProd1 fvp0
   fvp2 <- flexItem $ runForm cfg $ runEditor editProd2 fvp1
   fvp3 <- flexItem $ runForm cfg $ runEditor editProd3 fvp2
-  flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvp3)
+  fvp4 <- flexItem $ runForm cfg $ runEditor editProd4 fvp3
+  flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvp4)
   return ()
 
 boxEditor = liftE (flexItem' (oneClass "sf-outline-black"))
@@ -137,8 +141,8 @@ boxEditor = liftE (flexItem' (oneClass "sf-outline-black"))
 -- of course, since we are sending the result of one into the other we could just use categorical composition here as well
 categoricalEditorW :: FormInstanceC t m => FormConfiguration t m -> m ()
 categoricalEditorW cfg = flexCol $ do
-  let fvpIn = dynMaybeToFormValue $ constDynMaybe $ Just $ Prod 1 2 "Prod"
-      ed = liftE flexCol $ boxEditor editProd1 |>| boxEditor editProd2 |>| boxEditor editProd3
+  let fvpIn = constFormValue $ Prod 1 2 "Prod"
+      ed = liftE flexCol $ boxEditor editProd1 |>| boxEditor editProd2 |>| boxEditor editProd3 |>| boxEditor editProd4
   fvpOut <- runForm cfg $ runEditor ed fvpIn
   flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvpOut)
 
@@ -169,9 +173,9 @@ editSum1 = editField Nothing
 editSum2 :: FormInstanceC t m => FormEditor t m Sum Sum
 editSum2 = (wander _A $ editField Nothing) |>| (wander _B $ editField Nothing) |>| (wander _C $ editField Nothing)
 
-data BuilderChoice t m a b = BuilderChoice { bName :: T.Text
-                                           , isA   :: FormValue t a -> FormValue t Bool
-                                           , edAB  :: FormEditor t m a b
+data BuilderChoice t m a b = BuilderChoice { bName :: T.Text -- name for display in chooser
+                                           , isA   :: a -> Bool -- switch To/include this builder if True
+                                           , edAB  :: FormEditor t m a b -- builder for this case
                                            }
 
 chooseAmong :: FormInstanceC t m => [BuilderChoice t m a b] -> FormEditor t m a b
@@ -182,7 +186,7 @@ chooseAmong choices =
   in Editor $ \fva -> makeForm $ flexRow $ do
     let fValBoolToMaybe = accValidation (const Nothing) (bool Nothing (Just ()))
         fvBoolToMaybeEv fvb = updated $ widgetResultToDynamic $ fmap fValBoolToMaybe (getCompose fvb)
-        chooserListItemToIntEvent (k, BuilderChoice _ ic _) = k <$ (fmapMaybe id $ fvBoolToMaybeEv $ ic fva)
+        chooserListItemToIntEvent (k, BuilderChoice _ ic _) = k <$ (fmapMaybe id $ fvBoolToMaybeEv $ fmap ic fva)
         changeToEv = leftmost $ chooserListItemToIntEvent <$> chooserList
         ddConfig = def { _safeDropdownConfig_setValue = Just <$> changeToEv }
     choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> bName cc) Nothing (constDyn chooserMap) ddConfig)
@@ -192,9 +196,9 @@ chooseAmong choices =
 
 -- This one allows you to choose which you want to be able to edit but can only edit if it matches the input
 editSum3 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum3 = chooseAmong [ BuilderChoice "Is A" (const $ constFormValue False) (wander _A $ editField Nothing)
-                       , BuilderChoice "Is B" (const $ constFormValue False) (wander _B $ editField Nothing)
-                       , BuilderChoice "Is C" (const $ constFormValue False) (wander _C $ editField Nothing)
+editSum3 = chooseAmong [ BuilderChoice "Is A" (const False) (wander _A $ editField Nothing)
+                       , BuilderChoice "Is B" (const False) (wander _B $ editField Nothing)
+                       , BuilderChoice "Is C" (const False) (wander _C $ editField Nothing)
                        ]
 
 maybeEditor :: Reflex t => FormEditor t m a b -> FormEditor t m (Maybe a) b
@@ -203,24 +207,24 @@ maybeEditor ed = Editor $ \fvma -> (runEditor ed . Compose . (fmap mergeAccValid
 -- this one lets you choose which to edit, forces the output to match.
 -- If the input is the same constructor, then this can also be set by the input.
 editSum4 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum4 = chooseAmong [ BuilderChoice "A" (const $ constFormValue False) (A <$> (lmap $ preview _A) (maybeEditor (editField Nothing)))
-                       , BuilderChoice "B" (const $ constFormValue False) (B <$> (lmap $ preview _B) (maybeEditor (editField Nothing)))
-                       , BuilderChoice "C" (const $ constFormValue False) (C <$> (lmap $ preview _C) (maybeEditor (editField Nothing)))
+editSum4 = chooseAmong [ BuilderChoice "A" (const False) (A <$> (lmap $ preview _A) (maybeEditor (editField Nothing)))
+                       , BuilderChoice "B" (const False) (B <$> (lmap $ preview _B) (maybeEditor (editField Nothing)))
+                       , BuilderChoice "C" (const False) (C <$> (lmap $ preview _C) (maybeEditor (editField Nothing)))
                        ]
 
 -- this one lets you choose which to edit, forces the output to match.
 -- Switches on input
 editSum5 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum5 = chooseAmong [ BuilderChoice "A" (fmap (maybe False (const True) . preview _A)) (A <$> (lmap $ preview _A) (maybeEditor (editField Nothing)))
-                       , BuilderChoice "B" (fmap (maybe False (const True) . preview _B)) (B <$> (lmap $ preview _B) (maybeEditor (editField Nothing)))
-                       , BuilderChoice "C" (fmap (maybe False (const True) . preview _C)) (C <$> (lmap $ preview _C) (maybeEditor (editField Nothing)))
+editSum5 = chooseAmong [ BuilderChoice "A" (maybe False (const True) . preview _A) (A <$> (lmap $ preview _A) (maybeEditor (editField Nothing)))
+                       , BuilderChoice "B" (maybe False (const True) . preview _B) (B <$> (lmap $ preview _B) (maybeEditor (editField Nothing)))
+                       , BuilderChoice "C" (maybe False (const True) . preview _C) (C <$> (lmap $ preview _C) (maybeEditor (editField Nothing)))
                        ]
 
 sumEditW :: FormInstanceC t m => FormConfiguration t m -> m ()
 sumEditW cfg = do
-  let fvpIn = dynMaybeToFormValue $ constDynMaybe $ Just $ A 12
+  let fvp0 = constFormValue $ A 12
       ed = liftE flexCol $ boxEditor editSum1 |>| boxEditor editSum2 |>| boxEditor editSum3 |>| boxEditor editSum4 |>| boxEditor editSum5
-  fvpOut <- runForm cfg $ runEditor ed fvpIn
+  fvpOut <- runForm cfg $ runEditor ed fvp0
   flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvpOut)
 
 sumEditTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
