@@ -75,6 +75,7 @@ import           Reflex                                       (Dynamic,
                                                                fmapMaybe,
                                                                holdDyn,
                                                                leftmost,
+                                                               traceDynWith,
                                                                traceEventWith,
                                                                updated)
 import           Reflex.Dom                                   (DomBuilder,
@@ -112,7 +113,7 @@ toAccValEither :: AccValidation e (Either a b) -> AccValEither e a b
 toAccValEither = accValidation F (either SL SR)
 
 fromAccValEither :: AccValEither e a b -> AccValidation e (Either a b)
-fromAccValEither (F x) = AccFailure x
+fromAccValEither (F x)  = AccFailure x
 fromAccValEither (SL x) = AccSuccess $ Left x
 fromAccValEither (SR x) = AccSuccess $ Right x
 
@@ -130,7 +131,7 @@ instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormValue t) m 
         f :: AccValidation (Dynamic t e) (Either c d) -> Dynamic t (AccValidation e (Either c d))
         f x = case x of
           AccFailure de -> fmap AccFailure de
-          AccSuccess y -> constDyn $ AccSuccess y
+          AccSuccess y  -> constDyn $ AccSuccess y
         x4 :: FormValue t (Either (Dynamic t a) (Dynamic t b))
         x4 = Compose $ dynamicToWidgetResult $ join $ fmap f x3
     return $ fmap (bimap (dynMaybeToFormValue . Compose . fmap pure) (dynMaybeToFormValue . Compose . fmap pure)) x4
@@ -160,7 +161,7 @@ chooseAmong choices =
   in Editor $ \fva -> Compose $ flexRow $ do
     let mIntFromA a = fst <$> (headMay $ filter (\(_,bc) -> isA bc a) chooserList)
     newMAEv <- dynAsEv $ widgetResultToDynamic $ avToMaybe <$> (getCompose $ fva)
-    let newChoiceEv = traceEventWith (\i -> "new index = " ++ show i) $ fmapMaybe (join . fmap mIntFromA) newMAEv
+    let newChoiceEv = fmapMaybe (join . fmap mIntFromA) newMAEv
         ddConfig = def
                    & safeDropdownConfig_setValue .~ (Just <$> newChoiceEv)
     choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> bName cc) Nothing (constDyn chooserMap) ddConfig)

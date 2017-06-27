@@ -197,8 +197,8 @@ editSum5 = chooseAmong [ BuilderChoice "A" (isJust . preview _A) (A <$> (lmap $ 
 sumEditW :: FormInstanceC t m => FormConfiguration t m -> m ()
 sumEditW cfg = do
   let fvp0 = constFormValue $ A 12
-      ed = liftE flexCol $ boxEditor editSum1 |>| boxEditor editSum2 |>| boxEditor editSum3 |>| boxEditor editSum4 |>| boxEditor editSum5
-  fvpOut <- runForm cfg $ runEditor ed fvp0
+      ed = boxEditor editSum1 |>| boxEditor editSum2 |>| boxEditor editSum3 |>| boxEditor editSum4 |>| boxEditor editSum5
+  fvpOut <- flexItem $ runForm cfg $ runEditor ed fvp0
   flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvpOut)
 
 sumEditTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
@@ -231,7 +231,7 @@ test cfg = do
     [
       simpleProdEditorTab cfg
     , categoricalEditorTab cfg
---    , sumEditTab cfg
+    , sumEditTab cfg
     , listEditTab cfg
     ]
   return ()

@@ -35,6 +35,7 @@ import Control.Lens (makeLenses)
 import Control.Monad (join)
 import Control.Monad.Fix (MonadFix)
 import Data.Default
+import Data.Bool (bool)
 import Safe (headMay)
 import qualified Data.Map as M
 import qualified Data.Text as T
@@ -70,25 +71,25 @@ safeDropdown :: forall k t m. ( RD.DomBuilder t m
   -> m (SafeDropdown t k)
 safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   postbuild <- RD.getPostBuild
-  optionsNullEv <- R.holdUniqDyn (M.null <$> optionsDyn) >>= dynAsEv
+  optionsNullEv <- R.updated <$> R.holdUniqDyn (M.null <$> optionsDyn) 
   let (someOptionsEv, noOptionsEv) = fanBool optionsNullEv
-      showE (Left _) = "setToNothing"
-      showE (Right _) = "keySetEv"
-      (setToNothingEv, keySetEv) = R.fanEither $ R.traceEventWith showE $ maybe (Left ()) Right <$> leftmost [ R.traceEventWith (const "setEv") setEv
-                                                                                                             , Just <$> R.fmapMaybe (const k0m) postbuild]
-      noOptionsWidget ev = return $ SafeDropdown (constDyn Nothing) ev
-      noOptionsWidgetEv = noOptionsWidget (Nothing <$ noOptionsEv) <$ leftmost [ noOptionsEv, setToNothingEv]
-      defaultKeyNewOptionsEv = R.traceEventWith (const "defaultKeyNewOptionsEv") $ R.fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> optionsDyn) someOptionsEv
+      (setToNothingEv, keySetEv) = R.fanEither $ maybe (Left ()) Right <$> leftmost [setEv, Just <$> R.fmapMaybe (const k0m) postbuild]
       keySetSafeEv = 
         let checkKey m k = if M.member k m then Just k else Nothing
-        in R.traceEventWith (const "keySetSafeEv") $ attachWithMaybe checkKey (current optionsDyn) keySetEv
-        
+        in attachWithMaybe checkKey (current optionsDyn) keySetEv
+  safeKeyDyn <- R.holdDyn Nothing (Just <$> keySetSafeEv)  
+  let noOptionsWidget ev = return $ SafeDropdown (constDyn Nothing) ev
+      noOptionsWidgetEv = noOptionsWidget (Nothing <$ noOptionsEv) <$ leftmost [ noOptionsEv, setToNothingEv]
+      defaultKeyOnStartEv = R.fmapMaybe id $ tagPromptlyDyn safeKeyDyn postbuild
+      defaultKeyNewOptionsEv = R.fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> optionsDyn) someOptionsEv
+      newDropDownEv = R.leftmost [defaultKeyOnStartEv, defaultKeyNewOptionsEv]
+      
       dropdownWidget k0 = mdo
         let newK curK m = if M.member curK m then Nothing else headMay $ M.keys m
             newKEv = attachWithMaybe newK (current ddVal) (updated optionsDyn)
             k0removed oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m
             k0removedEv = attachWithMaybe k0removed (current k0Dyn) (updated optionsDyn)
-            innerSetEv = R.traceEventWith (const "innerSetEv") $ leftmost [newKEv, keySetSafeEv]
+            innerSetEv = leftmost [newKEv, keySetSafeEv]
             ddConfig = DropdownConfig innerSetEv attrsDyn  
         k0Dyn <- R.holdDyn k0 k0removedEv
         ddDyn <- RD.widgetHold (dropdown k0 optionsDyn ddConfig) $ (\x->dropdown x optionsDyn ddConfig) <$> k0removedEv
@@ -98,7 +99,7 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
         let ddChangeEv = R.leftmost [newKEv, k0removedEv, R.switch ddChangeEvBeh]
         return $ SafeDropdown (Just <$> ddVal) (Just <$> ddChangeEv)
 
-      dropdownWidgetEv = R.traceEventWith (const "dropdownWidgetEv") $ dropdownWidget <$> defaultKeyNewOptionsEv  
+      dropdownWidgetEv = dropdownWidget <$> newDropDownEv  
       newWidgetEv =  leftmost [noOptionsWidgetEv, dropdownWidgetEv]
   safeDyn <- widgetHold (noOptionsWidget never) newWidgetEv -- Dynamic t (SafeDropdown t k)
   return $ SafeDropdown (join $ _safeDropdown_value <$> safeDyn) (R.switch . current $ _safeDropdown_change <$> safeDyn)
