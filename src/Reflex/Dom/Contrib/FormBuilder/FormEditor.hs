@@ -40,12 +40,14 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation (AccValidation (Ac
                                                                FormError (FNothing),
                                                                FormErrors,
                                                                accValidation,
+                                                               avToMaybe,
                                                                maybeToFV,
                                                                mergeAccValidation)
 import           Reflex.Dom.Contrib.Layout.FlexLayout         (flexItem,
                                                                flexRow)
 import           Reflex.Dom.Contrib.Widgets.SafeDropdown      (SafeDropdown (..),
                                                                SafeDropdownConfig (..),
+                                                               safeDropdownConfig_setValue,
                                                                safeDropdownOfLabelKeyedValue)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult,
                                                                dynamicToWidgetResult,
@@ -54,6 +56,7 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult
 import           Reflex.Dynamic.FactorDyn                     (factorDyn')
 
 
+import           Control.Lens                                 ((&), (.~))
 import           Control.Monad                                (join)
 import           Control.Monad.Fix                            (MonadFix)
 import           Data.Bifunctor                               (bimap)
@@ -64,7 +67,7 @@ import qualified Data.Map                                     as M
 import qualified Data.Text                                    as T
 import qualified Generics.SOP                                 as SOP
 import           GHC.Generics                                 (Generic)
-
+import           Safe                                         (headMay)
 
 import           Reflex                                       (Dynamic,
                                                                MonadHold,
@@ -72,6 +75,7 @@ import           Reflex                                       (Dynamic,
                                                                fmapMaybe,
                                                                holdDyn,
                                                                leftmost,
+                                                               traceEventWith,
                                                                updated)
 import           Reflex.Dom                                   (DomBuilder,
                                                                PostBuild, def,
@@ -154,12 +158,11 @@ chooseAmong choices =
       chooserMap = M.fromList chooserList
       runMaybeEditorOn x =  maybe (Compose $ return formValueNothing) (flip runEditor x)
   in Editor $ \fva -> Compose $ flexRow $ do
-    fvaEv <- dynAsEv $ widgetResultToDynamic $ getCompose $ fva
-    let fValBoolToMaybe = accValidation (const Nothing) (bool Nothing (Just ()))
-        fvBoolToMaybeEv fvb = dynAsEv $ widgetResultToDynamic $ fmap fValBoolToMaybe (getCompose fvb)
-        chooserListItemToIntEvent (k, BuilderChoice _ ic _) = fmap (const k) . fmapMaybe id <$> (fvBoolToMaybeEv $ fmap ic fva)
-    changeToEv <- leftmost <$> (sequenceA $ chooserListItemToIntEvent <$> chooserList)
-    let ddConfig = def { _safeDropdownConfig_setValue = Just <$> changeToEv }
+    let mIntFromA a = fst <$> (headMay $ filter (\(_,bc) -> isA bc a) chooserList)
+    newMAEv <- dynAsEv $ widgetResultToDynamic $ avToMaybe <$> (getCompose $ fva)
+    let newChoiceEv = traceEventWith (\i -> "new index = " ++ show i) $ fmapMaybe (join . fmap mIntFromA) newMAEv
+        ddConfig = def
+                   & safeDropdownConfig_setValue .~ (Just <$> newChoiceEv)
     choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> bName cc) Nothing (constDyn chooserMap) ddConfig)
     x <- dyn (getCompose . runMaybeEditorOn fva . fmap edAB <$> choice) -- Event t (FormResult t s)
     y <- holdDyn formValueNothing x

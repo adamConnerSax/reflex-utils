@@ -231,7 +231,7 @@ test cfg = do
     [
       simpleProdEditorTab cfg
     , categoricalEditorTab cfg
-    , sumEditTab cfg
+--    , sumEditTab cfg
     , listEditTab cfg
     ]
   return ()
