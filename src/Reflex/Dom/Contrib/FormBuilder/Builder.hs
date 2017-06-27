@@ -31,6 +31,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
        , validateEditor
        , FormBuilder(..)
        , gBuildFormValidated
+       , gBuildEditorValidated
        , gBuildForm
        , buildFMDWrappedList
        , makeSubformData
@@ -177,6 +178,13 @@ gBuildForm :: ( RD.DomBuilder t m
   => Maybe FieldName -> FormValue t a -> Form t m a
 gBuildForm = gBuildFormValidated B.validator
 
+
+gBuildEditorValidated :: ( RD.DomBuilder t m
+                         , RD.MonadHold t m
+                         , RD.PostBuild t m
+                         , B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
+  => FormValidator a -> Maybe FieldName -> FormEditor t m a a
+gBuildEditorValidated va mFN = Editor $ gBuildFormValidated va mFN
 
 type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable FValidation a)
 
