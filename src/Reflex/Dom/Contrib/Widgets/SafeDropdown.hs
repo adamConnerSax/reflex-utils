@@ -88,7 +88,8 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
             newKEv = attachWithMaybe newK (current ddVal) (updated optionsDyn)
             k0removed oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m
             k0removedEv = attachWithMaybe k0removed (current k0Dyn) (updated optionsDyn)
-            ddConfig = DropdownConfig (leftmost [newKEv, keySetSafeEv]) attrsDyn  
+            innerSetEv = R.traceEventWith (const "innerSetEv") $ leftmost [newKEv, keySetSafeEv]
+            ddConfig = DropdownConfig innerSetEv attrsDyn  
         k0Dyn <- R.holdDyn k0 k0removedEv
         ddDyn <- RD.widgetHold (dropdown k0 optionsDyn ddConfig) $ (\x->dropdown x optionsDyn ddConfig) <$> k0removedEv
         let ddVal = join $ RD._dropdown_value <$> ddDyn
