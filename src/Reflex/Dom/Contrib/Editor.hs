@@ -43,7 +43,6 @@ import           Reflex.Dom                                   (DomBuilder,
                                                                PostBuild, dyn)
 
 
-
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }
 
 transformEditor :: (q a -> g a') -> (f b -> h b') -> Editor g f a' b -> Editor q h a b'
@@ -129,15 +128,29 @@ instance ( Applicative f
         x2 = fmap (either (fmap Left) (fmap Right)) x1
     getCompose $ combine x2
 
+-- This version allows an optimization step to move dynamics away from the combine.
+-- for instance, if you are "wandering" over a Dynamic t [a],
+-- you would do better to wander over a Dynamic t [Dynamic t a] where the outer dynamic only handles
+-- changes in list size.  Then the dyn in "combine" is firing as infrequently as possible.
+customWander :: ( Applicative g
+                , Applicative m
+                , f ~ Compose m g
+                , Combinable g f) => (g t -> g u) -> (g u -> g t) -> (forall q. Applicative q => (a -> q b) -> (s -> q t)) -> Editor g f a b -> Editor g f s t
+customWander toU fromU vlt (Editor eab) =
+  let doUnder x = Compose . fmap x . getCompose
+  in Editor $ doUnder fromU . combine . fmap (doUnder toU . vlt (eab . pure))
+
+-- TODO: write a generic traversable wander or at least a listWander and mapWander which optimize the use of dyn
+
+-- written in terms of the above since it's the same logic, only there's no place for the optimization functions                                          
 instance ( Applicative g
          , Applicative f
          , f ~ Compose m g
          , Monad m
          , Distributable g m
          , Combinable g f) => Traversing (Editor g f) where
-  wander :: (forall f. Applicative f => (a -> f b) -> (s -> f t)) -> Editor g f a b -> Editor g f s t
-  wander vlt (Editor eab) = Editor $ combine . fmap (vlt (eab . pure))
-
+  wander :: (forall q. Applicative q => (a -> q b) -> (s -> q t)) -> Editor g f a b -> Editor g f s t
+  wander = customWander id id
 
 (|<|) :: (Monad m, f ~ Compose m g) => Editor g f b c -> Editor g f a b -> Editor g f a c
 (Editor ebc) |<| (Editor eab) =  Editor $ \ga -> Compose $ join $ fmap (getCompose . ebc) (getCompose $ eab ga)-- Editor g f b c -> Editor g f a b -> Editor g f a c
@@ -167,9 +180,6 @@ instance ( Applicative f
          , Distributable g m
          , Combinable g f) => ArrowChoice (Editor g f) where
   left = left'  -- from Profunctor.Choice
-
-  
-  
 
 {-    
 -- | This makes any Editor with a (m (DynMaybe t)) result into a Category.
