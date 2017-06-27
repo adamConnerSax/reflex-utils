@@ -72,13 +72,16 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   postbuild <- RD.getPostBuild
   optionsNullEv <- R.holdUniqDyn (M.null <$> optionsDyn) >>= dynAsEv
   let (someOptionsEv, noOptionsEv) = fanBool optionsNullEv
-      (setToNothingEv, keySetEv) = R.fanEither $ maybe (Left ()) Right <$> leftmost [setEv, Just <$> R.fmapMaybe (const k0m) postbuild]
+      showE (Left _) = "setToNothing"
+      showE (Right _) = "keySetEv"
+      (setToNothingEv, keySetEv) = R.fanEither $ R.traceEventWith showE $ maybe (Left ()) Right <$> leftmost [ R.traceEventWith (const "setEv") setEv
+                                                                                                             , Just <$> R.fmapMaybe (const k0m) postbuild]
       noOptionsWidget ev = return $ SafeDropdown (constDyn Nothing) ev
-      noOptionsWidgetEv = noOptionsWidget (Nothing <$ noOptionsEv) <$ leftmost [noOptionsEv, setToNothingEv]
+      noOptionsWidgetEv = noOptionsWidget (Nothing <$ noOptionsEv) <$ leftmost [ noOptionsEv, setToNothingEv]
       defaultKeyNewOptionsEv = R.fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> optionsDyn) someOptionsEv
       keySetSafeEv =
-        let checkKey m k = if M.member k m then Just k else Nothing
-        in attachWithMaybe checkKey (current optionsDyn) keySetEv
+        let checkKey m k = Just k --if M.member k m then Just k else Nothing
+        in R.traceEventWith (const "keySetSafeEv") $ attachWithMaybe checkKey (current optionsDyn) keySetEv
         
       dropdownWidget k0 = mdo
         let newK curK m = if M.member curK m then Nothing else headMay $ M.keys m
@@ -114,7 +117,7 @@ safeDropdownOfLabelKeyedValue :: forall m t v l. (RD.DomBuilder t m
   -> SafeDropdownConfig t l
   -> m (SafeDropdown t v)
 safeDropdownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
-  let sdOptionsDyn = M.mapWithKey (\l v -> labelToText l v) <$> optionsDyn
+  let sdOptionsDyn = M.mapWithKey (\l v -> labelToText l v) <$> optionsDyn -- Map l Text
       maybeLookup opts ml = ml >>= flip M.lookup opts -- Map l v -> Maybe l -> Maybe v
       mapEvent = R.attachWith maybeLookup (current optionsDyn) -- Event t (Maybe l) -> Event t (Maybe v)
       mapDynamic = R.zipDynWith maybeLookup optionsDyn 
