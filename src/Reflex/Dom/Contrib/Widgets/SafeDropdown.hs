@@ -78,9 +78,9 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
                                                                                                              , Just <$> R.fmapMaybe (const k0m) postbuild]
       noOptionsWidget ev = return $ SafeDropdown (constDyn Nothing) ev
       noOptionsWidgetEv = noOptionsWidget (Nothing <$ noOptionsEv) <$ leftmost [ noOptionsEv, setToNothingEv]
-      defaultKeyNewOptionsEv = R.fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> optionsDyn) someOptionsEv
-      keySetSafeEv =
-        let checkKey m k = Just k --if M.member k m then Just k else Nothing
+      defaultKeyNewOptionsEv = R.traceEventWith (const "defaultKeyNewOptionsEv") $ R.fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> optionsDyn) someOptionsEv
+      keySetSafeEv = 
+        let checkKey m k = if M.member k m then Just k else Nothing
         in R.traceEventWith (const "keySetSafeEv") $ attachWithMaybe checkKey (current optionsDyn) keySetEv
         
       dropdownWidget k0 = mdo
@@ -96,8 +96,9 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
         ddChangeEvBeh <- R.hold R.never ddChangeEvEv
         let ddChangeEv = R.leftmost [newKEv, k0removedEv, R.switch ddChangeEvBeh]
         return $ SafeDropdown (Just <$> ddVal) (Just <$> ddChangeEv)
-        
-      newWidgetEv = leftmost [noOptionsWidgetEv, dropdownWidget <$> defaultKeyNewOptionsEv]
+
+      dropdownWidgetEv = R.traceEventWith (const "dropdownWidgetEv") $ dropdownWidget <$> defaultKeyNewOptionsEv  
+      newWidgetEv =  leftmost [noOptionsWidgetEv, dropdownWidgetEv]
   safeDyn <- widgetHold (noOptionsWidget never) newWidgetEv -- Dynamic t (SafeDropdown t k)
   return $ SafeDropdown (join $ _safeDropdown_value <$> safeDyn) (R.switch . current $ _safeDropdown_change <$> safeDyn)
 
