@@ -21,6 +21,9 @@ module Reflex.Dom.Contrib.FormBuilder.FormEditor
   -- reexports
   , runEditor
   , transformEditor
+  , editPart
+  , editOnly
+  , editAndBeForm
   , (|<|)
   , (|>|)
   ) where
@@ -28,6 +31,9 @@ module Reflex.Dom.Contrib.FormBuilder.FormEditor
 
 import           Reflex.Dom.Contrib.Editor                    (Combinable (..), Distributable (..),
                                                                Editor (Editor),
+                                                               editAndBe,
+                                                               editOnly,
+                                                               editPart,
                                                                embedEditor,
                                                                runEditor,
                                                                transformEditor,
@@ -58,7 +64,8 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult
 import           Reflex.Dynamic.FactorDyn                     (factorDyn')
 
 
-import           Control.Lens                                 ((&), (.~))
+import           Control.Lens                                 (Prism', (&),
+                                                               (.~))
 import           Control.Monad                                (join)
 import           Control.Monad.Fix                            (MonadFix)
 import           Data.Bifunctor                               (bimap)
@@ -90,6 +97,10 @@ import           Reflex.Dom                                   (DomBuilder,
 type Form t m = Compose (FR t m) (FormValue t)
 
 type FormEditor t m a b = Editor (FormValue t) (Form t m) a b
+
+editAndBeForm :: (Reflex t, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => Prism' s a -> FormEditor t m a a -> FormEditor t m s s
+editAndBeForm p = editAndBe p . maybeFormEditor
+
 
 -- Ditto for DynMaybe t m -> Form t m
 -- NB: This one uses the instance for (FormValue t m) (Form t m) by upgrading the DynMaybe to a FormValue.

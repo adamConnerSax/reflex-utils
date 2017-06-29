@@ -112,41 +112,19 @@ editProd2 = Prod
 
 -- using categorical composition
 
---embedWithLens' :: (f ~ Compose m g, Applicative m, Applicative g) => Lens s t a b -> Editor g f a b -> Editor g f s t
---embedWithLens' l (Editor eab) = Editor $ \gs -> set l <$> eab (fmap (view l) gs) <*> Compose (pure gs)
-
-embedWithLens :: (f ~ Compose m g, Applicative m, Applicative g) => Lens' s a -> Editor g f a a -> Editor g f s s
-embedWithLens l (Editor eaa) = Editor $ \gs -> set l <$> eaa (fmap (view l) gs) <*> Compose (pure gs)
-
-editOnly :: (Functor f, Functor g) => Prism' s a -> Editor g f (Maybe a) a -> Editor g f s s
-editOnly p = dimap (preview p) (review p)
-
---embedWithPrism :: forall g f s a. Choice (Editor g f) => Prism' s a -> Editor g f a a -> Editor g f s s
---embedWithPrism p ed = withPrism p go where
---  go :: (a -> s) -> (s -> Either s a) -> Editor g f s s
---  go makeS sToEither = dimap sToEither (either id makeS) $ right' ed
-
-embedFormWithPrism :: (Reflex t, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => Prism' s a -> FormEditor t m a a -> FormEditor t m s s
-embedFormWithPrism = wander
-
-editIfIs = wander
-
-editAndForceToBe :: (Reflex t, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => Prism' s a -> FormEditor t m a a -> FormEditor t m s s
-editAndForceToBe p = editOnly p . maybeFormEditor
-
 -- NB: we could change the order here and it would all still work.
 -- The widgets do not need to be in the order of the structure.  This is different from the applicative case.
 -- The point in (|>|) or (|<|) indicates the directional flow of data through the widgets
 -- We need a synonym for wander.  "focusEditor"? "zoomEditor"?
 editProd3 :: FormInstanceC t m => FormEditor t m Prod Prod
-editProd3 = (embedWithLens f1 $ editField Nothing) |>| (embedWithLens f2 $ editField Nothing) |>| (embedWithLens f3 $ editField Nothing)
+editProd3 = (editPart f1 $ editField Nothing) |>| (editPart f2 $ editField Nothing) |>| (editPart f3 $ editField Nothing)
 
 -- arrows! This is acting...odd
 editProd4 :: FormInstanceC t m => FormEditor t m Prod Prod
 editProd4 = proc x -> do
-  p1 <- (embedWithLens f1 $ editField Nothing) -< x
-  p2 <- (embedWithLens f2 $ editField Nothing) -< p1
-  p3 <- (embedWithLens f3 $ editField Nothing) -< p2
+  p1 <- (editPart f1 $ editField Nothing) -< x
+  p2 <- (editPart f2 $ editField Nothing) -< p1
+  p3 <- (editPart f3 $ editField Nothing) -< p2
   returnA -< p3
 
 simpleEditorW :: FormInstanceC t m => FormConfiguration t m -> m ()
@@ -194,30 +172,30 @@ editSum1 = editField Nothing
 -- this one allows editing of the incoming sum but cannot change which constructor is in play.  But you could also select which are
 -- editable by including only some of constructors
 editSum2 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum2 = (embedFormWithPrism _A $ editField Nothing) |>| (embedFormWithPrism _B $ editField Nothing) |>| (embedFormWithPrism _C $ editField Nothing)
+editSum2 = (editOnly _A $ editField Nothing) |>| (editOnly _B $ editField Nothing) |>| (editOnly _C $ editField Nothing)
 
 --
 -- This one allows you to choose which you want to be able to edit but can only edit if it matches the input
 editSum3 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum3 = chooseAmong [ BuilderChoice "If A" (const False) (editIfIs _A $ editField Nothing)
-                       , BuilderChoice "If B" (const False) (editIfIs _B $ editField Nothing)
-                       , BuilderChoice "If C" (const False) (editIfIs _C $ editField Nothing)
+editSum3 = chooseAmong [ BuilderChoice "If A" (const False) (editOnly _A $ editField Nothing)
+                       , BuilderChoice "If B" (const False) (editOnly _B $ editField Nothing)
+                       , BuilderChoice "If C" (const False) (editOnly _C $ editField Nothing)
                        ]
 
 -- this one lets you choose which to edit, forces the output to match.
 -- If the input is the same constructor, then this will be set by the input.
 editSum4 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum4 = chooseAmong [ BuilderChoice "Force A" (const False) (editAndForceToBe _A $ editField Nothing)
-                       , BuilderChoice "Force B" (const False) (editAndForceToBe _B $ editField Nothing)
-                       , BuilderChoice "Force C" (const False) (editAndForceToBe _C $ editField Nothing)
+editSum4 = chooseAmong [ BuilderChoice "Force A" (const False) (editAndBeForm _A $ editField Nothing)
+                       , BuilderChoice "Force B" (const False) (editAndBeForm _B $ editField Nothing)
+                       , BuilderChoice "Force C" (const False) (editAndBeForm _C $ editField Nothing)
                        ]
 
 -- this one lets you choose which to edit, forces the output to match.
 -- Switches on input
 editSum5 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum5 = chooseAmong [ BuilderChoice "A" (isJust . preview _A) (editAndForceToBe _A $ editField Nothing)
-                       , BuilderChoice "B" (isJust . preview _B) (editAndForceToBe _B $ editField Nothing)
-                       , BuilderChoice "C" (isJust . preview _C) (editAndForceToBe _C $ editField Nothing)
+editSum5 = chooseAmong [ BuilderChoice "A" (isJust . preview _A) (editAndBeForm _A $ editField Nothing)
+                       , BuilderChoice "B" (isJust . preview _B) (editAndBeForm _B $ editField Nothing)
+                       , BuilderChoice "C" (isJust . preview _C) (editAndBeForm _C $ editField Nothing)
                        ]
 
 sumEditW :: FormInstanceC t m => FormConfiguration t m -> m ()

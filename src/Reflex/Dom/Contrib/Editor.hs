@@ -12,6 +12,9 @@ module Reflex.Dom.Contrib.Editor
     Editor (Editor)
   , runEditor
   , transformEditor
+  , editPart
+  , editAndBe
+  , editOnly
   , (|<|)
   , (|>|)
   , DynMaybe
@@ -23,10 +26,13 @@ module Reflex.Dom.Contrib.Editor
 import           Reflex.Dynamic.FactorDyn (factorDyn')
 
 import qualified Generics.SOP  as SOP
-import           GHC.Generics (Generic)
+import           GHC.Generics                                 (Generic)
 import qualified Control.Category                             as C
 import           Control.Monad                                (join)
-import           Control.Monad.Fix (MonadFix)
+import           Control.Lens                                 (Lens', Prism' ,
+                                                               view, set,
+                                                               preview, review)
+import           Control.Monad.Fix                            (MonadFix)
 import           Data.Bifunctor                               (bimap)
 import           Data.Functor.Compose                         (Compose (Compose),
                                                                getCompose)
@@ -48,6 +54,15 @@ newtype Editor g f a b = Editor { runEditor :: g a -> f b }
 
 transformEditor :: (q a -> g a') -> (f b -> h b') -> Editor g f a' b -> Editor q h a b'
 transformEditor inF outF e = Editor $ outF . runEditor e . inF
+
+-- This doesn't work but I don't get why.
+{-
+editPart' :: (f ~ Compose m g, Applicative m, Applicative g) => Lens s t a b -> Editor g f a b -> Editor g f s t
+editPart' l (Editor eab) = Editor $ \gs -> set l <$> eab (fmap (view l) gs) <*> Compose (pure gs)
+-}
+
+editPart :: (f ~ Compose m g, Applicative m, Applicative g) => Lens' s a -> Editor g f a a -> Editor g f s s
+editPart l (Editor eaa) = Editor $ \gs -> set l <$> eaa (fmap (view l) gs) <*> Compose (pure gs)
 
 instance Functor f => Functor (Editor g f a) where
   fmap h (Editor e) = Editor $ fmap h . e
@@ -149,6 +164,27 @@ customWander toU fromU vlt (Editor eab) =
   in Editor $ doUnder fromU . combine . fmap (doUnder toU . vlt (eab . pure))
 
 -- TODO: write a generic traversable wander or at least a listWander and mapWander which optimize the use of dyn
+
+-- this will edit only if the input matches the prism.  Forces output to prism constructor
+editAndBe :: (Functor f, Functor g) => Prism' s a -> Editor g f (Maybe a) a -> Editor g f s s
+editAndBe p = dimap (preview p) (review p)
+
+-- this will edit only if the input matches the prism.  Otherwise pass the input through.
+editOnly :: ( Applicative g
+            , Applicative m
+            , f ~ Compose m g
+            , Combinable g f) => Prism' s a -> Editor g f a a -> Editor g f s s
+editOnly = customWander id id            
+
+
+{- This compiles but throws a heightBag error.  FactorDyn is buggy??
+-- we would prefer this to wander, I think, since it only uses optimized combine.
+embedWithPrism :: forall g f s a. Choice (Editor g f) => Prism' s a -> Editor g f a a -> Editor g f s s
+embedWithPrism p ed = withPrism p go where
+  go :: (a -> s) -> (s -> Either s a) -> Editor g f s s
+  go makeS sToEither = dimap sToEither (either id makeS) $ right' ed
+-}
+
 
 -- written in terms of the above since it's the same logic, only there's no place for the optimization functions                                          
 instance ( Applicative g
