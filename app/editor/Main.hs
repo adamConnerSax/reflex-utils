@@ -65,11 +65,12 @@ import           Reflex.Dom.Contrib.CssUtils                  (CssLink,
 --import           Css
 
 import           Control.Arrow                                (returnA)
-import           Control.Lens                                 (Prism, Traversal,
-                                                               each, makeLenses,
+import           Control.Lens                                 (Prism, Prism',
+                                                               Traversal, each,
+                                                               makeLenses,
                                                                makePrisms, over,
-                                                               preview, view,
-                                                               (^.))
+                                                               preview, review,
+                                                               view, (^.))
 import           Control.Monad.Fix                            (MonadFix)
 import           Data.Bool                                    (bool)
 import           Data.Functor.Compose                         (Compose (Compose),
@@ -77,7 +78,8 @@ import           Data.Functor.Compose                         (Compose (Compose)
 import qualified Data.Map                                     as M
 import           Data.Maybe                                   (isJust)
 import           Data.Monoid                                  ((<>))
-import           Data.Profunctor                              (lmap, rmap)
+import           Data.Profunctor                              (dimap, lmap,
+                                                               rmap)
 import           Data.Profunctor.Traversing                   (wander)
 import qualified Data.Text                                    as T
 import qualified GHC.Generics                                 as GHC
@@ -178,6 +180,12 @@ editSum3 = chooseAmong [ BuilderChoice "Is A" (const False) (wander _A $ editFie
                        ]
 
 
+prismEditor :: (Functor f, Functor g) => Prism' s a -> Editor g f (Maybe a) a -> Editor g f s s
+prismEditor p = dimap (preview p) (review p)
+
+prismFormEditor :: (Reflex t, Monad m) => Prism' s a -> FormEditor t m a a -> FormEditor t m s s
+prismFormEditor p = prismEditor p . maybeFormEditor
+
 -- this one lets you choose which to edit, forces the output to match.
 -- If the input is the same constructor, then this will be set by the input.
 editSum4 :: FormInstanceC t m => FormEditor t m Sum Sum
@@ -197,7 +205,7 @@ editSum5 = chooseAmong [ BuilderChoice "A" (isJust . preview _A) (A <$> (lmap $ 
 sumEditW :: FormInstanceC t m => FormConfiguration t m -> m ()
 sumEditW cfg = do
   let fvp0 = constFormValue $ A 12
-      ed = boxEditor editSum1 |>| boxEditor editSum2 |>| boxEditor editSum3 |>| boxEditor editSum4 |>| boxEditor editSum5
+      ed = boxEditor editSum1 |>| boxEditor editSum2  |>|  boxEditor editSum3 {- |>| boxEditor editSum4 |>| boxEditor editSum5 -}
   fvpOut <- flexItem $ runForm cfg $ runEditor ed fvp0
   flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvpOut)
 

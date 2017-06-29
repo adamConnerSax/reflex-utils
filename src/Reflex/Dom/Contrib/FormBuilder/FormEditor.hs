@@ -17,6 +17,7 @@ module Reflex.Dom.Contrib.FormBuilder.FormEditor
   , maybeFormEditor
   , BuilderChoice (..)
   , chooseAmong
+  , embedEditor
   -- reexports
   , runEditor
   , transformEditor
@@ -27,6 +28,7 @@ module Reflex.Dom.Contrib.FormBuilder.FormEditor
 
 import           Reflex.Dom.Contrib.Editor                    (Combinable (..), Distributable (..),
                                                                Editor (Editor),
+                                                               embedEditor,
                                                                runEditor,
                                                                transformEditor,
                                                                (|<|), (|>|))
@@ -161,7 +163,7 @@ chooseAmong choices =
   in Editor $ \fva -> Compose $ flexRow $ do
     let mIntFromA a = fst <$> (headMay $ filter (\(_,bc) -> isA bc a) chooserList)
     newMAEv <- dynAsEv $ widgetResultToDynamic $ avToMaybe <$> (getCompose $ fva)
-    let newChoiceEv = fmapMaybe (join . fmap mIntFromA) newMAEv
+    let newChoiceEv = fmapMaybe (>>= mIntFromA) newMAEv
         ddConfig = def
                    & safeDropdownConfig_setValue .~ (Just <$> newChoiceEv)
     choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> bName cc) Nothing (constDyn chooserMap) ddConfig)

@@ -17,6 +17,7 @@ module Reflex.Dom.Contrib.Editor
   , DynMaybe
   , Combinable (..)
   , Distributable (..)
+  , embedEditor
   ) where
 
 import           Reflex.Dynamic.FactorDyn (factorDyn')
@@ -127,6 +128,13 @@ instance ( Applicative f
     let x1 = fmap (bimap (runEditor ed) (Compose . pure)) dist_geac
         x2 = fmap (either (fmap Left) (fmap Right)) x1
     getCompose $ combine x2
+
+
+embedEditor :: ( Applicative g
+               , Applicative m
+               , f ~ Compose m g
+               , Combinable g f) => (forall q. Applicative q => (a -> q b) -> (s -> q t)) -> Editor g f a b -> Editor g f s t  
+embedEditor = customWander id id
 
 -- This version allows an optimization step to move dynamics away from the combine.
 -- for instance, if you are "wandering" over a Dynamic t [a],
