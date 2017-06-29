@@ -172,4 +172,19 @@ chooseAmong choices =
     return $ Compose $ dynamicWidgetResultToWidgetResult $ getCompose <$> y
 
 
+chooseAmong' :: (Reflex t, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => [BuilderChoice t m a b] -> FormEditor t m a b
+chooseAmong' choices =
+  let chooserList = zip ([0..] :: [Int]) choices
+      chooserMap = M.fromList chooserList
+      runMaybeEditorOn x =  maybe (Compose $ return formValueNothing) (flip runEditor x)
+  in Editor $ \fva -> Compose $ flexRow $ do
+    let fValBoolToMaybe = accValidation (const Nothing) (bool Nothing (Just ()))
+        fvBoolToMaybeEv fvb = updated $ widgetResultToDynamic $ fmap fValBoolToMaybe (getCompose fvb)
+        chooserListItemToIntEvent (k, BuilderChoice _ ic _) = k <$ (fmapMaybe id $ fvBoolToMaybeEv $ fmap ic fva)
+        changeToEv = leftmost $ chooserListItemToIntEvent <$> chooserList
+        ddConfig = def { _safeDropdownConfig_setValue = Just <$> changeToEv }
+    choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> bName cc) Nothing (constDyn chooserMap) ddConfig)
+    x <- dyn (getCompose . runMaybeEditorOn fva . fmap edAB <$> choice) -- Event t (FormResult t s)
+    y <- holdDyn formValueNothing x
+    return $ Compose $ dynamicWidgetResultToWidgetResult $ getCompose <$> y
 

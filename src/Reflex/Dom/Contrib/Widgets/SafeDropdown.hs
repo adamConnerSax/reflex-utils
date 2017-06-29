@@ -21,7 +21,7 @@ module Reflex.Dom.Contrib.Widgets.SafeDropdown
   , safeDropdownOfLabelKeyedValue
   ) where
 
-import Reflex.Dom.Contrib.DynamicUtils (dynAsEv)
+import Reflex.Dom.Contrib.DynamicUtils (dynAsEv, dynPlusEvent)
 import Reflex.Dom.Contrib.EventUtils (fanBool)
 import Reflex.Dom.Contrib.Widgets.WidgetResult (WrappedWidgetResult, unsafeBuildWrappedWidgetResult)
 
@@ -74,10 +74,12 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
   optionsNullEv <- R.updated <$> R.holdUniqDyn (M.null <$> optionsDyn) 
   let (someOptionsEv, noOptionsEv) = fanBool optionsNullEv
       (setToNothingEv, keySetEv) = R.fanEither $ maybe (Left ()) Right <$> leftmost [setEv, Just <$> R.fmapMaybe (const k0m) postbuild]
+      reallySafeKeyDyn = headMay . M.keys <$> optionsDyn
       keySetSafeEv = 
         let checkKey m k = if M.member k m then Just k else Nothing
         in attachWithMaybe checkKey (current optionsDyn) keySetEv
-  safeKeyDyn <- R.holdDyn Nothing (Just <$> keySetSafeEv)  
+      
+  safeKeyDyn <- dynPlusEvent reallySafeKeyDyn (Just <$> keySetSafeEv)  
   let noOptionsWidget ev = return $ SafeDropdown (constDyn Nothing) ev
       noOptionsWidgetEv = noOptionsWidget (Nothing <$ noOptionsEv) <$ leftmost [ noOptionsEv, setToNothingEv]
       defaultKeyOnStartEv = R.fmapMaybe id $ tagPromptlyDyn safeKeyDyn postbuild
@@ -100,7 +102,7 @@ safeDropdown k0m optionsDyn (SafeDropdownConfig setEv attrsDyn) = do
         return $ SafeDropdown (Just <$> ddVal) (Just <$> ddChangeEv)
 
       dropdownWidgetEv = dropdownWidget <$> newDropDownEv  
-      newWidgetEv =  leftmost [noOptionsWidgetEv, dropdownWidgetEv]
+      newWidgetEv =  leftmost [dropdownWidgetEv, noOptionsWidgetEv]
   safeDyn <- widgetHold (noOptionsWidget never) newWidgetEv -- Dynamic t (SafeDropdown t k)
   return $ SafeDropdown (join $ _safeDropdown_value <$> safeDyn) (R.switch . current $ _safeDropdown_change <$> safeDyn)
 

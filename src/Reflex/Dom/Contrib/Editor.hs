@@ -39,7 +39,7 @@ import           Reflex                                       (Dynamic,
                                                                MonadHold,
                                                                Reflex,
                                                                buildDynamic,
-                                                               constDyn)
+                                                               constDyn, holdDyn)
 import           Reflex.Dom                                   (DomBuilder,
                                                                PostBuild, dyn)
 
@@ -83,7 +83,7 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
     let mdm2dm = Compose . fmap join . sequenceA . fmap getCompose  
         x1 = fmap (fmap mdm2dm . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t (m (DynMaybe t a))
     x2 <- dyn x1 -- Event t (DynMaybe t a)
-    dmd <- buildDynamic (return $ constDyn Nothing) (getCompose <$> x2)
+    dmd <- holdDyn (constDyn Nothing) (getCompose <$> x2)
     return $ Compose $ join dmd
 
 {-
@@ -91,7 +91,7 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
   combine :: h t (Compose m (h t) a) -> Compose m (h t) a
 -}
 
--- Applicative (Pointed) is the obvious way to do this but there are others, 
+-- Applicative (Pointed) is the obvious way to do this but there are others, e.g., factorDyn
 class Monad m => Distributable g m where
   distribute :: g (Either a c) -> m (g (Either (g a) (g c)))
 

@@ -2,6 +2,7 @@ module Reflex.Dom.Contrib.DynamicUtils
   (
     dynStartingFrom
   , dynPlusEvent
+--  , hiccupDyn
   , dynAsEv
   , traceDynAsEv
   , mDynAsEv
@@ -21,6 +22,10 @@ dynStartingFrom d = R.buildDynamic (R.sample $ R.current d)
 dynPlusEvent :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
 dynPlusEvent d e = dynStartingFrom d $ R.leftmost [R.updated d, e]
 
+{-
+hiccupDyn :: (R.Reflex t, R.MonadHold t m, RD.PostBuild t m) => R.Dynamic t a -> m (R.Dynamic t a)
+hiccupDyn da = RD.getPostBuild >>= dynPlusEvent da . R.tagPromptlyDyn da
+-}
 -- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
 -- that's the value we want not the tagged current value.
 dynAsEv :: RD.PostBuild t m => R.Dynamic t a -> m (R.Event t a)
