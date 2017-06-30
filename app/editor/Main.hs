@@ -107,20 +107,21 @@ editProd1 = editField Nothing
 -- using applicative composition
 editProd2 :: FormInstanceC t m => FormEditor t m Prod Prod
 editProd2 = Prod
-            <$> lmap (view f1) (editField Nothing)
-            <*> lmap (view f2) (editField Nothing)
-            <*> lmap (view f3) (editField Nothing)
+            <$> focusInput f1 (editField Nothing)
+            <*> focusInput f2 (editField Nothing)
+            <*> focusInput f3 (editField Nothing)
 
 -- using categorical composition
 
 -- NB: we could change the order here and it would all still work.
 -- The widgets do not need to be in the order of the structure.  This is different from the applicative case.
 -- The point in (|>|) or (|<|) indicates the directional flow of data through the widgets
--- We need a synonym for wander.  "focusEditor"? "zoomEditor"?
+-- Also note, if the input to this thing is Nothing, this will only output Nothing since no single editor can make the entire type Just.
 editProd3 :: FormInstanceC t m => FormEditor t m Prod Prod
 editProd3 = (editPart f1 $ editField Nothing) |>| (editPart f2 $ editField Nothing) |>| (editPart f3 $ editField Nothing)
 
 -- arrows!
+-- Also note, if the input to this thing is Nothing, this will only output Nothing since no single arrow can make the entire type Just.
 editProd4 :: FormInstanceC t m => FormEditor t m Prod Prod
 editProd4 = proc x -> do
   p1 <- (editPart f1 $ editField Nothing) -< x
@@ -223,7 +224,7 @@ editSumTupleGeneric = editField Nothing
 editSumTuple1 :: forall t m. FormInstanceC t m => FormEditor t m SumTuple SumTuple
 editSumTuple1 =
   let aTupleEd = editField Nothing
-      bTupleEd = (,) <$> lmap (view _1) (editField Nothing) <*> lmap (view _2) (editField Nothing)
+      bTupleEd = (,) <$> focusInput _1 (editField Nothing) <*> focusInput _2 (editField Nothing)
       cTupleEd = defaultFormValue (1,1) $ (editPart _1 $ editField Nothing) |>| (editPart _2 $ editField Nothing)
       dTupleEd = (editPart _1 $ editField Nothing) |>| (editPart _2 $ editField Nothing) -- NB: If the input to this is Nothing, it can only output Nothing.
   in chooseAmong [ BuilderChoice "ATuple" (has _ATuple) (editAndBeForm _ATuple aTupleEd)

@@ -35,7 +35,7 @@ import Control.Lens (makeLenses)
 import Control.Monad (join)
 import Control.Monad.Fix (MonadFix)
 import Data.Default
-import Data.Bool (bool)
+--import Data.Bool (bool)
 import Safe (headMay)
 import qualified Data.Map as M
 import qualified Data.Text as T

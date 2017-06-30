@@ -15,6 +15,7 @@ module Reflex.Dom.Contrib.Editor
   , editPart
   , editAndBe
   , editOnly
+  , focusInput
   , (|<|)
   , (|>|)
   , DynMaybe
@@ -29,14 +30,14 @@ import qualified Generics.SOP  as SOP
 import           GHC.Generics                                 (Generic)
 import qualified Control.Category                             as C
 import           Control.Monad                                (join)
-import           Control.Lens                                 (Lens', Prism' ,
+import           Control.Lens                                 (Lens', Prism', Getter,
                                                                view, set,
                                                                preview, review)
 import           Control.Monad.Fix                            (MonadFix)
 import           Data.Bifunctor                               (bimap)
 import           Data.Functor.Compose                         (Compose (Compose),
                                                                getCompose)
-import           Data.Profunctor                              (Choice (..), Profunctor (dimap),
+import           Data.Profunctor                              (Choice (..), Profunctor (lmap,dimap),
                                                                Strong (..))
 import           Data.Profunctor.Traversing                   (Traversing (..))
 import           Control.Arrow                                (Arrow(..), ArrowChoice (..))
@@ -176,6 +177,8 @@ editOnly :: ( Applicative g
             , Combinable g f) => Prism' s a -> Editor g f a a -> Editor g f s s
 editOnly = customWander id id            
 
+focusInput :: (Functor f, Functor g) => Getter s a -> Editor g f a b -> Editor g f s b
+focusInput l = lmap (view l)
 
 {- This compiles but throws a heightBag error.  FactorDyn is buggy??
 -- we would prefer this to wander, I think, since it only uses optimized combine.

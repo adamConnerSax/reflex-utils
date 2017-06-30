@@ -20,13 +20,14 @@ module Reflex.Dom.Contrib.FormBuilder.FormEditor
   , maybeFormEditor
   , BuilderChoice (..)
   , chooseAmong
+  , editAndBeForm
   -- reexports
   , runEditor
   , embedEditor
   , transformEditor
   , editPart
   , editOnly
-  , editAndBeForm
+  , focusInput
   , (|<|)
   , (|>|)
   ) where
@@ -38,6 +39,7 @@ import           Reflex.Dom.Contrib.Editor                    (Combinable (..), 
                                                                editOnly,
                                                                editPart,
                                                                embedEditor,
+                                                               focusInput,
                                                                runEditor,
                                                                transformEditor,
                                                                (|<|), (|>|))
