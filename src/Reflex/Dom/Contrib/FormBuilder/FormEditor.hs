@@ -152,7 +152,7 @@ instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormValue t) m 
 -- utilities
 
 fValishFormEditor :: Reflex t => (g a -> FValidation a) -> FormEditor t m a b -> FormEditor t m (g a) b
-fValishFormEditor toFVal ed = Editor $ runEditor ed . Compose . (fmap mergeAccValidation) . getCompose . fmap toFVal
+fValishFormEditor toFVal ed = Editor $ runEditor ed . Compose . fmap mergeAccValidation . getCompose . fmap toFVal
 
 fValFormEditor :: Reflex t => FormEditor t m a b -> FormEditor t m (FValidation a) b
 fValFormEditor = fValishFormEditor id

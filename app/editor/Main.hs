@@ -72,7 +72,8 @@ import           Control.Lens                                 (Lens, Lens',
                                                                makePrisms, over,
                                                                preview, review,
                                                                set, view,
-                                                               withPrism, (^.))
+                                                               withPrism, (^.),
+                                                               _1, _2, _3)
 import           Control.Monad.Fix                            (MonadFix)
 import           Data.Bool                                    (bool)
 import           Data.Functor.Compose                         (Compose (Compose),
@@ -208,6 +209,39 @@ sumEditW cfg = do
 sumEditTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 sumEditTab cfg = TabInfo "Simple Sum" (constDyn ("Simple Sum Example", M.empty)) $ sumEditW cfg
 
+data SumTuple = ATuple Int Int | BTuple T.Text Color Double | CTuple (Int, Int) deriving (GHC.Generic, Show)
+instance Generic SumTuple
+instance HasDatatypeInfo SumTuple
+instance FormInstanceC t m => FormBuilder t m SumTuple
+
+
+makePrisms ''SumTuple
+
+editSumTupleGeneric :: FormInstanceC t m => FormEditor t m SumTuple SumTuple
+editSumTupleGeneric = editField Nothing
+
+editSumTuple1 :: forall t m. FormInstanceC t m => FormEditor t m SumTuple SumTuple
+editSumTuple1 =
+  let aTupleEd = (editPart _1 $ editField Nothing) |>| (editPart _2 $ editField Nothing)
+      bTupleEd = (editPart _1 $ editField Nothing) |>| (editPart _2 $ editField Nothing) |>| (editPart _3 $ editField Nothing)
+      cTupleEd = editField Nothing --(editPart _1 $ editField Nothing) |>| (editPart _2 $ editField Nothing)
+  in chooseAmong [ BuilderChoice "ATuple" (isJust . preview _ATuple) (editAndBeForm _ATuple aTupleEd)
+                 , BuilderChoice "BTuple" (isJust . preview _BTuple) (editAndBeForm _BTuple bTupleEd)
+                 , BuilderChoice "CTuple" (isJust . preview _CTuple) (editAndBeForm _CTuple cTupleEd)
+                 ]
+
+sumTupleEditW :: FormInstanceC t m => FormConfiguration t m -> m ()
+sumTupleEditW cfg = do
+  let fvp0 = constFormValue $ ATuple 2 2
+      ed = boxEditor editSumTupleGeneric |>| boxEditor editSumTuple1
+  fvpOut <- flexItem $ runForm cfg $ runEditor ed fvp0
+  flexItem $ dynText $ T.pack . show <$> (getCompose $ formValueToDynMaybe $ fvpOut)
+
+
+sumTupleEditTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
+sumTupleEditTab cfg = TabInfo "Tuple Sum" (constDyn ("Tuple Sum Example", M.empty)) $ sumTupleEditW cfg
+
+
 -- traversals
 
 listOfS :: [Sum]
@@ -236,6 +270,7 @@ test cfg = do
       simpleProdEditorTab cfg
     , categoricalEditorTab cfg
     , sumEditTab cfg
+    , sumTupleEditTab cfg
     , listEditTab cfg
     ]
   return ()
