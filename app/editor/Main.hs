@@ -68,7 +68,7 @@ import           Control.Arrow                                (returnA)
 import           Control.Lens                                 (Lens, Lens',
                                                                Prism, Prism',
                                                                Traversal, each,
-                                                               makeLenses,
+                                                               has, makeLenses,
                                                                makePrisms, over,
                                                                preview, review,
                                                                set, view,
@@ -120,7 +120,7 @@ editProd2 = Prod
 editProd3 :: FormInstanceC t m => FormEditor t m Prod Prod
 editProd3 = (editPart f1 $ editField Nothing) |>| (editPart f2 $ editField Nothing) |>| (editPart f3 $ editField Nothing)
 
--- arrows! This is acting...odd
+-- arrows!
 editProd4 :: FormInstanceC t m => FormEditor t m Prod Prod
 editProd4 = proc x -> do
   p1 <- (editPart f1 $ editField Nothing) -< x
@@ -194,9 +194,9 @@ editSum4 = chooseAmong [ BuilderChoice "Force A" (const False) (editAndBeForm _A
 -- this one lets you choose which to edit, forces the output to match.
 -- Switches on input
 editSum5 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum5 = chooseAmong [ BuilderChoice "A" (isJust . preview _A) (editAndBeForm _A $ editField Nothing)
-                       , BuilderChoice "B" (isJust . preview _B) (editAndBeForm _B $ editField Nothing)
-                       , BuilderChoice "C" (isJust . preview _C) (editAndBeForm _C $ editField Nothing)
+editSum5 = chooseAmong [ BuilderChoice "A" (has _A) (editAndBeForm _A $ editField Nothing)
+                       , BuilderChoice "B" (has _B) (editAndBeForm _B $ editField Nothing)
+                       , BuilderChoice "C" (has _C) (editAndBeForm _C $ editField Nothing)
                        ]
 
 sumEditW :: FormInstanceC t m => FormConfiguration t m -> m ()
@@ -209,7 +209,7 @@ sumEditW cfg = do
 sumEditTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 sumEditTab cfg = TabInfo "Simple Sum" (constDyn ("Simple Sum Example", M.empty)) $ sumEditW cfg
 
-data SumTuple = ATuple Int Int | BTuple T.Text Color Double | CTuple (Int, Int) deriving (GHC.Generic, Show)
+data SumTuple = ATuple Int Int | BTuple Int Int | CTuple Int Int | DTuple Int Int deriving (GHC.Generic, Show)
 instance Generic SumTuple
 instance HasDatatypeInfo SumTuple
 instance FormInstanceC t m => FormBuilder t m SumTuple
@@ -222,12 +222,14 @@ editSumTupleGeneric = editField Nothing
 
 editSumTuple1 :: forall t m. FormInstanceC t m => FormEditor t m SumTuple SumTuple
 editSumTuple1 =
-  let aTupleEd = (editPart _1 $ editField Nothing) |>| (editPart _2 $ editField Nothing)
-      bTupleEd = (editPart _1 $ editField Nothing) |>| (editPart _2 $ editField Nothing) |>| (editPart _3 $ editField Nothing)
-      cTupleEd = editField Nothing --(editPart _1 $ editField Nothing) |>| (editPart _2 $ editField Nothing)
-  in chooseAmong [ BuilderChoice "ATuple" (isJust . preview _ATuple) (editAndBeForm _ATuple aTupleEd)
-                 , BuilderChoice "BTuple" (isJust . preview _BTuple) (editAndBeForm _BTuple bTupleEd)
-                 , BuilderChoice "CTuple" (isJust . preview _CTuple) (editAndBeForm _CTuple cTupleEd)
+  let aTupleEd = editField Nothing
+      bTupleEd = (,) <$> lmap (view _1) (editField Nothing) <*> lmap (view _2) (editField Nothing)
+      cTupleEd = defaultFormValue (1,1) $ (editPart _1 $ editField Nothing) |>| (editPart _2 $ editField Nothing)
+      dTupleEd = (editPart _1 $ editField Nothing) |>| (editPart _2 $ editField Nothing) -- NB: If the input to this is Nothing, it can only output Nothing.
+  in chooseAmong [ BuilderChoice "ATuple" (has _ATuple) (editAndBeForm _ATuple aTupleEd)
+                 , BuilderChoice "BTuple" (has _BTuple) (editAndBeForm _BTuple bTupleEd)
+                 , BuilderChoice "CTuple" (has _CTuple) (editAndBeForm _CTuple cTupleEd)
+                 , BuilderChoice "DTuple" (has _DTuple) (editAndBeForm _DTuple dTupleEd)
                  ]
 
 sumTupleEditW :: FormInstanceC t m => FormConfiguration t m -> m ()

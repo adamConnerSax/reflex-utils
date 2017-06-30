@@ -9,17 +9,20 @@
 {-# LANGUAGE UndecidableInstances  #-}
 module Reflex.Dom.Contrib.FormBuilder.FormEditor
   (
+  -- Types
     Form
   , FormEditor
   , Editor (Editor)
+  -- Utilities
+  , defaultFormValue
   , fValishFormEditor
   , fValFormEditor
   , maybeFormEditor
   , BuilderChoice (..)
   , chooseAmong
-  , embedEditor
   -- reexports
   , runEditor
+  , embedEditor
   , transformEditor
   , editPart
   , editOnly
@@ -40,7 +43,8 @@ import           Reflex.Dom.Contrib.Editor                    (Combinable (..), 
                                                                (|<|), (|>|))
 
 import           Reflex.Dom.Contrib.DynamicUtils              (dynAsEv)
-import           Reflex.Dom.Contrib.FormBuilder.Configuration (FR, FormValue, dynMaybeToFormValue,
+import           Reflex.Dom.Contrib.FormBuilder.Configuration (FR, FormValue, addFormValueDefault,
+                                                               dynMaybeToFormValue,
                                                                formValueNothing)
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation (AccValidation (AccFailure, AccSuccess),
                                                                DynMaybe,
@@ -150,6 +154,8 @@ instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormValue t) m 
     return $ fmap (bimap (dynMaybeToFormValue . Compose . fmap pure) (dynMaybeToFormValue . Compose . fmap pure)) x4
 
 -- utilities
+defaultFormValue :: Reflex t => a -> FormEditor t m a b -> FormEditor t m a b
+defaultFormValue dflt = transformEditor (addFormValueDefault dflt) id -- Editor $ runEditor e . FBC.addFormValueDefault dflt
 
 fValishFormEditor :: Reflex t => (g a -> FValidation a) -> FormEditor t m a b -> FormEditor t m (g a) b
 fValishFormEditor toFVal ed = Editor $ runEditor ed . Compose . fmap mergeAccValidation . getCompose . fmap toFVal
