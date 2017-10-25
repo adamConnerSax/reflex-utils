@@ -2,8 +2,8 @@
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
 resolver: 
-  name: jsaddle8-snapshot
-  location: ../stack-custom-snapshots/jsaddle/jsaddle8-snapshot.yaml
+  name: jsaddle9-snapshot
+  location: ../stack-custom-snapshots/jsaddle/jsaddle9-snapshot.yaml
 
 packages:
 - location:
@@ -14,26 +14,30 @@ packages:
     git: https://github.com/adamConnerSax/dataBuilder
     commit: "e6a84e66bcb4afbd7ea7a1035b06c722b4efa617"
   extra-dep: true
-- location:
-    git: https://github.com/adamConnerSax/reflex-sumType-utilities
-    commit: "ae53680dde9babeea3b1760fce7c4a60a3e58c2e"
-  extra-dep: true
+#- location:
+#    git: https://github.com/adamConnerSax/reflex-sumType-utilities
+#    commit: "ae53680dde9babeea3b1760fce7c4a60a3e58c2e"
+#  extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex
-    commit: "75426f7c85e83db3365a3dac9c3ac67710fed2de"
+    commit: "af07fd8462bb0a87d132c20b1e15f4a870759eff" # generics-sop branch
+#    commit: "75426f7c85e83db3365a3dac9c3ac67710fed2de"
   extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex-dom
+    commit: "986e1cfb514e8a8832479924166920f783787742" # newer develop
 #    commit: "c86fee7a7d731f50aa100b32e79010dd69e11409" # jsaddle family 0.9
-    commit: "706ab47df9729bdc5c4ac3f4d8dfd4661d9f6e1a" # jsaddle family 0.8
+#    commit: "706ab47df9729bdc5c4ac3f4d8dfd4661d9f6e1a" # jsaddle family 0.8
   extra-dep: true
   subdirs:
   - reflex-dom-core
   - reflex-dom
-- location:
-    git: https://github.com/reflex-frp/reflex-dom-contrib
-    commit: "904fc9915c3de995a3084df50243400337ddd1f8"
+#- location:
+#    git: https://github.com/reflex-frp/reflex-dom-contrib
+#    commit: "80f0e032b500fe450e0a2f948424f7ee88891f4d" # newer version
+#    commit: "904fc9915c3de995a3084df50243400337ddd1f8"
   extra-dep: true
+- '../../github/reflex/reflex-dom-contrib'  
 #- '../dataBuilder'  
 - '.'
 

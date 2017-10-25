@@ -24,7 +24,7 @@ module Reflex.Dom.Contrib.Editor
   , embedEditor
   ) where
 
-import           Reflex.Dynamic.FactorDyn (factorDyn')
+import           Reflex.Dynamic.FactorDynGeneric (factorDynGeneric)
 
 import qualified Generics.SOP  as SOP
 import           GHC.Generics                                 (Generic)
@@ -123,7 +123,7 @@ fromMaybeEither (L x) = Just $ Left x
 fromMaybeEither (R x) = Just $ Right x
     
 factorMaybeEither :: (Reflex t, MonadHold t m, MonadFix m) => Dynamic t (MaybeEither a b) -> m (Dynamic t (MaybeEither (Dynamic t a) (Dynamic t b)))
-factorMaybeEither = factorDyn'
+factorMaybeEither = factorDynGeneric
                                                                                                
 instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (DynMaybe t) m where
   distribute :: forall t a b m. (Reflex t, MonadHold t m, MonadFix m) => DynMaybe t (Either a b) -> m (DynMaybe t (Either (DynMaybe t a) (DynMaybe t b)))

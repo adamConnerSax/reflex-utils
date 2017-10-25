@@ -12,25 +12,26 @@
 
 import           Control.Monad.Ref
 import           Data.IORef
-import           GHCJS.DOM.Types                   (JSM)
-import           Language.Javascript.JSaddle.Warp  (run)
+import           Data.Map.Misc                    (applyMap)
+import           GHCJS.DOM.Types                  (JSM)
+import           Language.Javascript.JSaddle.Warp (run)
 import           Reflex
-import           Reflex.Dom                        hiding (mainWidget, run)
-import           Reflex.Dom.Core                   (mainWidget)
-import           Reflex.Dom.Old                    (MonadWidget)
+import           Reflex.Dom                       hiding (mainWidget, run)
+import           Reflex.Dom.Core                  (mainWidget)
+import           Reflex.Dom.Old                   (MonadWidget)
 
-import           Control.Monad                     (join)
-import           Control.Monad.Fix                 (MonadFix)
+import           Control.Monad                    (join)
+import           Control.Monad.Fix                (MonadFix)
 
-import qualified Data.Map                          as M
-import           Data.Maybe                        (fromJust, isNothing)
-import           Data.Monoid                       ((<>))
-import qualified Data.Text                         as T
+import qualified Data.Map                         as M
+import           Data.Maybe                       (fromJust, isNothing)
+import           Data.Monoid                      ((<>))
+import qualified Data.Text                        as T
 
-import           System.Process                    (spawnProcess)
-import           Text.Read                         (readMaybe)
+import           System.Process                   (spawnProcess)
+import           Text.Read                        (readMaybe)
 
-import           Safe                              (headMay)
+import           Safe                             (headMay)
 
 -- NB: This is just for warp.
 main::IO ()
@@ -53,7 +54,7 @@ testWidget = mainWidget $ do
   el "p" $ text "These editor widgets are each made using one of the listView family of functions.  I used each to build the same basic widget for editing a map.  The basic editor is then extended to support removing elements from the map and then adding them as well.  It turns out this can be done generically: using value widgets returning (Just v) for an edit and Nothing for a delete, and tacking an additional widget on to handle the addition of new elements."
   el "p" $ text "I include all 3 variations for the listWithKey version and then only the edit, delete and add versions for the other listView functions."
   el "p" $ text "Each widget's output is sent to the next as input in order to test that dynamic input is correctly handled."
-  
+
   bigBreak
   el "h2" $ text "Using ListWithKey"
   res1 <- el "div" $ buildLBEMapLWK keyedWidget $ constDyn x0
@@ -125,7 +126,7 @@ buildLBEMapLVWKSD editOneValueWK mapDyn0 = mdo
 -- dropdown will switch out if map is empty and rebuild if default key is forced to change
 
 boolToEither::Bool -> Either () ()
-boolToEither True = Right ()
+boolToEither True  = Right ()
 boolToEither False = Left ()
 -- NB: right event fires if true, left if false--(FalseEv,TrueEv)--which fits Either but is not intuitive, at least to me
 fanBool::Reflex t=>Event t Bool->(Event t (), Event t ())
@@ -137,19 +138,19 @@ buildLBEMapSVLWK editOneValueWK mapDyn0 = mdo
   let editW k vDyn selDyn = fieldWidgetEv (addDynamicVisibility editOneValueWK selDyn k) (Just vDyn) -- (k->Dynamic t v->Dynamic t Bool->m (Event t (Maybe v)))
       selectWidget k0 = mdo
         let ddConfig = def & dropdownConfig_attributes .~ constDyn ("size" =: "1")
-            newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m            
+            newK0 oldK0 m = if M.member oldK0 m then Nothing else headMay $ M.keys m
             newk0Ev = attachWithMaybe newK0 (current k0Dyn) (updated mapDyn) -- has to be old k0, otherwise causality loop
         k0Dyn <- holdDyn k0 newk0Ev
         let dropdownWidget k =  _dropdown_value <$> dropdown k (M.mapWithKey (\k _ ->T.pack . show $ k) <$> mapDyn) ddConfig -- this needs to know about deletes
-        selDyn <- join <$> widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)        
+        selDyn <- join <$> widgetHold (dropdownWidget k0) (dropdownWidget <$> newk0Ev)
         selectViewListWithKey selDyn mapDyn0 editW  -- NB: this map doesn't need updating from edits or deletes
-        
+
       (nonNullEv,nullEv) = fanBool . updated . uniqDyn $ M.null <$> mapDyn
       nullWidget = el "div" (text "Empty Map") >> return never
       nullWidgetEv = nullWidget <$ nullEv
       defaultKeyEv = fmapMaybe id $ tagPromptlyDyn (headMay . M.keys <$> mapDyn) nonNullEv -- headMay and fmapMaybe id are redundant here but...
       widgetEv = leftmost [nullWidgetEv, selectWidget <$> defaultKeyEv]
-      
+
   mapEditEvDyn <- widgetHold nullWidget widgetEv -- Dynamic (Event t (k,Maybe v))
   mapEditEvBeh <- hold never (updated mapEditEvDyn)
   let mapEditEv = switch mapEditEvBeh -- Event t (k,Maybe v)
@@ -198,12 +199,12 @@ type FieldWidgetEv t m v = Maybe (Dynamic t v)-> m (Event t (Maybe v))
 data FieldWidget t m v = FWDyn (FieldWidgetDyn t m v) | FWEv (FieldWidgetEv t m v)
 
 fieldWidgetEv::(Functor m, Reflex t)=>FieldWidget t m v->FieldWidgetEv t m v
-fieldWidgetEv (FWEv wEv) mvDyn = wEv mvDyn
+fieldWidgetEv (FWEv wEv) mvDyn   = wEv mvDyn
 fieldWidgetEv (FWDyn wDyn) mvDyn = updated <$> wDyn mvDyn
 
 fieldWidgetDyn::MonadHold t m=>FieldWidget t m v->FieldWidgetDyn t m v
 fieldWidgetDyn (FWDyn wDyn) mvDyn = wDyn mvDyn
-fieldWidgetDyn (FWEv wEv) mvDyn = wEv mvDyn >>= holdDyn Nothing
+fieldWidgetDyn (FWEv wEv) mvDyn   = wEv mvDyn >>= holdDyn Nothing
 
 applyToFieldWidget::(forall a.m a -> m a)->FieldWidget t m v->FieldWidget t m v
 applyToFieldWidget f fw = case fw of
@@ -219,7 +220,7 @@ addFixedKeyToWidget printK fw k =
   in applyToFieldWidget addKey fw
 
 
-type TWidget t m = TextInputConfig t -> m (TextInput t) 
+type TWidget t m = TextInputConfig t -> m (TextInput t)
 
 fieldWidgetDyn'::(ReflexConstraints t m, Show v)=>(T.Text -> Maybe v)->(TWidget t m->TWidget t m)->FieldWidgetDyn t m v
 fieldWidgetDyn' parse f mvDyn = do
@@ -243,7 +244,7 @@ blurOrEnter::Reflex t=>TextInput t -> Event t T.Text
 blurOrEnter w = tagPromptlyDyn (_textInput_value w) fireEvent
   where
     fireEvent = leftmost [ () <$ (ffilter (==13) $ _textInput_keypress w)
-                         , () <$ (ffilter not $ updated $ _textInput_hasFocus w) ] 
+                         , () <$ (ffilter not $ updated $ _textInput_hasFocus w) ]
 
 
 -- like Reflex.Dom.Contrib.Widgets.Common.restrictWidget but allows the set event to change the "authoritative value"

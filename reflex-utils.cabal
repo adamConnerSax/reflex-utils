@@ -74,7 +74,7 @@ library
                      , reflex
                      , reflex-dom
                      , reflex-dom-contrib
-                     , reflex-sumType-utilities
+--                     , reflex-sumType-utilities
                      , dependent-map
                      , transformers
                      , exception-transformers
@@ -93,7 +93,7 @@ library
                      , bytestring
                      , template-haskell
                      , dataBuilder
-                     , perConstructor-sop
+  --                   , perConstructor-sop
                      , generics-sop
                      , ghc-prim
                      , readable

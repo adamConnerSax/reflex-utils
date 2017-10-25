@@ -67,7 +67,7 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult
                                                                dynamicToWidgetResult,
                                                                dynamicWidgetResultToWidgetResult,
                                                                widgetResultToDynamic)
-import           Reflex.Dynamic.FactorDyn                     (factorDyn')
+import           Reflex.Dynamic.FactorDynGeneric              (factorDynGeneric)
 
 
 import           Control.Lens                                 (Prism', (&),
@@ -137,7 +137,7 @@ fromAccValEither (SL x) = AccSuccess $ Left x
 fromAccValEither (SR x) = AccSuccess $ Right x
 
 factorAccValEither :: (Reflex t, MonadHold t m, MonadFix m) => Dynamic t (AccValEither e a b) -> m (Dynamic t (AccValEither (Dynamic t e) (Dynamic t a) (Dynamic t b)))
-factorAccValEither = factorDyn'
+factorAccValEither = factorDynGeneric
 
 instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormValue t) m where
   distribute :: forall t a b m. (Reflex t, MonadHold t m, MonadFix m) => FormValue t (Either a b) -> m (FormValue t (Either (FormValue t a) (FormValue t b)))

@@ -236,7 +236,7 @@ instance RD.TriggerEvent t m => RD.TriggerEvent t (LayoutM t m) where
   newEventWithLazyTriggerWithOnComplete = lift . RD.newEventWithLazyTriggerWithOnComplete
 
 
-instance R.MonadAdjust t m => R.MonadAdjust t (StateT s m) where
+instance R.Adjustable t m => R.Adjustable t (StateT s m) where
   runWithReplace a0 a' = do
     s <- get
     lift $ R.runWithReplace (evalStateT a0 s) $ fmap (`evalStateT` s) a'
@@ -248,7 +248,7 @@ instance R.MonadAdjust t m => R.MonadAdjust t (StateT s m) where
     lift $ R.traverseDMapWithKeyWithAdjustWithMove (\k v -> evalStateT (f k v) s) dm0 dm'
 
 
-instance R.MonadAdjust t m => R.MonadAdjust t (LayoutM t m) where
+instance R.Adjustable t m => R.Adjustable t (LayoutM t m) where
   runWithReplace a0 a' = LayoutM $ R.runWithReplace (coerce a0) (RD.coerceEvent a')
   traverseDMapWithKeyWithAdjust f dm0 dm' = LayoutM $ R.traverseDMapWithKeyWithAdjust (coerce . f) dm0 dm'
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = LayoutM $ R.traverseDMapWithKeyWithAdjustWithMove (coerce . f) dm0 dm'
