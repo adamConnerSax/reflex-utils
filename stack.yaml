@@ -32,12 +32,10 @@ packages:
   subdirs:
   - reflex-dom-core
   - reflex-dom
-#- location:
-#    git: https://github.com/reflex-frp/reflex-dom-contrib
-#    commit: "80f0e032b500fe450e0a2f948424f7ee88891f4d" # newer version
-#    commit: "904fc9915c3de995a3084df50243400337ddd1f8"
+- location:
+    git: https://github.com/adamConnerSax/reflex-dom-contrib
+    commit: "11a4965f0d124f40ac278e01a73be2e3c5c99161" # MonadAdjust name fixed branch
   extra-dep: true
-- '../../github/reflex/reflex-dom-contrib'  
 #- '../dataBuilder'  
 - '.'
 
