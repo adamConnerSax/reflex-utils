@@ -1,12 +1,13 @@
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE UndecidableInstances  #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE DeriveGeneric #-}
 module Reflex.Dom.Contrib.Editor
   (
     Editor (Editor)
@@ -15,6 +16,7 @@ module Reflex.Dom.Contrib.Editor
   , editPart
   , editAndBe
   , editOnly
+  , editOnlyOptimized
   , focusInput
   , (|<|)
   , (|>|)
@@ -26,29 +28,26 @@ module Reflex.Dom.Contrib.Editor
 
 import           Reflex.Dynamic.FactorDynGeneric (factorDynGeneric)
 
-import qualified Generics.SOP  as SOP
-import           GHC.Generics                                 (Generic)
-import qualified Control.Category                             as C
-import           Control.Monad                                (join)
-import           Control.Lens                                 (Lens', Prism', Getter,
-                                                               view, set,
-                                                               preview, review)
-import           Control.Monad.Fix                            (MonadFix)
-import           Data.Bifunctor                               (bimap)
-import           Data.Functor.Compose                         (Compose (Compose),
-                                                               getCompose)
-import           Data.Profunctor                              (Choice (..), Profunctor (lmap,dimap),
-                                                               Strong (..))
-import           Data.Profunctor.Traversing                   (Traversing (..))
-import           Control.Arrow                                (Arrow(..), ArrowChoice (..))
+import           Control.Arrow                   (Arrow (..), ArrowChoice (..))
+import qualified Control.Category                as C
+import           Control.Lens                    (Getter, Lens', Prism',
+                                                  preview, review, set, view,
+                                                  withPrism)
+import           Control.Monad                   (join)
+import           Control.Monad.Fix               (MonadFix)
+import           Data.Bifunctor                  (bimap)
+import           Data.Functor.Compose            (Compose (Compose), getCompose)
+import           Data.Profunctor                 (Choice (..),
+                                                  Profunctor (dimap, lmap),
+                                                  Strong (..))
+import           Data.Profunctor.Traversing      (Traversing (..))
+import qualified Generics.SOP                    as SOP
+import           GHC.Generics                    (Generic)
 
-import           Reflex                                       (Dynamic,
-                                                               MonadHold,
-                                                               Reflex,
-                                                               buildDynamic,
-                                                               constDyn, holdDyn)
-import           Reflex.Dom                                   (DomBuilder,
-                                                               PostBuild, dyn)
+import           Reflex                          (Dynamic, MonadHold, Reflex,
+                                                  buildDynamic, constDyn,
+                                                  holdDyn)
+import           Reflex.Dom                      (DomBuilder, PostBuild, dyn)
 
 
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }
@@ -96,7 +95,7 @@ type DynMaybe t = Compose (Dynamic t) Maybe
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (DynMaybe t) (Compose m (DynMaybe t)) where
   combine :: DynMaybe t (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a
   combine x =  Compose $ do
-    let mdm2dm = Compose . fmap join . sequenceA . fmap getCompose  
+    let mdm2dm = Compose . fmap join . sequenceA . fmap getCompose
         x1 = fmap (fmap mdm2dm . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t (m (DynMaybe t a))
     x2 <- dyn x1 -- Event t (DynMaybe t a)
     dmd <- holdDyn (constDyn Nothing) (getCompose <$> x2)
@@ -118,19 +117,21 @@ toMaybeEither :: Maybe (Either a b) -> MaybeEither a b
 toMaybeEither = maybe N (either L R)
 
 fromMaybeEither :: MaybeEither a b -> Maybe (Either a b)
-fromMaybeEither N = Nothing
+fromMaybeEither N     = Nothing
 fromMaybeEither (L x) = Just $ Left x
 fromMaybeEither (R x) = Just $ Right x
-    
-factorMaybeEither :: (Reflex t, MonadHold t m, MonadFix m) => Dynamic t (MaybeEither a b) -> m (Dynamic t (MaybeEither (Dynamic t a) (Dynamic t b)))
+
+factorMaybeEither :: (Reflex t, MonadHold t m, MonadFix m)
+  => Dynamic t (MaybeEither a b)
+  -> m (Dynamic t (MaybeEither (Dynamic t a) (Dynamic t b)))
 factorMaybeEither = factorDynGeneric
-                                                                                               
+
 instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (DynMaybe t) m where
   distribute :: forall t a b m. (Reflex t, MonadHold t m, MonadFix m) => DynMaybe t (Either a b) -> m (DynMaybe t (Either (DynMaybe t a) (DynMaybe t b)))
   distribute x = do
     let x1 = toMaybeEither <$> getCompose x
-    x2 <- factorMaybeEither x1 
-    return $ fmap (bimap (Compose . fmap pure) (Compose . fmap pure)) $ Compose . fmap fromMaybeEither $ x2 
+    x2 <- factorMaybeEither x1
+    return $ fmap (bimap (Compose . fmap pure) (Compose . fmap pure)) $ Compose . fmap fromMaybeEither $ x2
 
 instance ( Applicative f
          , Functor g
@@ -140,7 +141,7 @@ instance ( Applicative f
          , Combinable g f) => Choice (Editor g f) where
   left' :: forall g f a b c m. (Applicative f, Functor g, Monad m, f ~ Compose m g, Distributable g m, Combinable g f) => Editor g f a b -> Editor g f (Either a c) (Either b c)
   left' ed = Editor $ \geac -> Compose $ do
-    dist_geac :: g (Either (g a) (g c)) <- distribute geac    
+    dist_geac :: g (Either (g a) (g c)) <- distribute geac
     let x1 = fmap (bimap (runEditor ed) (Compose . pure)) dist_geac
         x2 = fmap (either (fmap Left) (fmap Right)) x1
     getCompose $ combine x2
@@ -149,7 +150,7 @@ instance ( Applicative f
 embedEditor :: ( Applicative g
                , Applicative m
                , f ~ Compose m g
-               , Combinable g f) => (forall q. Applicative q => (a -> q b) -> (s -> q t)) -> Editor g f a b -> Editor g f s t  
+               , Combinable g f) => (forall q. Applicative q => (a -> q b) -> (s -> q t)) -> Editor g f a b -> Editor g f s t
 embedEditor = customWander id id
 
 -- This version allows an optimization step to move dynamics away from the combine.
@@ -170,26 +171,26 @@ customWander toU fromU vlt (Editor eab) =
 editAndBe :: (Functor f, Functor g) => Prism' s a -> Editor g f (Maybe a) a -> Editor g f s s
 editAndBe p = dimap (preview p) (review p)
 
+
 -- this will edit only if the input matches the prism.  Otherwise pass the input through.
 editOnly :: ( Applicative g
             , Applicative m
             , f ~ Compose m g
             , Combinable g f) => Prism' s a -> Editor g f a a -> Editor g f s s
-editOnly = customWander id id            
+editOnly = customWander id id
+
+-- we would prefer this to editOnly/wander, I think, since it only uses optimized combine.
+editOnlyOptimized :: forall g f s a. Choice (Editor g f) => Prism' s a -> Editor g f a a -> Editor g f s s
+editOnlyOptimized p ed = withPrism p go where
+  go :: (a -> s) -> (s -> Either s a) -> Editor g f s s
+  go makeS sToEither = dimap sToEither (either id makeS) $ right' ed
 
 focusInput :: (Functor f, Functor g) => Getter s a -> Editor g f a b -> Editor g f s b
 focusInput l = lmap (view l)
 
-{- This compiles but throws a heightBag error.  FactorDyn is buggy??
--- we would prefer this to wander, I think, since it only uses optimized combine.
-embedWithPrism :: forall g f s a. Choice (Editor g f) => Prism' s a -> Editor g f a a -> Editor g f s s
-embedWithPrism p ed = withPrism p go where
-  go :: (a -> s) -> (s -> Either s a) -> Editor g f s s
-  go makeS sToEither = dimap sToEither (either id makeS) $ right' ed
--}
 
 
--- written in terms of the above since it's the same logic, only there's no place for the optimization functions                                          
+-- written in terms of the above since it's the same logic, only there's no place for the optimization functions
 instance ( Applicative g
          , Applicative f
          , f ~ Compose m g
@@ -204,9 +205,9 @@ instance ( Applicative g
 infixr 7 |<|
 
 (|>|) :: (Monad m, f ~ Compose m g) => Editor g f a b -> Editor g f b c -> Editor g f a c
-(|>|)  = flip (|<|)  
+(|>|)  = flip (|<|)
 infixr 7 |>|
-  
+
 instance (Monad m, f ~ Compose m g) => C.Category (Editor g f) where
   id = Editor $ Compose . pure -- Editor g f a a
   ebc . eab = ebc |<| eab
@@ -217,7 +218,7 @@ instance Monad f => Monad (Editor g f a) where
 
 instance (Applicative f, Functor g, Monad m, f ~ Compose m g) => Arrow (Editor g f) where
   arr :: (b -> c) -> Editor g f b c
-  arr h = Editor $ Compose . return . fmap h 
+  arr h = Editor $ Compose . return . fmap h
   first = first' -- this is from Strong
 
 instance ( Applicative f
@@ -228,7 +229,7 @@ instance ( Applicative f
          , Combinable g f) => ArrowChoice (Editor g f) where
   left = left'  -- from Profunctor.Choice
 
-{-    
+{-
 -- | This makes any Editor with a (m (DynMaybe t)) result into a Category.
 instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Combinable (Compose m (DynMaybe t)) (Compose m (DynMaybe t)) where
   combine :: Compose m (DynMaybe t) (Compose m (DynMaybe t) a) -> Compose m (DynMaybe t) a

@@ -27,6 +27,7 @@ module Reflex.Dom.Contrib.FormBuilder.FormEditor
   , transformEditor
   , editPart
   , editOnly
+  , editOnlyOptimized
   , focusInput
   , (|<|)
   , (|>|)
@@ -37,6 +38,7 @@ import           Reflex.Dom.Contrib.Editor                    (Combinable (..), 
                                                                Editor (Editor),
                                                                editAndBe,
                                                                editOnly,
+                                                               editOnlyOptimized,
                                                                editPart,
                                                                embedEditor,
                                                                focusInput,

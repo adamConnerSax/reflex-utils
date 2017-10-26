@@ -174,14 +174,14 @@ editSum1 = editField Nothing
 -- this one allows editing of the incoming sum but cannot change which constructor is in play.  But you could also select which are
 -- editable by including only some of constructors
 editSum2 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum2 = (editOnly _A $ editField Nothing) |>| (editOnly _B $ editField Nothing) |>| (editOnly _C $ editField Nothing)
+editSum2 = (editOnlyOptimized _A $ editField Nothing) |>| (editOnlyOptimized _B $ editField Nothing) |>| (editOnlyOptimized _C $ editField Nothing)
 
 --
 -- This one allows you to choose which you want to be able to edit but can only edit if it matches the input
 editSum3 :: FormInstanceC t m => FormEditor t m Sum Sum
-editSum3 = chooseAmong [ BuilderChoice "If A" (const False) (editOnly _A $ editField Nothing)
-                       , BuilderChoice "If B" (const False) (editOnly _B $ editField Nothing)
-                       , BuilderChoice "If C" (const False) (editOnly _C $ editField Nothing)
+editSum3 = chooseAmong [ BuilderChoice "If A" (const False) (editOnlyOptimized _A $ editField Nothing)
+                       , BuilderChoice "If B" (const False) (editOnlyOptimized _B $ editField Nothing)
+                       , BuilderChoice "If C" (const False) (editOnlyOptimized _C $ editField Nothing)
                        ]
 
 -- this one lets you choose which to edit, forces the output to match.
