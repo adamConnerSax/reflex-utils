@@ -2,8 +2,8 @@
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
 resolver: 
-  name: jsaddle9-snapshot
-  location: ../stack-custom-snapshots/jsaddle/jsaddle9-snapshot.yaml
+  name: jsaddle9-ghc8.2.2-snapshot
+  location: ../stack-custom-snapshots/jsaddle/jsaddle9-ghc8.2.2-snapshot.yaml
 
 packages:
 - location:
