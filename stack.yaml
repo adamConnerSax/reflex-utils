@@ -1,26 +1,25 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: 
-  name: jsaddle9-ghc8.2.2-snapshot
-  location: ../stack-custom-snapshots/jsaddle/jsaddle9-ghc8.2.2-snapshot.yaml
+resolver: ../stack-custom-snapshots/jsaddle/jsaddle9-ghc8.2.2-snapshot.yaml
 
 packages:
 - location:
     git: https://github.com/adamConnerSax/perConstructor-sop
-    commit: "0ad25c04cbf4010752f07ca8291ce7ddb684ec5f"
+    commit: "b0c8fd5c4b1576b4ad713821f35d06b0c00ff5f6"
   extra-dep: true 
 - location:
     git: https://github.com/adamConnerSax/dataBuilder
     commit: "e6a84e66bcb4afbd7ea7a1035b06c722b4efa617"
   extra-dep: true
-#- location:
-#    git: https://github.com/adamConnerSax/reflex-sumType-utilities
-#    commit: "ae53680dde9babeea3b1760fce7c4a60a3e58c2e"
-#  extra-dep: true
+- location:
+    git: https://github.com/adamConnerSax/reflex-sumType-utilities
+    commit: "a0a73c80df4c4265223ca9ea38a8ceaed8b3ad52"
+  extra-dep: true
 - location:
     git: https://github.com/reflex-frp/reflex
-    commit: "af07fd8462bb0a87d132c20b1e15f4a870759eff" # generics-sop branch
+    commit: "5add4130db67159fc08b90f795d38d8ba15bb437"
+#    commit: "af07fd8462bb0a87d132c20b1e15f4a870759eff" # generics-sop branch
 #    commit: "75426f7c85e83db3365a3dac9c3ac67710fed2de"
   extra-dep: true
 - location:

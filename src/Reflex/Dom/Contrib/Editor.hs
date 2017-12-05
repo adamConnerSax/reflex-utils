@@ -26,28 +26,26 @@ module Reflex.Dom.Contrib.Editor
   , embedEditor
   ) where
 
-import           Reflex.Dynamic.FactorDynGeneric (factorDynGeneric)
+import           Reflex.Dynamic.FactorDyn   (factorDynGeneric)
 
-import           Control.Arrow                   (Arrow (..), ArrowChoice (..))
-import qualified Control.Category                as C
-import           Control.Lens                    (Getter, Lens', Prism',
-                                                  preview, review, set, view,
-                                                  withPrism)
-import           Control.Monad                   (join)
-import           Control.Monad.Fix               (MonadFix)
-import           Data.Bifunctor                  (bimap)
-import           Data.Functor.Compose            (Compose (Compose), getCompose)
-import           Data.Profunctor                 (Choice (..),
-                                                  Profunctor (dimap, lmap),
-                                                  Strong (..))
-import           Data.Profunctor.Traversing      (Traversing (..))
-import qualified Generics.SOP                    as SOP
-import           GHC.Generics                    (Generic)
+import           Control.Arrow              (Arrow (..), ArrowChoice (..))
+import qualified Control.Category           as C
+import           Control.Lens               (Getter, Lens', Prism', preview,
+                                             review, set, view, withPrism)
+import           Control.Monad              (join)
+import           Control.Monad.Fix          (MonadFix)
+import           Data.Bifunctor             (bimap)
+import           Data.Functor.Compose       (Compose (Compose), getCompose)
+import           Data.Profunctor            (Choice (..),
+                                             Profunctor (dimap, lmap),
+                                             Strong (..))
+import           Data.Profunctor.Traversing (Traversing (..))
+import qualified Generics.SOP               as SOP
+import           GHC.Generics               (Generic)
 
-import           Reflex                          (Dynamic, MonadHold, Reflex,
-                                                  buildDynamic, constDyn,
-                                                  holdDyn)
-import           Reflex.Dom                      (DomBuilder, PostBuild, dyn)
+import           Reflex                     (Dynamic, MonadHold, Reflex,
+                                             buildDynamic, constDyn, holdDyn)
+import           Reflex.Dom                 (DomBuilder, PostBuild, dyn)
 
 
 newtype Editor g f a b = Editor { runEditor :: g a -> f b }

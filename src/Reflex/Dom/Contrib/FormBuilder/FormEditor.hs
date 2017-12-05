@@ -69,7 +69,7 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult
                                                                dynamicToWidgetResult,
                                                                dynamicWidgetResultToWidgetResult,
                                                                widgetResultToDynamic)
-import           Reflex.Dynamic.FactorDynGeneric              (factorDynGeneric)
+import           Reflex.Dynamic.FactorDyn                     (factorDynGeneric)
 
 
 import           Control.Lens                                 (Prism', (&),
