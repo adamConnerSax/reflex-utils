@@ -25,7 +25,7 @@
       {
         "url": "https://github.com/reflex-frp/reflex-dom-contrib",
         "rev": "11a4965f0d124f40ac278e01a73be2e3c5c99161",
-        "sha256": "1hawxpnx29yiakqrv444153i9hh9844rvcdc151df9pnlkz85gp0"
+        "sha256": "1zgcxkg7mdc93m5nxk96amkhd4m8bsd7kbp69ri3rh76m3pwsh7f"
       }
     ''))) {};
   };
