@@ -3,7 +3,7 @@
 
 let
   localPlatform = import ./packages.nix { reflex-platform = reflex-platform; };
-  nixpkgs = reflex-platform.nixpkgs;
+  nixpkgs = reflex-platform.nixpkgs; 
   inherit (nixpkgs) pkgs;
 
   f = { mkDerivation, base, bifunctors, bytestring, cabal-macosx
@@ -42,6 +42,7 @@ let
         description = "Initial project template from stack";
         license = stdenv.lib.licenses.bsd3;
       };
+      
 
   haskellPackages = if compiler == "default"
                        then localPlatform
