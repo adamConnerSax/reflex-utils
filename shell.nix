@@ -3,7 +3,7 @@
 
 let
   localPlatform = import ./packages.nix { reflex-platform = reflex-platform; };
-  nixpkgs = reflex-platform.nixpkgs; 
+  nixpkgs = reflex-platform.nixpkgs // { haskellPackages = localPlatform; haskell = localPlatform; } ; 
   inherit (nixpkgs) pkgs;
 
   f = { mkDerivation, base, bifunctors, bytestring, cabal-macosx
@@ -45,8 +45,8 @@ let
       
 
   haskellPackages = if compiler == "default"
-                       then localPlatform
-                       else localPlatform.${compiler};
+                       then pkgs.haskellPackages
+                       else pkgs.haskell.${compiler};
 
   drv = haskellPackages.callPackage f {};
 
