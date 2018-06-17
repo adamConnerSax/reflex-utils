@@ -6,4 +6,4 @@
 /dist
 \#*#
 .#*
-.dist-newstyle/*
+/dist-newstyle
