@@ -1,36 +1,13 @@
-{ mkDerivation, base, bifunctors, bytestring, cabal-macosx, clay
-, containers, data-default, dataBuilder, dependent-map
-, exception-transformers, file-embed, generics-sop, ghc-prim
-, ghcjs-dom, hashable, jsaddle, jsaddle-warp, lens, mmorph
-, monad-control, mtl, perConstructor-sop, pretty-show, process
-, profunctors, readable, ref-tf, reflex, reflex-dom
-, reflex-dom-contrib, reflex-sumType-utilities, safe, semigroups
-, stdenv, template-haskell, text, these, time, transformers, tuple
-, unordered-containers, validation
-}:
-mkDerivation {
-  pname = "reflex-utils";
-  version = "0.2.1.1";
-  src = ./.;
-  isLibrary = true;
-  isExecutable = true;
-  libraryHaskellDepends = [
-    base bifunctors bytestring clay containers data-default dataBuilder
-    dependent-map exception-transformers file-embed generics-sop
-    ghc-prim ghcjs-dom hashable jsaddle lens mmorph monad-control mtl
-    perConstructor-sop profunctors readable ref-tf reflex reflex-dom
-    reflex-dom-contrib reflex-sumType-utilities safe semigroups
-    template-haskell text these time transformers tuple
-    unordered-containers validation
-  ];
-  executableHaskellDepends = [
-    base bytestring cabal-macosx clay containers data-default
-    dataBuilder exception-transformers file-embed ghcjs-dom hashable
-    jsaddle-warp lens mtl pretty-show process profunctors ref-tf reflex
-    reflex-dom reflex-dom-contrib safe text time transformers
-    unordered-containers validation
-  ];
-  homepage = "http://github.com/adamConnerSax/reflex-utils#readme";
-  description = "Initial project template from stack";
-  license = stdenv.lib.licenses.bsd3;
-}
+(import ./reflex-platform {}).project ({ pkgs, ... }: {
+  packages = {
+    reflex-utils = ./. ; 
+  };
+
+  shells = {
+   ghc = ["reflex-utils"];
+   #ghcjs = ["common" "frontend"];
+  };
+
+  overrides = import ./package-overlay.nix {};
+  withHoogle = false;
+})
