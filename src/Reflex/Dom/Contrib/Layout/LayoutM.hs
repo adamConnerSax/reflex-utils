@@ -191,7 +191,7 @@ instance MonadTransControl (LayoutM t) where
 --TriggerEvent makes me nervous
 type SupportsLayoutM t m = (R.Reflex t, MonadIO m, R.MonadHold t m, MonadFix m, R.PerformEvent t m, RC.MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref IO, RD.DomBuilder t m, RD.DomSpace (RD.DomBuilderSpace m), RD.DomBuilderSpace m ~ RD.GhcjsDomSpace, RD.TriggerEvent t m, Ref (R.Performable m) ~ Ref IO, RD.HasWebView (R.Performable m), MonadAsyncException (R.Performable m), MonadRef (R.Performable m), R.MonadSample t (R.Performable m))
 
-instance (RD.PostBuild t m, SupportsLayoutM t m) => RD.DomBuilder t (LayoutM t m) where
+instance (RD.PostBuild t m, SupportsLayoutM t m, RD.NotReady t (LayoutM t m)) => RD.DomBuilder t (LayoutM t m) where
   type DomBuilderSpace (LayoutM t m) = RD.DomBuilderSpace m
 {-  placeholder (RD.PlaceholderConfig insertAbove delete) = LayoutM $ do
     lc <- ask
