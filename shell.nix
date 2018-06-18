@@ -1,10 +1,8 @@
 { reflex-platform ? import ./reflex-platform {}, compiler ? "default" }:
-#{ nixpkgs ? import <nixpkgs> {}, compiler ? "default" }:
 
 let
-  localPlatform = import ./packages.nix { reflex-platform = reflex-platform; };
-  nixpkgs = reflex-platform.nixpkgs // { haskellPackages = localPlatform; haskell = localPlatform; } ; 
-  inherit (nixpkgs) pkgs;
+  nixpkgsPlus = import ./addPackages.nix {reflex-platform = reflex-platform;};
+  inherit (nixpkgsPlus) pkgs;
 
   f = { mkDerivation, base, bifunctors, bytestring, cabal-macosx
       , clay, containers, data-default, dataBuilder, dependent-map
@@ -53,3 +51,4 @@ let
 in
 
   if pkgs.lib.inNixShell then drv.env else drv
+
