@@ -65,7 +65,7 @@ library
   other-modules:
 
   if flag(wkwebview) || flag(warp)
-   build-depends: ghcjs-dom == 0.7.*
+   build-depends: ghcjs-dom 
                 , jsaddle
   else
    build-depends: ghcjs-dom

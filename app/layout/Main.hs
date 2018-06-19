@@ -14,6 +14,7 @@ import Reflex.Dom.Contrib.Layout.LayoutM (SupportsLayoutM,runLayoutM, LayoutM (.
 import Reflex.Dom.Contrib.Layout.FlexLayout (flexSizedItem,flexRow,flexCol,flexItem,flexCssBS)
 import qualified Reflex.Dom.Contrib.Layout.OptimizedFlexLayout as OF
 import Reflex.Dom.Contrib.Layout.OptimizedFlexLayout ((##),(#$))
+import Reflex.Dom.Contrib.CssUtils (headElt, CssLinks(CssLinks))
 
 import Reflex
 import Reflex.Dom.Core
@@ -126,7 +127,7 @@ row = lmFlexLayoutRow
 col::(PostBuild t m ,SupportsLayoutM t m)=>Int->LayoutM t m a->LayoutM t m a
 col = lmFlexCol
 
-subWidgetSimple::(PostBuild t m,SupportsLayoutM t m {-, MonadIO (PushM t) -})=>LayoutM t m ()
+subWidgetSimple::(PostBuild t m, SupportsLayoutM t m, NotReady t (LayoutM t m))=>LayoutM t m ()
 subWidgetSimple = do
   row $ do
     col 1 $ demoDiv "C"
@@ -134,20 +135,20 @@ subWidgetSimple = do
   subWidget1
 
 
-subWidget1::(PostBuild t m,SupportsLayoutM t m {-,MonadIO (PushM t)-})=>LayoutM t m ()
+subWidget1::(PostBuild t m, SupportsLayoutM t m, NotReady t (LayoutM t m))=>LayoutM t m ()
 subWidget1 = do
   row $ demoDiv "D"
   row $ demoDiv "E"
   row $ demoDiv "F"
 
-subWidget2::(PostBuild t m,SupportsLayoutM t m {-,MonadIO (PushM t)-})=>LayoutM t m ()
+subWidget2::(PostBuild t m,SupportsLayoutM t m, NotReady t (LayoutM t m))=>LayoutM t m ()
 subWidget2 = do
   row $ do
     col 1 $ demoDiv "D"
     col 1 $ demoDiv "E"
     col 1 $ demoDiv "F"
 
-subWidgetToggle::(PostBuild t m, SupportsLayoutM t m {-,MonadIO (PushM t)-})=>LayoutM t m ()
+subWidgetToggle::(PostBuild t m, SupportsLayoutM t m, NotReady t (LayoutM t m))=>LayoutM t m ()
 subWidgetToggle = do
   switchToEv <- row $ do
     col 1 $ demoDiv "C"
@@ -159,7 +160,7 @@ subWidgetToggle = do
 
 testControl::(SupportsLayoutM t m, PostBuild t m, HasDocument m,
               HasWebView m, MonadJSM (Performable m),
-              MonadJSM (LayoutM t m))=>Event t CssUpdate->LayoutM t m (Event t CssUpdate)
+              MonadJSM (LayoutM t m), NotReady t (LayoutM t m))=>Event t CssUpdate->LayoutM t m (Event t CssUpdate)
 testControl setEv  = mdo
   (evSelf,evChildren) <- row $ do
     addKeyedCssUpdateEventBelow "row" innerBoxInitialCss evSelf 
@@ -189,7 +190,7 @@ sfTab :: SupportsLayoutM t m => TabInfo t m ()
 sfTab = TabInfo "sf" (constDyn ("Simple Flex", M.empty)) simpleFlexWidget
 
 
-optFlexWidget::(SupportsLayoutM t m, PostBuild t m,HasWebView m,{- MonadAsyncException m, MonadIO (PushM t), -}
+optFlexWidget::(SupportsLayoutM t m, PostBuild t m, NotReady t (LayoutM t m), HasWebView m,{- MonadAsyncException m, MonadIO (PushM t), -}
                 MonadJSM m, MonadJSM (Performable m))=>m ()
 optFlexWidget = do
   let w = OF.flexRow #$ do
@@ -200,10 +201,10 @@ optFlexWidget = do
   OF.flexItem #$ OF.flexCenter LayoutHorizontal w
   OF.flexItem #$ OF.flexFill LayoutLeft w
 
-optFlexTab::(SupportsLayoutM t m, MonadJSM (Performable m), MonadJSM m, HasJSContext m, PostBuild t m {-, MonadAsyncException m -}) => TabInfo t m ()
+optFlexTab::(SupportsLayoutM t m, MonadJSM (Performable m), MonadJSM m, HasJSContext m, PostBuild t m, NotReady t (LayoutM t m) {-, MonadAsyncException m -}) => TabInfo t m ()
 optFlexTab = TabInfo "optFlex" (constDyn ("optFlex", M.empty)) optFlexWidget
 
-boxesWidget::(SupportsLayoutM t m,PostBuild t m,HasWebView m, HasDocument m,
+boxesWidget::(SupportsLayoutM t m,PostBuild t m,HasWebView m, HasDocument m, NotReady t (LayoutM t m),
               MonadJSM (Performable m),MonadJSM (LayoutM t m))=>LayoutM t m ()
 boxesWidget = do
   ev1 <- testControl never
@@ -220,6 +221,7 @@ boxesWidget = do
 
 boxesTab :: ( SupportsLayoutM t m
             , PostBuild t m
+            , NotReady t (LayoutM t m)
             , HasJSContext m
             , HasDocument m
             , MonadJSM (Performable m)
@@ -234,6 +236,7 @@ laidOut w = mainWidgetWithCss allCss $
 
 tabbedWidget::( SupportsLayoutM t m
               , PostBuild t m
+              , NotReady t (LayoutM t m)
               , HasWebView m
               , MonadIO (PushM t)
               , HasDocument m
@@ -254,10 +257,12 @@ allCss = tabCssBS
 --         <> $(embedFile "/Users/adam/Development/webResources/css/flexboxgrid-6.3.0/flexboxgrid.css")
 
 
-layoutMain::JSM ()
+
+
+layoutMain :: JSM ()
 layoutMain = do
   liftIO $ B.putStr allCss 
-  mainWidgetWithCss allCss $ do
+  mainWidgetWithHead (headElt "layout demo" (CssLinks []) allCss) $ do
       tabbedWidget
       return ()
 

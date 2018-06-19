@@ -211,6 +211,9 @@ instance RD.PostBuild t m => RD.PostBuild t (LayoutM t m) where
   {-# INLINABLE getPostBuild #-}
   getPostBuild = lift RD.getPostBuild
 
+instance RD.NotReady t m => RD.NotReady t (LayoutM t m)
+
+
 instance RC.MonadReflexCreateTrigger t m => RC.MonadReflexCreateTrigger t (LayoutM t m) where
   {-# INLINABLE newEventWithTrigger #-}
   newEventWithTrigger = lift . RC.newEventWithTrigger
