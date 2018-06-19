@@ -19,10 +19,16 @@ self: super: {
      rev = "a0a73c80df4c4265223ca9ea38a8ceaed8b3ad52";
      sha256 = "03rnll7m8vqq1wspc8kmxdccjaclamywxaggn51xbwpzj4r83giy";
    }) {};
+#   reflex-dom-contrib = super.callCabal2nix "reflex-dom-contrib" (nixpkgs.pkgs.fetchFromGitHub {
+#     owner = "reflex-frp";
+#     repo = "reflex-dom-contrib";
+#     rev = "5b5da107ccf7b4e1544dc6f6bdb6b6de7525a04d";
+#     sha256 = "0lmddfw7vhvc2yf22jdqsnr3aqz2j1k96v53ik1mr6kxl6265yms";
+#   }) {};
    reflex-dom-contrib = super.callCabal2nix "reflex-dom-contrib" (nixpkgs.pkgs.fetchFromGitHub {
-     owner = "reflex-frp";
+     owner = "adamConnerSax";
      repo = "reflex-dom-contrib";
-     rev = "5b5da107ccf7b4e1544dc6f6bdb6b6de7525a04d";
-     sha256 = "0lmddfw7vhvc2yf22jdqsnr3aqz2j1k96v53ik1mr6kxl6265yms";
+     rev = "0eed765f1945d76293238cca32f83d00fb04c61d";
+     sha256 = "0b0zlzbhd7c1syggn196jhhm67s4nsddmyd29njjnk537lw1d2qv";
    }) {};
 }      
