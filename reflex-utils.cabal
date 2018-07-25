@@ -40,6 +40,7 @@ library
                   Reflex.Dom.Contrib.Widgets.ModalEditor
                   Reflex.Dom.Contrib.ListHoldFunctions.Core
                   Reflex.Dom.Contrib.ListHoldFunctions.Maps
+                  Reflex.Dom.Contrib.ListHoldFunctions.Array
                   Reflex.Dom.Contrib.Layout.All
                   Reflex.Dom.Contrib.Layout.Types
                   Reflex.Dom.Contrib.Layout.ClayUtils
