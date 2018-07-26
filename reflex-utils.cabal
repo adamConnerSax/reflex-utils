@@ -40,7 +40,7 @@ library
                   Reflex.Dom.Contrib.Widgets.ModalEditor
                   Reflex.Dom.Contrib.ListHoldFunctions.Core
                   Reflex.Dom.Contrib.ListHoldFunctions.Maps
-                  Reflex.Dom.Contrib.ListHoldFunctions.Array
+                  Reflex.Dom.Contrib.ListHoldFunctions.HoldableArray
                   Reflex.Dom.Contrib.Layout.All
                   Reflex.Dom.Contrib.Layout.Types
                   Reflex.Dom.Contrib.Layout.ClayUtils
@@ -72,6 +72,7 @@ library
    build-depends: ghcjs-dom
   build-depends:       base >= 4.7 && < 5
                      , dependent-map
+                     , array
                      , reflex
                      , reflex-dom
                      , reflex-dom-contrib

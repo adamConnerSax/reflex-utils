@@ -32,6 +32,8 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
   , buildHashMap
   , buildEqHashMap
   , buildEqHashSet
+  , buildArray
+  , buildEqArray
 
   -- * Types for mapping containers to builders
   , MapLike(..)
@@ -97,6 +99,7 @@ import qualified Data.Text                                      as T
 import           Data.Validation                                (AccValidation (..))
 
 -- imports only to make instances
+import qualified Data.Array                                     as A
 import           Data.Bool                                      (bool)
 import           Data.Hashable                                  (Hashable)
 import qualified Data.HashMap.Lazy                              as HML
@@ -108,6 +111,7 @@ import           Data.Maybe                                     (isNothing)
 import           Data.Monoid                                    ((<>))
 import qualified Data.Sequence                                  as Seq
 import qualified Data.Set                                       as S
+
 -- my libs
 import qualified DataBuilder                                    as B
 
@@ -245,6 +249,21 @@ buildEqList = buildAdjustableContainer listEqML listWidgets
 instance (FormInstanceC t m, VFormBuilderC t m a)=>FormBuilder t m [a] where
   buildForm =  buildList
 
+arrayML :: A.Ix k => MapLike (A.Array k) (M.Map k) v
+arrayML = MapLike (M.fromAscList . A.assocs) (\m -> A.array (minimum $ M.keys m, maximum $ M.keys m) (M.toAscList m)) LHF.lhfMapDiffNoEq
+
+arrayEqML :: (A.Ix k, Eq v) => MapLike (A.Array k) (M.Map k) v
+arrayEqML = arrayML { diffMap = LHF.lhfMapDiff }
+
+arrayWidgets :: (A.Ix k, FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m k) => MapElemWidgets (M.Map k) t m k a
+arrayWidgets = MapElemWidgets showKeyEditVal mapEditWidget
+
+buildArray :: (FormInstanceC t m, VFormBuilderC t m v, VFormBuilderC t m k, A.Ix k) => BuildForm t m (A.Array k v)
+buildArray = buildAdjustableContainer arrayML arrayWidgets
+
+buildEqArray :: (FormInstanceC t m, VFormBuilderC t m v, VFormBuilderC t m k, A.Ix k, Eq v) => BuildForm t m (A.Array k v)
+buildEqArray = buildAdjustableContainer arrayEqML arrayWidgets
+
 setEqML :: Ord a => MapLike S.Set IM.IntMap a
 setEqML = MapLike (IM.fromAscList . zip [0..] . S.toList) (S.fromList . fmap snd . IM.toList) LHF.lhfMapDiffNoEq
 
@@ -295,7 +314,7 @@ buildEqSequence  = buildAdjustableContainer sequenceEqML listWidgets
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (Seq.Seq a) where
   buildForm = buildSequence
 
--- this is the same, up to input types as intMapEditwidget.  More polymorphism!
+-- this is the same, up to input types, as intMapEditwidget.  More polymorphism!
 hashMapEditWidget :: (FormInstanceC t m, VFormBuilderBoth t m k v)
   => R.Dynamic t (HML.HashMap k (FValidation v))
   -> FRW t m (k,v)
@@ -335,6 +354,7 @@ buildEqHashSet = buildAdjustableContainer hashSetEqML setEqWidgets
 
 instance (FormInstanceC t m, VFormBuilderC t m a, Hashable a, Eq a) => FormBuilder t m (HS.HashSet a) where
   buildForm = buildEqHashSet
+
 
 -- the various container builder components
 type BuildF t m a    = FormValidator a -> Maybe FieldName -> FormValue t a -> FRW t m a
