@@ -38,9 +38,6 @@ library
                   Reflex.Dom.Contrib.Widgets.WidgetResult
                   Reflex.Dom.Contrib.Widgets.SafeDropdown
                   Reflex.Dom.Contrib.Widgets.ModalEditor
-                  Reflex.Dom.Contrib.ListHoldFunctions.Core
-                  Reflex.Dom.Contrib.ListHoldFunctions.Maps
-                  Reflex.Dom.Contrib.ListHoldFunctions.HoldableArray
                   Reflex.Dom.Contrib.Layout.All
                   Reflex.Dom.Contrib.Layout.Types
                   Reflex.Dom.Contrib.Layout.ClayUtils
@@ -77,6 +74,7 @@ library
                      , reflex-dom
                      , reflex-dom-contrib
                      , reflex-sumType-utilities
+                     , reflex-collections
                      , dependent-map
                      , transformers
                      , exception-transformers

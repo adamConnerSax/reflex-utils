@@ -43,6 +43,8 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
   ) where
 
 
+import           Reflex.Collections.Maps                        (LHFMap (..))
+import qualified Reflex.Collections.Maps                        as LHF
 import           Reflex.Dom.Contrib.DynamicUtils                (dynAsEv,
                                                                  dynPlusEvent)
 import           Reflex.Dom.Contrib.EventUtils                  (fanBool, leftWhenNotRight)
@@ -74,8 +76,6 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FormError (FNot
                                                                  printFormErrors)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.Layout.Types                (LayoutDirection (..))
-import           Reflex.Dom.Contrib.ListHoldFunctions.Maps      (LHFMap (..))
-import qualified Reflex.Dom.Contrib.ListHoldFunctions.Maps      as LHF
 import qualified Reflex.Dom.Contrib.Widgets.ModalEditor         as MW
 import qualified Reflex.Dom.Contrib.Widgets.SafeDropdown        as SD
 import           Reflex.Dom.Contrib.Widgets.WidgetResult        (WidgetResult, buildWidgetResult,

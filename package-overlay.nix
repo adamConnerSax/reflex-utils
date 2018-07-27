@@ -19,6 +19,12 @@ self: super: {
      rev = "a0a73c80df4c4265223ca9ea38a8ceaed8b3ad52";
      sha256 = "03rnll7m8vqq1wspc8kmxdccjaclamywxaggn51xbwpzj4r83giy";
    }) {};
+   reflex-collections = super.callCabal2nix "reflex-collections" (nixpkgs.pkgs.fetchFromGitHub {
+     owner = "adamConnerSax";
+     repo = "reflex-collections";
+     rev = "4be6ab91775ecdedf954c484fc897b30564fd56e";
+     sha256 = "0rc0vpk0fij4a7kqr1js35zjbqpbn8gzxhf24l8p1r6djj97k473";
+   }) {};
 #   reflex-dom-contrib = super.callCabal2nix "reflex-dom-contrib" (nixpkgs.pkgs.fetchFromGitHub {
 #     owner = "reflex-frp";
 #     repo = "reflex-dom-contrib";
