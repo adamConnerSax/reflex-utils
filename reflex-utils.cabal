@@ -38,6 +38,7 @@ library
                   Reflex.Dom.Contrib.Widgets.WidgetResult
                   Reflex.Dom.Contrib.Widgets.SafeDropdown
                   Reflex.Dom.Contrib.Widgets.ModalEditor
+                  Reflex.Dom.Contrib.Widgets.EditableCollection
                   Reflex.Dom.Contrib.Layout.All
                   Reflex.Dom.Contrib.Layout.Types
                   Reflex.Dom.Contrib.Layout.ClayUtils

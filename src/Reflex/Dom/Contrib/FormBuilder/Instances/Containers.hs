@@ -76,6 +76,7 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FormError (FNot
                                                                  printFormErrors)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.Layout.Types                (LayoutDirection (..))
+import qualified Reflex.Dom.Contrib.Widgets.EditableCollection  as EC
 import qualified Reflex.Dom.Contrib.Widgets.ModalEditor         as MW
 import qualified Reflex.Dom.Contrib.Widgets.SafeDropdown        as SD
 import           Reflex.Dom.Contrib.Widgets.WidgetResult        (WidgetResult, buildWidgetResult,
