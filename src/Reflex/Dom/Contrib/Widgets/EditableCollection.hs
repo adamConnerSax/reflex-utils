@@ -97,10 +97,18 @@ validOnly toMaybe editCollectionF initial = do
   R.buildDynamic (R.sample $ R.current initial) $ R.leftmost [R.updated initial, validEditEv] 
 
 
-editDeletableGeneral :: ( RD.Adjustable t m
+editDeletableSimple :: ( RD.Adjustable t m
                         , RD.PostBuild t m
                         , RD.MonadHold t m
                         , MonadFix m)
+  => (a -> b)
+  -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
+  -> (((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b)))) -- function to convert widget to deletable
+  -> Dynamic t (f a) -- input collection
+  -> m (R.Event t (Diff f b)) -- edits and deletes
+editDeletableSimple aTob widget widgetWithDelete initial = do
+  let w = widgetWithDelete widget
+      
   
 {-
 
