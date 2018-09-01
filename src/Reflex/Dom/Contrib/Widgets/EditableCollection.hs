@@ -22,6 +22,7 @@ import           Reflex.Collections.Collections as RC
 
 import           Reflex            (Dynamic, Event, Reflex, attachWithMaybe,
                                     leftmost, never)
+import           Reflex.Dom        ((=:))                 
 import           Reflex.Dynamic    (constDyn, current, tagPromptlyDyn, updated)
 --import Reflex.Dom (widgetHold,dropdown,DropdownConfig(..))
 import qualified Reflex            as R
@@ -31,6 +32,9 @@ import           Data.Traversable (sequenceA)
 import           Control.Lens      (makeLenses)
 import           Control.Monad (join)
 import           Control.Monad.Fix (MonadFix)
+import           Data.Maybe (isJust)
+import           Data.Monoid ((<>))
+import           Data.Kind (Type)
 --import           Data.Default
 
 import qualified Data.Map          as M
@@ -42,7 +46,7 @@ import qualified Data.Sequence as S
 import qualified Data.Array as A
 import qualified Data.Tree as T
 
-import           Data.Kind (Type)
+
 
 class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) where
   editValues :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
@@ -50,13 +54,13 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
     -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
     -> Dynamic t (f a) -- input collection
     -> m (R.Dynamic t (f b)) 
-
+{-
   editDeletable :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => (a -> b) -- to map the input type to the output type. Often "Just" or "Right"
     -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
     -> Dynamic t (f a) -- input collection
     -> m (R.Event t (Diff f b)) -- edits and deletes
-
+-}
 {-
   editStructure :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
@@ -67,25 +71,25 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
 -}
 
 instance Ord k => EditableCollection (M.Map k) where
-  editValues _ initial widget = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
+  editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
 
 instance (Hashable k, Ord k) => EditableCollection (HM.HashMap k) where
-  editValues _ initial widget = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
+  editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
 
 instance EditableCollection IM.IntMap where
-  editValues _ initial widget = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
+  editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
 
 instance EditableCollection [] where
-  editValues _ initial widget = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
+  editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
 
 instance EditableCollection S.Seq where
-  editValues _ initial widget = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
+  editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
 
 instance (A.Ix k, Enum k, Bounded k) => EditableCollection (A.Array k) where
-  editValues aTob initial widget = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial
+  editValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial
 
 instance EditableCollection T.Tree where
-  editValues aTob initial widget = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial     
+  editValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial     
 
 -- helper for the case when you want the output to update only on input change or a valid edit
 -- e.g., validOnly (flip (editValues Right) widget) initial
@@ -98,17 +102,52 @@ validOnly toMaybe editCollectionF initial = do
 
 
 editDeletableSimple :: ( RD.Adjustable t m
-                        , RD.PostBuild t m
-                        , RD.MonadHold t m
-                        , MonadFix m)
+                       , RD.PostBuild t m
+                       , RD.MonadHold t m
+                       , MonadFix m
+                       , RC.Mergeable f (Maybe b)
+                       , EditableCollection f)
   => (a -> b)
   -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
   -> (((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b)))) -- function to convert widget to deletable
   -> Dynamic t (f a) -- input collection
-  -> m (R.Event t (Diff f b)) -- edits and deletes
-editDeletableSimple aTob widget widgetWithDelete initial = do
-  let w = widgetWithDelete widget
+  -> m (R.Dynamic t b) -- edits and deletes
+editDeletableSimple aTob widget widgetWithDelete fDyn = do
+  let w = widgetWithDelete widget -- RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))
+  diffEv <- R.switch . R.current . fmap RC.mergeOver <$> editValues aTob w fDyn  -- R.Event (Diff f (Maybe b))
+  let newFEv = R.attachWith (flip applyDiff) (R.current fDyn) diffEv 
+  R.buildDynamic (R.sample $ fDyn) newFEv     
+
+-- one possible button widget
+buttonNoSubmit :: RD.DomBuilder t m=>T.Text -> m (R.Event t ())
+buttonNoSubmit t = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "button" ("type" RD.=: "button") (RD.text t)
+
+editWithDeleteButton :: ( R.Reflex t
+                        , R.MonadHold t m
+                        , R.PostBuild t m
+                        , RD.DomBuilder t m
+                        , MonadFix m)
+  => (k -> R.Dynamic t a -> m (R.Dynamic t b)) -- widget to edit one element
+  -> M.Map T.Text T.Text -- attrs for the div surrounding the widget with button
+  -> m (Event t ()) -- delete button widget
+  -> R.Dynamic t Bool -- visibility of widget
+  -> k -- key in collection
+  -> R.Dynamic t a -- input element
+  -> m (R.Event t (Maybe b)) -- 'Just b' if changed, 'Nothing' if deleted.
+editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
+  let widgetAttrs = (\x -> attrs <> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
+  (visibleDyn', outEv) <- RD.elDynAttr "div" widgetAttrs $ do
+    editedDyn <- RD.el "span" $ editWidget k vDyn
+    delButtonEv <- RD.el "span" $ delButton
+    let outEv = R.leftmost [Just <$> R.updated editedDyn, Nothing <$ delButtonEv]  
+    visDyn <- R.buildDynamic (R.sample $ current visibleDyn) $ (isJust <$> outEv) 
+    return (visDyn, outEv)
+  return outEv
       
+hiddenCSS :: M.Map T.Text T.Text
+hiddenCSS  = "style" =: "display: none !important"
+visibleCSS :: M.Map T.Text T.Text
+visibleCSS = "style" =: "display: inline"
   
 {-
 
