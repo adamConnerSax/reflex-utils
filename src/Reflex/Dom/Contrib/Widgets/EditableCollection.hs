@@ -111,34 +111,22 @@ validOnly toMaybe editCollectionF initial = do
   let validEditEv = R.fmapMaybe toMaybe $ updated $ (fmap sequenceA) edited
   R.buildDynamic (R.sample $ R.current initial) $ R.leftmost [R.updated initial, validEditEv] 
 
-
-editDeletableSimple :: ( RD.Adjustable t m
-                       , RD.PostBuild t m
-                       , RD.MonadHold t m
-                       , MonadFix m
-                       , RC.Mergeable f (Maybe b)
-                       , EditableCollection f)
-  => (a -> b)
-  -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
-  -> (((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b)))) -- function to convert widget to deletable
-  -> Dynamic t (f a) -- input collection
-  -> m (R.Dynamic t (f b)) 
-editDeletableSimple aTob widget widgetWithDelete fDyn = do
-  let w = widgetWithDelete widget -- RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))
-  diffEv <- ecListViewWithKey fDyn w --R.switch . R.current . fmap RC.mergeOver <$> editValues aTob w fDyn  -- R.Event (Diff f (Maybe b))
-  let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap (fmap aTob) fDyn) diffEv 
-  R.buildDynamic (R.sample . R.current $ fmap (fmap aTob) fDyn) newFEv     
-
 editDeletable ::  ( RD.Adjustable t m
                   , RD.PostBuild t m
                   , RD.MonadHold t m
                   , MonadFix m
                   , RC.Mergeable f (Maybe b)
                   , EditableCollection f)
+  => (a -> b)
+  -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))) -- function to edit (Just b) or Delete (Nothing)
+  -> Dynamic t (f a) -- input collection
+  -> m (R.Dynamic t (f b))
+editDeleteable aTob widget fDyn =
+  diffEv <- ecListViewWithKey fDyn widget --R.switch . R.current . fmap RC.mergeOver <$> editValues aTob w fDyn  -- R.Event (Diff f (Maybe b))
+  let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap (fmap aTob) fDyn) diffEv 
+  R.buildDynamic (R.sample . R.current $ fmap (fmap aTob) fDyn) newFEv     
+  
 
--- one possible button widget
-buttonNoSubmit :: RD.DomBuilder t m=>T.Text -> m (R.Event t ())
-buttonNoSubmit t = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "button" ("type" RD.=: "button") (RD.text t)
 
 editWithDeleteButton :: ( R.Reflex t
                         , R.MonadHold t m
@@ -161,7 +149,33 @@ editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
     visDyn <- R.buildDynamic (R.sample $ current visibleDyn) $ (isJust <$> outEv) 
     return (visDyn, outEv)
   return outEv
-      
+
+
+newItemEditorConfig :: (Show e, R.Reflex t) => ME.ModalEditorConfig t e a
+newItemEditorConfig = RD.def
+                      & ME.modalEditor_updateOutput .~ MW.OnOk
+                      & ME.modalEditor_closeOnOk .~ True
+                      & ME.modalEditor_openButton .~ const (MW.ButtonConfig "Add" M.empty (Just "fa fa-plus"))
+                      & ME.modalEditor_XButton .~ Nothing
+                      & ME.modalEditor_OkButton .~ ME.disableAndDisplayIfError (T.pack . show) (MW.ButtonConfig "OK" M.empty (Just "fa fa-check"))
+                      & ME.modalEditor_CancelButton .~ const (MW.ButtonConfig "Cancel" M.empty (Just "fa fa-window-close"))
+
+newItemWidget :: (R.Reflex t, KeyedCollection f)
+  => (R.Dynamic t (f v) -> m (R.Dynamic t (Either e (Key f,v)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
+  -> R.Dynamic t (f v)
+  -> m (R.Event t (Diff f v))
+newItemWidget editPairW mapDyn = mdo
+  let modalEditW = const $ fmap avToEither . getCompose <$> editPairW mapDyn
+      blankInput = R.constDyn $ Left [FNothing]
+      pairEvToDiffEv pairEv = fmap Just . uncurry lhfMapSingleton <$> pairEv
+  newPairEv <- MW.modalEditor_change <$> MW.modalEditorEither modalEditW blankInput newItemEditorConfig
+  return $ pairEvToDiffEv newPairEv
+
+
+-- one possible button widget
+buttonNoSubmit :: RD.DomBuilder t m=>T.Text -> m (R.Event t ())
+buttonNoSubmit t = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "button" ("type" RD.=: "button") (RD.text t)
+    
 hiddenCSS :: M.Map T.Text T.Text
 hiddenCSS  = "style" =: "display: none !important"
 visibleCSS :: M.Map T.Text T.Text
