@@ -53,7 +53,11 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
     => (a -> b) -- to map the input type to the output type. Often "Just" or "Right"
     -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
     -> Dynamic t (f a) -- input collection
-    -> m (R.Dynamic t (f b)) 
+    -> m (R.Dynamic t (f b))
+
+  ecListViewWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
+    => R.Dynamic t (f v) -> (Key f -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t (Diff f a))
+    
 {-
   editDeletable :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => (a -> b) -- to map the input type to the output type. Often "Just" or "Right"
@@ -72,25 +76,32 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
 
 instance Ord k => EditableCollection (M.Map k) where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
+  ecListViewWithKey = RC.listViewWithKey
 
 instance (Hashable k, Ord k) => EditableCollection (HM.HashMap k) where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
+  ecListViewWithKey = RC.listViewWithKey
 
 instance EditableCollection IM.IntMap where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
-
+  ecListViewWithKey = RC.listViewWithKey
+  
 instance EditableCollection [] where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
-
+  ecListViewWithKey = RC.listViewWithKey
+  
 instance EditableCollection S.Seq where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
-
+  ecListViewWithKey = RC.listViewWithKey
+  
 instance (A.Ix k, Enum k, Bounded k) => EditableCollection (A.Array k) where
   editValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial
+  ecListViewWithKey = RC.listViewWithKeyMaybe
 
 instance EditableCollection T.Tree where
   editValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial     
-
+  ecListViewWithKey = RC.listViewWithKeyMaybe
+  
 -- helper for the case when you want the output to update only on input change or a valid edit
 -- e.g., validOnly (flip (editValues Right) widget) initial
 validOnly :: (Reflex t, R.MonadHold t m, Traversable f, Applicative g)
@@ -111,12 +122,19 @@ editDeletableSimple :: ( RD.Adjustable t m
   -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
   -> (((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b)))) -- function to convert widget to deletable
   -> Dynamic t (f a) -- input collection
-  -> m (R.Dynamic t b) -- edits and deletes
+  -> m (R.Dynamic t (f b)) 
 editDeletableSimple aTob widget widgetWithDelete fDyn = do
   let w = widgetWithDelete widget -- RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))
-  diffEv <- R.switch . R.current . fmap RC.mergeOver <$> editValues aTob w fDyn  -- R.Event (Diff f (Maybe b))
-  let newFEv = R.attachWith (flip applyDiff) (R.current fDyn) diffEv 
-  R.buildDynamic (R.sample $ fDyn) newFEv     
+  diffEv <- ecListViewWithKey fDyn w --R.switch . R.current . fmap RC.mergeOver <$> editValues aTob w fDyn  -- R.Event (Diff f (Maybe b))
+  let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap (fmap aTob) fDyn) diffEv 
+  R.buildDynamic (R.sample . R.current $ fmap (fmap aTob) fDyn) newFEv     
+
+editDeletable ::  ( RD.Adjustable t m
+                  , RD.PostBuild t m
+                  , RD.MonadHold t m
+                  , MonadFix m
+                  , RC.Mergeable f (Maybe b)
+                  , EditableCollection f)
 
 -- one possible button widget
 buttonNoSubmit :: RD.DomBuilder t m=>T.Text -> m (R.Event t ())
