@@ -14,7 +14,8 @@ module Reflex.Dom.Contrib.Widgets.EditableCollection
 
 --import Reflex.Dom.Contrib.DynamicUtils (dynAsEv, dynPlusEvent)
 --import Reflex.Dom.Contrib.EventUtils (fanBool)
---import Reflex.Dom.Contrib.Widgets.WidgetResult (WrappedWidgetResult, unsafeBuildWrappedWidgetResult)
+import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult (dynamicToWidgetResult)
 import qualified Reflex.Dom.Contrib.Widgets.ModalEditor as ME
 
 -- for the collection functions and constraints they need
@@ -29,7 +30,7 @@ import qualified Reflex            as R
 import qualified Reflex.Dom        as RD
 
 import           Data.Traversable (sequenceA) 
-import           Control.Lens      (makeLenses)
+import           Control.Lens      (makeLenses,(&),(.~))
 import           Control.Monad (join)
 import           Control.Monad.Fix (MonadFix)
 import           Data.Maybe (isJust)
@@ -121,13 +122,27 @@ editDeletable ::  ( RD.Adjustable t m
   -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))) -- function to edit (Just b) or Delete (Nothing)
   -> Dynamic t (f a) -- input collection
   -> m (R.Dynamic t (f b))
-editDeleteable aTob widget fDyn =
-  diffEv <- ecListViewWithKey fDyn widget --R.switch . R.current . fmap RC.mergeOver <$> editValues aTob w fDyn  -- R.Event (Diff f (Maybe b))
+editDeletable aTob widget fDyn = do
+  diffEv <- ecListViewWithKey fDyn widget
   let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap (fmap aTob) fDyn) diffEv 
   R.buildDynamic (R.sample . R.current $ fmap (fmap aTob) fDyn) newFEv     
+
+{-
+editStructure :: ( RD.Adjustable t m
+                 , RD.PostBuild t m
+                 , RD.MonadHold t m
+                 , MonadFix m
+                 , RC.Mergeable f (Maybe b)
+                 , EditableCollection f)
+                 
+  => (a -> b)
+  -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))) -- function to make edit widget: (Just b) or Delete (Nothing)
+  -> (R.Dynamic t a -> m (R.Event t (Diff f b))) --  function to make add item widget.  Only fires on valid add
+  -> Dynamic t (f a) -- input collection
+  -> m (R.Dynamic t (f b))
+-}
   
-
-
+-- add a delete action to a widget that edits the (key/)value.  
 editWithDeleteButton :: ( R.Reflex t
                         , R.MonadHold t m
                         , R.PostBuild t m
@@ -153,23 +168,31 @@ editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
 
 newItemEditorConfig :: (Show e, R.Reflex t) => ME.ModalEditorConfig t e a
 newItemEditorConfig = RD.def
-                      & ME.modalEditor_updateOutput .~ MW.OnOk
+                      & ME.modalEditor_updateOutput .~ ME.OnOk
                       & ME.modalEditor_closeOnOk .~ True
-                      & ME.modalEditor_openButton .~ const (MW.ButtonConfig "Add" M.empty (Just "fa fa-plus"))
+                      & ME.modalEditor_openButton .~ const (ME.ButtonConfig "Add" M.empty (Just "fa fa-plus"))
                       & ME.modalEditor_XButton .~ Nothing
-                      & ME.modalEditor_OkButton .~ ME.disableAndDisplayIfError (T.pack . show) (MW.ButtonConfig "OK" M.empty (Just "fa fa-check"))
-                      & ME.modalEditor_CancelButton .~ const (MW.ButtonConfig "Cancel" M.empty (Just "fa fa-window-close"))
+                      & ME.modalEditor_OkButton .~ flip (ME.disableAndDisplayIfError (T.pack . show)) (ME.ButtonConfig "OK" M.empty (Just "fa fa-check"))
+                      & ME.modalEditor_CancelButton .~ const (ME.ButtonConfig "Cancel" M.empty (Just "fa fa-window-close"))
 
-newItemWidget :: (R.Reflex t, KeyedCollection f)
-  => (R.Dynamic t (f v) -> m (R.Dynamic t (Either e (Key f,v)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
-  -> R.Dynamic t (f v)
-  -> m (R.Event t (Diff f v))
+newItemWidget :: ( R.Reflex t
+                 , RD.DomBuilder t m
+                 , RD.PostBuild t m
+                 , RD.MonadHold t m
+                 , MonadFix m
+                 , MonadWidgetExtraC t m
+                 , Diffable f
+                 , Show e
+                 , Monoid e)
+  => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (Diff f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
+  -> R.Dynamic t (f a)
+  -> m (R.Event t (Diff f b))
 newItemWidget editPairW mapDyn = mdo
-  let modalEditW = const $ fmap avToEither . getCompose <$> editPairW mapDyn
-      blankInput = R.constDyn $ Left [FNothing]
-      pairEvToDiffEv pairEv = fmap Just . uncurry lhfMapSingleton <$> pairEv
-  newPairEv <- MW.modalEditor_change <$> MW.modalEditorEither modalEditW blankInput newItemEditorConfig
-  return $ pairEvToDiffEv newPairEv
+  let modalEditW = const $ dynamicToWidgetResult <$> editPairW mapDyn
+      blankInput = R.constDyn $ Left mempty
+      pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
+  newPairEv <- ME.modalEditor_change <$> ME.modalEditorEither modalEditW blankInput newItemEditorConfig
+  return $ pairEvToDiffMaybeEv newPairEv
 
 
 -- one possible button widget
