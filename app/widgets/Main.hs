@@ -89,7 +89,9 @@ editableCollectionsWidget = do
   RD.el "p" (RD.text "")
   RD.el "br" RD.blank
   RD.dynText $ fmap (T.pack . show) editValuesDyn
-
+  let editAndDeleteWidget = EC.editWithDeleteButton (const editValue) M.empty (EC.buttonNoSubmit "-") (constDyn True)
+      editDeletableWidget = EC.editDeletable Just editAndDeleteWidget
+      
 editableCollectionTab :: (R.Reflex t, RD.DomBuilder t m, MonadWidgetExtraC t m, RD.MonadHold t m, RD.PostBuild t m, MonadFix m) => TabInfo t m ()
 editableCollectionTab = TabInfo "Editable Collections" (R.constDyn ("Editable Collections", M.empty)) $ editableCollectionsWidget
 
