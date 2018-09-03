@@ -127,7 +127,7 @@ editDeletable aTob widget fDyn = do
   let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap (fmap aTob) fDyn) diffEv 
   R.buildDynamic (R.sample . R.current $ fmap (fmap aTob) fDyn) newFEv     
 
-{-
+
 editStructure :: ( RD.Adjustable t m
                  , RD.PostBuild t m
                  , RD.MonadHold t m
@@ -135,12 +135,18 @@ editStructure :: ( RD.Adjustable t m
                  , RC.Mergeable f (Maybe b)
                  , EditableCollection f)
                  
-  => (a -> b)
-  -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))) -- function to make edit widget: (Just b) or Delete (Nothing)
-  -> (R.Dynamic t a -> m (R.Event t (Diff f b))) --  function to make add item widget.  Only fires on valid add
+  => (R.Dynamic t (f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete
+  -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  function to make add item widget.  Only fires on valid add
+  -> (R.Dynamic t (f a) -> Dynamic t (M.Map T.Text T.Text)) -- attrs can depend on collection
+  -> (a -> b)
   -> Dynamic t (f a) -- input collection
   -> m (R.Dynamic t (f b))
--}
+editStructure editDeleteWidget addWidget attrsF aTob fDyn = RD.elDynAttr (attrsF fDyn) $ do
+  editDeleteDiffMaybeEv <- editDeleteWidget fDyn
+  addDiffMaybeEv <- fmap (fmap Just) <$> addWidget fDyn
+  let diffev = R.leftmost [editDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
+      newFEv = R.attachWith (flip applyDiff) (R.current $ fmap (fmap aTob) fDyn) diffEv
+  R.buildDynamic (R.sample . R.current $ fmap (fmap aTob) fDyn) newFEv           
   
 -- add a delete action to a widget that edits the (key/)value.  
 editWithDeleteButton :: ( R.Reflex t
