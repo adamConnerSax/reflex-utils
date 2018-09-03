@@ -10,6 +10,13 @@
 {-# LANGUAGE TypeFamilies      #-}
 module Reflex.Dom.Contrib.Widgets.EditableCollection
   (
+    EditableCollection(..)
+  , editDeletable
+  , editStructure
+  , editWithDeleteButton
+  , newItemWidget
+  , buttonNoSubmit
+  , validOnly
   ) where
 
 --import Reflex.Dom.Contrib.DynamicUtils (dynAsEv, dynPlusEvent)
@@ -59,22 +66,6 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
   ecListViewWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => R.Dynamic t (f v) -> (Key f -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t (Diff f a))
     
-{-
-  editDeletable :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
-    => (a -> b) -- to map the input type to the output type. Often "Just" or "Right"
-    -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
-    -> Dynamic t (f a) -- input collection
-    -> m (R.Event t (Diff f b)) -- edits and deletes
--}
-{-
-  editStructure :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
-    => ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
-    -> (R.Dynamic t (f a) -> m (R.Event t (RC.Diff b))) -- widget for adding an item or items. Might respond to changes in the input collection.
-    -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b)) -> (Dynamic t (f a) -> m (R.Event t (RC.Diff b))))  -- widget taking single item widget and adding delete 
-    -> Dynamic t (f a)
-    -> m (Dynamic t (f b))
--}
-
 instance Ord k => EditableCollection (M.Map k) where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
@@ -130,23 +121,26 @@ editDeletable aTob widget fDyn = do
 
 editStructure :: ( RD.Adjustable t m
                  , RD.PostBuild t m
-                 , RD.MonadHold t m
+                 , RD.MonadHold t m                 
                  , MonadFix m
+                 , RD.DomBuilder t m
                  , RC.Mergeable f (Maybe b)
-                 , EditableCollection f)
-                 
+                 , EditableCollection f)                 
   => (R.Dynamic t (f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete
   -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  function to make add item widget.  Only fires on valid add
   -> (R.Dynamic t (f a) -> Dynamic t (M.Map T.Text T.Text)) -- attrs can depend on collection
-  -> (a -> b)
+  -> (f a -> f b) -- we need this to have a starting point for the output dynamics
+  -> (f b -> f a) -- we need this to feed the changes back in to the collection functions
   -> Dynamic t (f a) -- input collection
   -> m (R.Dynamic t (f b))
-editStructure editDeleteWidget addWidget attrsF aTob fDyn = RD.elDynAttr (attrsF fDyn) $ do
-  editDeleteDiffMaybeEv <- editDeleteWidget fDyn
+editStructure editDeleteWidget addWidget attrsF faTofb fbTofa fDyn = RD.elDynAttr "div" (attrsF fDyn) $ mdo
+  editDeleteDiffMaybeEv <- editDeleteWidget (fbTofa <$> withAddsDyn)
   addDiffMaybeEv <- fmap (fmap Just) <$> addWidget fDyn
-  let diffev = R.leftmost [editDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
-      newFEv = R.attachWith (flip applyDiff) (R.current $ fmap (fmap aTob) fDyn) diffEv
-  R.buildDynamic (R.sample . R.current $ fmap (fmap aTob) fDyn) newFEv           
+  let diffEv = R.leftmost [editDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
+      newFEv = R.attachWith (flip applyDiff) (R.current $ faTofb <$> fDyn) diffEv
+  curDyn <- R.buildDynamic (R.sample . R.current $ faTofb <$> fDyn) newFEv -- always has current value
+  withAddsDyn <- R.buildDynamic (R.sample . R.current $ faTofb <$> fDyn) (R.tag (current curDyn) addDiffMaybeEv) -- updates to current value only on adds
+  return curDyn
   
 -- add a delete action to a widget that edits the (key/)value.  
 editWithDeleteButton :: ( R.Reflex t

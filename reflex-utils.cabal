@@ -58,7 +58,7 @@ library
                   Reflex.Dom.Contrib.FormBuilder.Builder
                   Reflex.Dom.Contrib.FormBuilder.Instances
                   Reflex.Dom.Contrib.FormBuilder.AllDefault
-                  Reflex.Dom.Contrib.FormBuilder.Instances.Containers
+--                  Reflex.Dom.Contrib.FormBuilder.Instances.Containers
                   Reflex.Dom.Contrib.FormBuilder.Instances.Basic
                   Reflex.Dom.Contrib.FormBuilder.Instances.ModalForm
   other-modules:
@@ -186,7 +186,7 @@ executable reflex-utils-layout
 
 
 executable reflex-utils-formBuilder-warp
-  if flag(wkwebview)
+--  if flag(wkwebview)
     buildable: False
   hs-source-dirs:      app/formBuilder
   main-is:             Main.hs
@@ -250,7 +250,34 @@ executable reflex-utils-editor-warp
                      , text
   default-language:    Haskell2010
 
+executable reflex-utils-widgets-warp
+  if flag(wkwebview)
+    buildable: False
+  hs-source-dirs:      app/widgets
+  main-is:             Main.hs
+  other-modules:       
+  ghc-options:         -threaded -Wall -fwarn-tabs -funbox-strict-fields -rtsopts -with-rtsopts=-N -O2
+  if flag(warp)
+   cpp-options: -DUSE_WARP -DUSE_JSADDLE
+   build-depends: jsaddle-warp
+                , cabal-macosx >= 0.2.3.4 && < 0.3
+  if flag(ghcjs)
+   cpp-options: -DUSE_GHCJS 
+  build-depends:       base
+                     , reflex
+                     , reflex-dom
+                     , reflex-collections
+                     , reflex-utils
+                     , ghcjs-dom
+                     , containers
+                     , lens
+                     , dataBuilder
+                     , process
+                     , text
+  default-language:    Haskell2010
 
+
+  
 executable reflex-utils-layout-warp
   if flag(wkwebview)
     buildable: False
