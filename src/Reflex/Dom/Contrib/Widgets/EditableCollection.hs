@@ -66,33 +66,28 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
   ecListViewWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => R.Dynamic t (f v) -> (Key f -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t (Diff f a))
 
-  newKey :: KeyedCollection f => Dynamic t (f a) -> Dynamic t (Maybe (Key f)) -- if the key is determined by the collection
     
 instance Ord k => EditableCollection (M.Map k) where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  newKey _ = R.constDyn Nothing
+
 
 instance (Hashable k, Ord k) => EditableCollection (HM.HashMap k) where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  newKey _ = R.constDyn Nothing
 
 instance EditableCollection IM.IntMap where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  newKey _ = R.constDyn Nothing
-  
+
 instance EditableCollection [] where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  newKey = fmap (Just . length) 
-  
+        
 instance EditableCollection S.Seq where
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  newKey = fmap (Just . S.length) 
-  
+
 instance (A.Ix k, Enum k, Bounded k) => EditableCollection (A.Array k) where
   editValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial
   ecListViewWithKey = RC.listViewWithKeyMaybe
@@ -100,6 +95,7 @@ instance (A.Ix k, Enum k, Bounded k) => EditableCollection (A.Array k) where
 instance EditableCollection T.Tree where
   editValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial     
   ecListViewWithKey = RC.listViewWithKeyMaybe
+
   
 -- helper for the case when you want the output to update only on input change or a valid edit
 -- e.g., validOnly (flip (editValues Right) widget) initial
@@ -121,8 +117,8 @@ editDeletable ::  ( RD.Adjustable t m
   -> Dynamic t (f a) -- input collection
   -> m (R.Dynamic t (f b))
 editDeletable faTofb widget fDyn = do
-  diffEv <- ecListViewWithKey fDyn widget
-  let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap faTofb fDyn) diffEv 
+  editDeleteDiffEv <- ecListViewWithKey fDyn widget
+  let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap faTofb fDyn) editDeleteDiffEv 
   R.buildDynamic (R.sample . R.current $ fmap faTofb fDyn) newFEv     
 
 
@@ -133,7 +129,7 @@ There are 3 sources of change:
 2. An edit or delete of an existing element (editDeleteDiffMaybeEv)
 3. The addition of a new element (addDiffMaybeEv)
 which must be reflected in 2 places:
-1. The collection as its rendered in the dom via editDeleteWidget 
+1. The collection as it's rendered in the DOM via editDeleteWidget 
 2. The output of this widget (curDyn)
 -}
 editStructure :: ( RD.Adjustable t m
@@ -153,12 +149,13 @@ editStructure :: ( RD.Adjustable t m
 editStructure editDeleteWidget addWidget attrsF faTofb fbTofa fDyn = RD.elDynAttr "div" (attrsF fDyn) $ mdo
   editDeleteDiffMaybeEv <- editDeleteWidget (fbTofa <$> editDeleteInputDyn)
   addDiffMaybeEv <- fmap (fmap Just) <$> addWidget fDyn
-  let inputfbEv = faTofb <$> R.updated fDyn
-      diffEv = R.leftmost [editDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
-      newFEv = R.leftmost [inputfbEv, R.attachWith (flip applyDiff) (R.current curDyn) diffEv]
-      newWidgetInputEv = leftmost [() <$ R.updated fDyn, () <$ addDiffMaybeEv]
-  curDyn <- R.buildDynamic (R.sample . R.current $ faTofb <$> fDyn) newFEv -- always has current value
-  editDeleteInputDyn <- R.buildDynamic (R.sample . R.current $ faTofb <$> fDyn) (R.tagDyn curDyn newWidgetInputEv) -- updates to current value (in this frame) on adds or new input
+  let inputFbBeh = faTofb <$> R.current fDyn 
+      inputFbEv = faTofb <$> R.updated fDyn
+      editDeleteAddDiffEv = R.leftmost [editDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
+      newFEv = R.leftmost [inputFbEv, R.attachWith (flip applyDiff) (R.current curDyn) editDeleteAddDiffEv]
+      newCollectionInputEv = leftmost [() <$ R.updated fDyn, () <$ addDiffMaybeEv]
+  curDyn <- R.buildDynamic (R.sample inputFbBeh) newFEv -- always has current value
+  editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) (R.tagDyn curDyn newCollectionInputEv) -- updates to current value (in this frame) on adds or new input
   return curDyn
   
 -- add a delete action to a widget that edits the (key/)value.  
