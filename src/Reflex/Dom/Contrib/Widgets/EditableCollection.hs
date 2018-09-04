@@ -109,14 +109,14 @@ editDeletable ::  ( RD.Adjustable t m
                   , MonadFix m
                   , RC.Mergeable f (Maybe b)
                   , EditableCollection f)
-  => (a -> b)
+  => (f a -> f b)
   -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))) -- function to edit (Just b) or Delete (Nothing)
   -> Dynamic t (f a) -- input collection
   -> m (R.Dynamic t (f b))
-editDeletable aTob widget fDyn = do
+editDeletable faTofb widget fDyn = do
   diffEv <- ecListViewWithKey fDyn widget
-  let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap (fmap aTob) fDyn) diffEv 
-  R.buildDynamic (R.sample . R.current $ fmap (fmap aTob) fDyn) newFEv     
+  let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap faTofb fDyn) diffEv 
+  R.buildDynamic (R.sample . R.current $ fmap faTofb fDyn) newFEv     
 
 
 editStructure :: ( RD.Adjustable t m
@@ -148,7 +148,7 @@ editWithDeleteButton :: ( R.Reflex t
                         , R.PostBuild t m
                         , RD.DomBuilder t m
                         , MonadFix m)
-  => (k -> R.Dynamic t a -> m (R.Dynamic t b)) -- widget to edit one element
+  => (k -> R.Dynamic t a -> m (R.Event t b)) -- widget to edit one element, fires only on valid change
   -> M.Map T.Text T.Text -- attrs for the div surrounding the widget with button
   -> m (Event t ()) -- delete button widget
   -> R.Dynamic t Bool -- visibility of widget
@@ -158,9 +158,9 @@ editWithDeleteButton :: ( R.Reflex t
 editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
   let widgetAttrs = (\x -> attrs <> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
   (visibleDyn', outEv) <- RD.elDynAttr "div" widgetAttrs $ do
-    editedDyn <- RD.el "span" $ editWidget k vDyn
+    editedEv <- RD.el "span" $ editWidget k vDyn
     delButtonEv <- RD.el "span" $ delButton
-    let outEv = R.leftmost [Just <$> R.updated editedDyn, Nothing <$ delButtonEv]  
+    let outEv = R.leftmost [Just <$> editedEv, Nothing <$ delButtonEv]  
     visDyn <- R.buildDynamic (R.sample $ current visibleDyn) $ (isJust <$> outEv) 
     return (visDyn, outEv)
   return outEv
