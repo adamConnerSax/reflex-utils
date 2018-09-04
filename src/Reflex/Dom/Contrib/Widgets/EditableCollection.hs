@@ -137,7 +137,7 @@ editStructure editDeleteWidget addWidget attrsF faTofb fbTofa fDyn = RD.elDynAtt
   editDeleteDiffMaybeEv <- editDeleteWidget (fbTofa <$> withAddsDyn)
   addDiffMaybeEv <- fmap (fmap Just) <$> addWidget fDyn
   let diffEv = R.leftmost [editDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
-      newFEv = R.attachWith (flip applyDiff) (R.current $ faTofb <$> fDyn) diffEv
+      newFEv = R.attachWith (flip applyDiff) (R.current curDyn) diffEv
   curDyn <- R.buildDynamic (R.sample . R.current $ faTofb <$> fDyn) newFEv -- always has current value
   withAddsDyn <- R.buildDynamic (R.sample . R.current $ faTofb <$> fDyn) (R.tag (current curDyn) addDiffMaybeEv) -- updates to current value only on adds
   return curDyn

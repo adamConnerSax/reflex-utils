@@ -91,17 +91,13 @@ editableCollectionsWidget = do
   RD.el "p" (RD.text "")
   RD.el "br" RD.blank
   RD.dynText $ fmap (T.pack . show) editValuesDyn
-  let editValueWidget :: (RD.DomBuilder r m, MonadWidgetExtraC t m) => k -> R.Dynamic t a -> m (R.Event t a)
-      editValueWidget _ vDyn = R.fmapMaybe id . R.updated <$> editValue vDyn
-      editAndDeleteWidget :: (RD.DomBuilder r m, MonadWidgetExtraC t m) => k -> R.Dynamic t a -> m (R.Event t (Maybe a))
+  let editValueWidget _ vDyn = R.fmapMaybe id . R.updated <$> editValue vDyn
       editAndDeleteWidget = EC.editWithDeleteButton editValueWidget M.empty (EC.buttonNoSubmit "-") (R.constDyn True)
---      editDeletableWidget :: (RD.DomBuilder r m, MonadWidgetExtraC t m) => R.Dynamic t (f a) -> m (R.Event t (f (Maybe a)))
       editDeletableWidget = flip EC.ecListViewWithKey editAndDeleteWidget
---      newMapItemWidget :: (RD.DomBuilder r m, MonadWidgetExtraC t m) => R.Dynamic t (f a) -> m (R.Event t (RC.Diff f a))
       newMapItemWidget = EC.newItemWidget (const $ fmap (maybe (Left "Invalid (Text,String)") Right) <$> editPair)
   RD.el "p" (RD.text "")
   RD.el "br" RD.blank
-  editStructureDyn <- EC.editStructure editDeletableWidget newMapItemWidget (const $ R.constDyn M.empty) (fmap Just) (M.mapMaybe id) editValuesDyn
+  editStructureDyn <- EC.editStructure editDeletableWidget newMapItemWidget (const $ R.constDyn M.empty) id id editValuesDyn
   RD.el "p" (RD.text "")
   RD.el "br" RD.blank
   RD.dynText $ fmap (T.pack . show) editStructureDyn
