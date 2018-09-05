@@ -183,22 +183,26 @@ selectEditValues :: ( RD.Adjustable t m
                     , Ord (Key f)
                     , EditableCollection f) -- for dropdown label
   => M.Map T.Text T.Text -- safedropdown attrs
+  -> (RC.Diff f b -> M.Map (Key f) T.Text -> M.Map (Key f) T.Text) -- function to adjust dropdown labels 
   -> (Key f -> R.Dynamic t a -> m (R.Event t b)) -- single element edit widget 
   -> R.Dynamic t (f a)
   -> m (R.Event t (RC.Diff f b))
-selectEditValues ddAttrs elemWidget fDyn = do
+selectEditValues ddAttrs updateKeyLabelMap elemWidget fDyn = mdo
   let safeDropdownConfig = SD.SafeDropdownConfig R.never $ R.constDyn (ddAttrs <> ("size" RD.=: "1"))
-      keyLabelMap = M.fromList . fmap (\(k, v) -> (k, T.pack . show $ k)) . toKeyValueList <$> fDyn
-  sdd <- SD.safeDropdown Nothing keyLabelMap safeDropdownConfig
+      keyLabelMapInDyn = M.fromList . fmap (\(k, v) -> (k, T.pack . show $ k)) . toKeyValueList <$> fDyn
+      keyLabelMapUpdateEv = R.attachWith (flip updateKeyLabelMap) (R.current keyLabelMapDyn) diffBEv
+  keyLabelMapDyn <- R.buildDynamic (R.sample . R.current $ keyLabelMapInDyn) $ R.leftmost [R.updated keyLabelMapInDyn, keyLabelMapUpdateEv]
+  sdd <- SD.safeDropdown Nothing keyLabelMapDyn safeDropdownConfig
   sddNullEv <- R.updated <$> R.holdUniqDyn (isNothing <$> view SD.safeDropdown_value sdd) -- why not (M.null <$> keyLabelMap)?
   let (notNullEv, nullEv) = fanBool sddNullEv
       nullWidgetEv = return R.never <$ nullEv
-      safeKeyEv = R.tagPromptlyDyn (head . M.keys <$> keyLabelMap) notNullEv
+      safeKeyEv = R.tagPromptlyDyn (head . M.keys <$> keyLabelMapDyn) notNullEv
       dynamicallyVisible visDyn w = let attrsDyn = bool hiddenCSS visibleCSS <$> visDyn in RD.elDynAttr "div" attrsDyn w
       selWidget safeKey = do
         selDyn <- R.holdDyn safeKey (R.fmapMaybe id $ view SD.safeDropdown_change sdd)
         ecSelectViewListWithKey selDyn fDyn (\k vDyn visDyn -> dynamicallyVisible visDyn $ elemWidget k vDyn)
-  R.switchPromptlyDyn <$> (RD.widgetHold (return R.never) $ R.leftmost [nullWidgetEv, selWidget <$> safeKeyEv]) -- Event t (Diff f a)
+  diffBEv <- R.switchPromptlyDyn <$> (RD.widgetHold (return R.never) $ R.leftmost [nullWidgetEv, selWidget <$> safeKeyEv]) -- Event t (Diff f b)
+  return diffBEv
     
 -- add a delete action to a widget that edits the (key/)value.  
 editWithDeleteButton :: ( R.Reflex t
