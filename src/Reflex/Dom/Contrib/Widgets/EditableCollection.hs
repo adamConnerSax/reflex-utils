@@ -13,6 +13,7 @@ module Reflex.Dom.Contrib.Widgets.EditableCollection
     EditableCollection(..)
   , editDeletable
   , editStructure
+  , selectEditValues
   , editWithDeleteButton
   , newItemWidget
   , buttonNoSubmit
@@ -20,29 +21,27 @@ module Reflex.Dom.Contrib.Widgets.EditableCollection
   ) where
 
 --import Reflex.Dom.Contrib.DynamicUtils (dynAsEv, dynPlusEvent)
---import Reflex.Dom.Contrib.EventUtils (fanBool)
+import           Reflex.Dom.Contrib.EventUtils (fanBool)
 import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult (dynamicToWidgetResult)
 import qualified Reflex.Dom.Contrib.Widgets.ModalEditor as ME
+import qualified Reflex.Dom.Contrib.Widgets.SafeDropdown as SD
 
 -- for the collection functions and constraints they need
 import           Reflex.Collections.Collections as RC
 
-import           Reflex            (Dynamic, Event, Reflex, attachWithMaybe,
-                                    leftmost, never)
 import           Reflex.Dom        ((=:))                 
-import           Reflex.Dynamic    (constDyn, current, tagPromptlyDyn, updated)
---import Reflex.Dom (widgetHold,dropdown,DropdownConfig(..))
 import qualified Reflex            as R
 import qualified Reflex.Dom        as RD
 
 import           Data.Traversable (sequenceA) 
-import           Control.Lens      (makeLenses,(&),(.~))
+import           Control.Lens      ((&),(.~), view)
 import           Control.Monad (join)
 import           Control.Monad.Fix (MonadFix)
-import           Data.Maybe (isJust)
+import           Data.Maybe (isJust, isNothing)
 import           Data.Monoid ((<>))
 import           Data.Kind (Type)
+import           Data.Bool (bool)
 --import           Data.Default
 
 import qualified Data.Map          as M
@@ -59,93 +58,84 @@ import qualified Data.Tree as T
 class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) where
   type NewItem f b :: Type
   editValues :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
-    => (a -> b) -- to map the input type to the output type. Often "Just" or "Right"
-    -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
-    -> Dynamic t (f a) -- input collection
+    => (a -> b) -- to map the input type to the output type. Often "id" or "Just" or "Right"
+    -> (RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b)) -- widget for editing one value, possibly with visible key
+    -> R.Dynamic t (f a) -- input collection
     -> m (R.Dynamic t (f b))
 
   ecListViewWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => R.Dynamic t (f v) -> (Key f -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t (Diff f a))
 
-  newKeyValueWidget :: (Reflex t, Applicative g, Monad m)
-    => (R.Dynamic t (f a) -> m (R.Dynamic t (g (NewItem f b)))) -> (R.Dynamic t (f a) -> m (R.Dynamic t (g (Key (Diff f), b))))
+  ecSelectViewListWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
+    => R.Dynamic t (Key f)    -- Current selection key
+    -> R.Dynamic t (f a)      -- Dynamic container of values
+    -> (Key f -> R.Dynamic t a -> R.Dynamic t Bool -> m (R.Event t b)) -- create a widget from Dynamic value and Dynamic Bool (is widget selected?)
+    -> m (R.Event t (Diff f b))
+
+  newKeyValueWidget :: (R.Reflex t, Applicative g, Monad m)
+    => (forall x. g x -> Either e x) -> m (R.Dynamic t (g (NewItem f b))) -> (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (Diff f), b))))
     
 instance Ord k => EditableCollection (M.Map k) where
   type NewItem (M.Map k) b = (k,b)
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  newKeyValueWidget = id
-
+  ecSelectViewListWithKey = RC.selectViewListWithKey
+  newKeyValueWidget nat = const . fmap (fmap nat) 
 
 instance (Hashable k, Ord k) => EditableCollection (HM.HashMap k) where
   type NewItem (HM.HashMap k) b = (k,b)
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  newKeyValueWidget = id
+  ecSelectViewListWithKey = RC.selectViewListWithKey  
+  newKeyValueWidget nat = const . fmap (fmap nat)
 
 instance EditableCollection IM.IntMap where
   type NewItem IM.IntMap b = (Int,b)
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  newKeyValueWidget = id
-
-seqAPair :: Applicative g => (g a, g b) -> g (a, b)
-seqAPair (ga, gb) = (,) <$> ga <*> gb
+  ecSelectViewListWithKey = RC.selectViewListWithKey  
+  newKeyValueWidget nat = const . fmap (fmap nat)
 
 instance EditableCollection [] where
   type NewItem [] b = b
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  newKeyValueWidget newgbW fDyn = do
-    newgbDyn <- newgbW fDyn
-    return $ R.zipDynWith (\ga gb -> (,) <$> ga <*> gb) (pure . length <$> fDyn) newgbDyn
+  ecSelectViewListWithKey = RC.selectViewListWithKey  
+  newKeyValueWidget nat inputgbW fDyn = do
+    newEitherbDyn <- fmap nat <$> inputgbW 
+    return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right . length <$> fDyn) newEitherbDyn
             
 instance EditableCollection S.Seq where
   type NewItem S.Seq b = b 
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  newKeyValueWidget newgbW fDyn = do
-    newgbDyn <- newgbW fDyn
-    return $ R.zipDynWith (\ga gb -> (,) <$> ga <*> gb) (pure . S.length <$> fDyn) newgbDyn
+  ecSelectViewListWithKey = RC.selectViewListWithKey  
+  newKeyValueWidget nat inputgbW fDyn = do
+    newEitherbDyn <- fmap nat <$> inputgbW 
+    return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right . S.length <$> fDyn) newEitherbDyn
   
 instance (A.Ix k, Enum k, Bounded k) => EditableCollection (A.Array k) where
   type NewItem (A.Array k) b = (k,b) 
   editValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial
   ecListViewWithKey = RC.listViewWithKeyMaybe
-  newKeyValueWidget _ _  = undefined -- can't add (or delete) in (Array k) collections
+  ecSelectViewListWithKey = RC.selectViewListWithKeyMaybe  
+  newKeyValueWidget _ _ = undefined -- can't add (or delete) in (Array k) collections
 
 instance EditableCollection T.Tree where
   type NewItem T.Tree b = b
   editValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial     
   ecListViewWithKey = RC.listViewWithKeyMaybe
-  newKeyValueWidget _ _  = undefined -- add to where?  Delete all below?  For now undefined.
+  ecSelectViewListWithKey = RC.selectViewListWithKeyMaybe  
+  newKeyValueWidget _ _ = undefined -- add to where?  Delete all below?  For now undefined.
 
-  
 -- helper for the case when you want the output to update only on input change or a valid edit
 -- e.g., validOnly (flip (editValues Right) widget) initial
-validOnly :: (Reflex t, R.MonadHold t m, Traversable f, Applicative g)
-  => (forall x. g x -> Maybe x) -> (Dynamic t (f a) -> m (Dynamic t (f (g a)))) -> Dynamic t (f a) -> m (Dynamic t (f a))
+validOnly :: (R.Reflex t, R.MonadHold t m, Traversable f, Applicative g)
+  => (forall x. g x -> Maybe x) -> (R.Dynamic t (f a) -> m (R.Dynamic t (f (g a)))) -> R.Dynamic t (f a) -> m (R.Dynamic t (f a))
 validOnly toMaybe editCollectionF initial = do
   edited <- editCollectionF initial
-  let validEditEv = R.fmapMaybe toMaybe $ updated $ (fmap sequenceA) edited
+  let validEditEv = R.fmapMaybe toMaybe $ R.updated $ (fmap sequenceA) edited
   R.buildDynamic (R.sample $ R.current initial) $ R.leftmost [R.updated initial, validEditEv] 
-
-editDeletable ::  ( RD.Adjustable t m
-                  , RD.PostBuild t m
-                  , RD.MonadHold t m
-                  , MonadFix m
-                  , RC.Mergeable f (Maybe b)
-                  , EditableCollection f)
-  => (f a -> f b)
-  -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))) -- function to edit (Just b) or Delete (Nothing)
-  -> Dynamic t (f a) -- input collection
-  -> m (R.Dynamic t (f b))
-editDeletable faTofb widget fDyn = do
-  editDeleteDiffEv <- ecListViewWithKey fDyn widget
-  let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap faTofb fDyn) editDeleteDiffEv 
-  R.buildDynamic (R.sample . R.current $ fmap faTofb fDyn) newFEv     
-
-
 
 {-
 There are 3 sources of change:
@@ -161,14 +151,13 @@ editStructure :: ( RD.Adjustable t m
                  , RD.MonadHold t m                 
                  , MonadFix m
                  , RD.DomBuilder t m
-                 , RC.Mergeable f (Maybe b)
-                 , EditableCollection f)                 
-  => (R.Dynamic t (f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete
-  -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  function to make add item widget.  Only fires on valid add
-  -> (R.Dynamic t (f a) -> Dynamic t (M.Map T.Text T.Text)) -- attrs can depend on collection
+                 , RC.Mergeable f (Maybe b))                 
+  => (R.Dynamic t (f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete widget.  Fires only on change. Something like Reflex.Collections.ListView.
+  -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  add item widget.  Fires only on valid add.
+  -> (R.Dynamic t (f a) -> R.Dynamic t (M.Map T.Text T.Text)) -- attrs can depend on collection
   -> (f a -> f b) -- we need this to have a starting point for the output dynamics
   -> (f b -> f a) -- we need this to feed the changes back in to the collection functions
-  -> Dynamic t (f a) -- input collection
+  -> R.Dynamic t (f a) -- input collection
   -> m (R.Dynamic t (f b))
 editStructure editDeleteWidget addWidget attrsF faTofb fbTofa fDyn = RD.elDynAttr "div" (attrsF fDyn) $ mdo
   editDeleteDiffMaybeEv <- editDeleteWidget (fbTofa <$> editDeleteInputDyn)
@@ -177,11 +166,40 @@ editStructure editDeleteWidget addWidget attrsF faTofb fbTofa fDyn = RD.elDynAtt
       inputFbEv = faTofb <$> R.updated fDyn
       editDeleteAddDiffEv = R.leftmost [editDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
       newFEv = R.leftmost [inputFbEv, R.attachWith (flip applyDiff) (R.current curDyn) editDeleteAddDiffEv]
-      newCollectionInputEv = leftmost [() <$ R.updated fDyn, () <$ addDiffMaybeEv]
+      newCollectionInputEv = R.leftmost [() <$ R.updated fDyn, () <$ addDiffMaybeEv]
   curDyn <- R.buildDynamic (R.sample inputFbBeh) newFEv -- always has current value
-  editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) (R.tagDyn curDyn newCollectionInputEv) -- updates to current value (in this frame) on adds or new input
+  editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) (R.tagPromptlyDyn curDyn newCollectionInputEv) -- updates to current value (in this frame) on adds or new input
   return curDyn
-  
+
+
+selectEditValues :: ( RD.Adjustable t m
+                    , RD.PostBuild t m
+                    , RD.MonadHold t m                 
+                    , MonadFix m
+                    , RD.DomBuilder t m
+                    , RC.Diffable f
+--                    , RC.Mergeable f (Maybe b)
+                    , Show (Key f)
+                    , Ord (Key f)
+                    , EditableCollection f) -- for dropdown label
+  => M.Map T.Text T.Text -- safedropdown attrs
+  -> (Key f -> R.Dynamic t a -> m (R.Event t b)) -- single element edit widget 
+  -> R.Dynamic t (f a)
+  -> m (R.Event t (RC.Diff f b))
+selectEditValues ddAttrs elemWidget fDyn = do
+  let safeDropdownConfig = SD.SafeDropdownConfig R.never $ R.constDyn (ddAttrs <> ("size" RD.=: "1"))
+      keyLabelMap = M.fromList . fmap (\(k, v) -> (k, T.pack . show $ k)) . toKeyValueList <$> fDyn
+  sdd <- SD.safeDropdown Nothing keyLabelMap safeDropdownConfig
+  sddNullEv <- R.updated <$> R.holdUniqDyn (isNothing <$> view SD.safeDropdown_value sdd) -- why not (M.null <$> keyLabelMap)?
+  let (notNullEv, nullEv) = fanBool sddNullEv
+      nullWidgetEv = return R.never <$ nullEv
+      safeKeyEv = R.tagPromptlyDyn (head . M.keys <$> keyLabelMap) notNullEv
+      dynamicallyVisible visDyn w = let attrsDyn = bool hiddenCSS visibleCSS <$> visDyn in RD.elDynAttr "div" attrsDyn w
+      selWidget safeKey = do
+        selDyn <- R.holdDyn safeKey (R.fmapMaybe id $ view SD.safeDropdown_change sdd)
+        ecSelectViewListWithKey selDyn fDyn (\k vDyn visDyn -> dynamicallyVisible visDyn $ elemWidget k vDyn)
+  R.switchPromptlyDyn <$> (RD.widgetHold (return R.never) $ R.leftmost [nullWidgetEv, selWidget <$> safeKeyEv]) -- Event t (Diff f a)
+    
 -- add a delete action to a widget that edits the (key/)value.  
 editWithDeleteButton :: ( R.Reflex t
                         , R.MonadHold t m
@@ -190,21 +208,20 @@ editWithDeleteButton :: ( R.Reflex t
                         , MonadFix m)
   => (k -> R.Dynamic t a -> m (R.Event t b)) -- widget to edit one element, fires only on valid change
   -> M.Map T.Text T.Text -- attrs for the div surrounding the widget with button
-  -> m (Event t ()) -- delete button widget
+  -> m (R.Event t ()) -- delete button widget
   -> R.Dynamic t Bool -- visibility of widget
   -> k -- key in collection
   -> R.Dynamic t a -- input element
   -> m (R.Event t (Maybe b)) -- 'Just b' if changed, 'Nothing' if deleted.
 editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
   let widgetAttrs = (\x -> attrs <> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
-  (visibleDyn', outEv) <- RD.elDynAttr "div" widgetAttrs $ do
+  (visibleDyn', outEv') <- RD.elDynAttr "div" widgetAttrs $ do
     editedEv <- RD.el "span" $ editWidget k vDyn
     delButtonEv <- RD.el "span" $ delButton
     let outEv = R.leftmost [Just <$> editedEv, Nothing <$ delButtonEv]  
-    visDyn <- R.buildDynamic (R.sample $ current visibleDyn) $ (isJust <$> outEv) 
+    visDyn <- R.buildDynamic (R.sample $ R.current visibleDyn) $ (isJust <$> outEv) 
     return (visDyn, outEv)
-  return outEv
-
+  return outEv'
 
 newItemEditorConfig :: (Show e, R.Reflex t) => ME.ModalEditorConfig t e a
 newItemEditorConfig = RD.def
@@ -243,6 +260,23 @@ hiddenCSS :: M.Map T.Text T.Text
 hiddenCSS  = "style" =: "display: none !important"
 visibleCSS :: M.Map T.Text T.Text
 visibleCSS = "style" =: "display: inline"
+
+
+editDeletable ::  ( RD.Adjustable t m
+                  , RD.PostBuild t m
+                  , RD.MonadHold t m
+                  , MonadFix m
+                  , RC.Mergeable f (Maybe b)
+                  , EditableCollection f)
+  => (f a -> f b)
+  -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))) -- function to edit (Just b) or Delete (Nothing)
+  -> R.Dynamic t (f a) -- input collection
+  -> m (R.Dynamic t (f b))
+editDeletable faTofb widget fDyn = do
+  editDeleteDiffEv <- ecListViewWithKey fDyn widget
+  let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap faTofb fDyn) editDeleteDiffEv 
+  R.buildDynamic (R.sample . R.current $ fmap faTofb fDyn) newFEv     
+
   
 {-
 
