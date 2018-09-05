@@ -57,6 +57,7 @@ import qualified Data.Tree as T
 
 
 class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) where
+  type NewItem f b :: Type
   editValues :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => (a -> b) -- to map the input type to the output type. Often "Just" or "Right"
     -> ((RC.Key f -> R.Dynamic t a -> m (R.Dynamic t b))) -- widget for editing one value, possibly with visible key
@@ -66,35 +67,55 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
   ecListViewWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => R.Dynamic t (f v) -> (Key f -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t (Diff f a))
 
+  newKeyValueWidget :: (Reflex t, Applicative g)
+    => (R.Dynamic t (f a) -> m (R.Dynamic t (g (NewItem f b)))) -> (R.Dynamic t (f a) -> m (R.Dynamic t (g (Key (Diff f), b))))
     
 instance Ord k => EditableCollection (M.Map k) where
+  type NewItem (M.Map k) b = (k,b)
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
+  newKeyValueWidget = id
 
 
 instance (Hashable k, Ord k) => EditableCollection (HM.HashMap k) where
+  type NewItem (HM.HashMap k) b = (k,b)
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
+  newKeyValueWidget = id
 
 instance EditableCollection IM.IntMap where
+  type NewItem IM.IntMap b = (Int,b)
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
+  newKeyValueWidget = id
 
 instance EditableCollection [] where
+  type NewItem [] b = b
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-        
+  newKeyValueWidget newgbW fDyn = do
+    newgbDyn <- newgbW fDyn
+    return $ (sequenceA <$> R.zipDyn (pure . length <$> fDyn) newgbDyn)
+            
 instance EditableCollection S.Seq where
+  type NewItem S.Seq b = b 
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-
+  newKeyValueWidget newgbW fDyn = do
+    newgbDyn <- newgbW fDyn
+    return $ (sequenceA <$> R.zipDyn (pure . S.length <$> fDyn) newgbDyn)
+  
 instance (A.Ix k, Enum k, Bounded k) => EditableCollection (A.Array k) where
+  type NewItem (A.Array k) b = (k,b) 
   editValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial
   ecListViewWithKey = RC.listViewWithKeyMaybe
+  newKeyValueWidget _ _  = undefined -- can't add (or delete) in (Array k) collections
 
 instance EditableCollection T.Tree where
+  type NewItem T.Tree b = b
   editValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial     
   ecListViewWithKey = RC.listViewWithKeyMaybe
+  newKeyValueWidget _ _  = undefined -- add to where?  Delete all below?  For now undefined.
 
   
 -- helper for the case when you want the output to update only on input change or a valid edit
