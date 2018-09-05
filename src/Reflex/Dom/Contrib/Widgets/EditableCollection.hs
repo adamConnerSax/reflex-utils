@@ -17,6 +17,7 @@ module Reflex.Dom.Contrib.Widgets.EditableCollection
   , editWithDeleteButton
   , newItemWidget
   , buttonNoSubmit
+  , updateKeyLabelMap
   , validOnly
   ) where
 
@@ -42,6 +43,7 @@ import           Data.Maybe (isJust, isNothing)
 import           Data.Monoid ((<>))
 import           Data.Kind (Type)
 import           Data.Bool (bool)
+import           Data.Proxy (Proxy)
 --import           Data.Default
 
 import qualified Data.Map          as M
@@ -203,6 +205,11 @@ selectEditValues ddAttrs updateKeyLabelMap elemWidget fDyn = mdo
         ecSelectViewListWithKey selDyn fDyn (\k vDyn visDyn -> dynamicallyVisible visDyn $ elemWidget k vDyn)
   diffBEv <- R.switchPromptlyDyn <$> (RD.widgetHold (return R.never) $ R.leftmost [nullWidgetEv, selWidget <$> safeKeyEv]) -- Event t (Diff f b)
   return diffBEv
+
+updateKeyLabelMap :: (RC.Diffable f, RC.Key f ~ RC.Key (RC.Diff f), Ord (Key (Diff f))) => Proxy f -> RC.Diff f (Maybe a) -> M.Map (Key f) b -> M.Map (Key f) b
+updateKeyLabelMap _ diff x =
+  let mapOfDeletes = M.filter isNothing . M.fromList . RC.toKeyValueList $ diff
+  in M.difference x mapOfDeletes
     
 -- add a delete action to a widget that edits the (key/)value.  
 editWithDeleteButton :: ( R.Reflex t

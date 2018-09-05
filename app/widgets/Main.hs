@@ -57,6 +57,7 @@ import           Data.Bool                                     (bool)
 import qualified Data.Map                                      as M
 import           Data.Maybe                                    (isJust)
 import           Data.Monoid                                   ((<>))
+import           Data.Proxy                                    (Proxy (..))
 
 import qualified Data.Text                                     as T
 import           Text.Read                                     (readMaybe)
@@ -105,7 +106,7 @@ editableCollectionsWidget = do
   newLine
   RD.dynText $ fmap (T.pack . show) editMapStructureDyn
   newLine
-  let selectEditDeletableWidget = EC.selectEditValues M.empty editAndDeleteWidget
+  let selectEditDeletableWidget = EC.selectEditValues M.empty (EC.updateKeyLabelMap (Proxy :: Proxy (M.Map k))) editAndDeleteWidget
   editMapStructureDyn' <- EC.editStructure selectEditDeletableWidget newMapItemWidget (const $ R.constDyn M.empty) id id editMapDyn
   newLine
   RD.dynText $ fmap (T.pack . show) editMapStructureDyn'
