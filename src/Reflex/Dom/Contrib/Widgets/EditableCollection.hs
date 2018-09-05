@@ -67,7 +67,7 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
   ecListViewWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => R.Dynamic t (f v) -> (Key f -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t (Diff f a))
 
-  newKeyValueWidget :: (Reflex t, Applicative g)
+  newKeyValueWidget :: (Reflex t, Applicative g, Monad m)
     => (R.Dynamic t (f a) -> m (R.Dynamic t (g (NewItem f b)))) -> (R.Dynamic t (f a) -> m (R.Dynamic t (g (Key (Diff f), b))))
     
 instance Ord k => EditableCollection (M.Map k) where
@@ -89,13 +89,16 @@ instance EditableCollection IM.IntMap where
   ecListViewWithKey = RC.listViewWithKey
   newKeyValueWidget = id
 
+seqAPair :: Applicative g => (g a, g b) -> g (a, b)
+seqAPair (ga, gb) = (,) <$> ga <*> gb
+
 instance EditableCollection [] where
   type NewItem [] b = b
   editValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
   newKeyValueWidget newgbW fDyn = do
     newgbDyn <- newgbW fDyn
-    return $ (sequenceA <$> R.zipDyn (pure . length <$> fDyn) newgbDyn)
+    return $ R.zipDynWith (\ga gb -> (,) <$> ga <*> gb) (pure . length <$> fDyn) newgbDyn
             
 instance EditableCollection S.Seq where
   type NewItem S.Seq b = b 
@@ -103,7 +106,7 @@ instance EditableCollection S.Seq where
   ecListViewWithKey = RC.listViewWithKey
   newKeyValueWidget newgbW fDyn = do
     newgbDyn <- newgbW fDyn
-    return $ (sequenceA <$> R.zipDyn (pure . S.length <$> fDyn) newgbDyn)
+    return $ R.zipDynWith (\ga gb -> (,) <$> ga <*> gb) (pure . S.length <$> fDyn) newgbDyn
   
 instance (A.Ix k, Enum k, Bounded k) => EditableCollection (A.Array k) where
   type NewItem (A.Array k) b = (k,b) 

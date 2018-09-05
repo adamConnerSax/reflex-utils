@@ -87,20 +87,32 @@ editPair = do
 editableCollectionsWidget :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.MonadHold t m, RD.PostBuild t m, MonadFix m) => m ()
 editableCollectionsWidget = do
   let testMap :: M.Map T.Text Int = M.fromList [("A",1),("B",2),("C",3)]
-  editValuesDyn <- EC.validOnly id (EC.editValues Just (const editValue)) (R.constDyn testMap)
+      testList :: [T.Text] = ["Hello","Goodbye","Cat"]
+  editMapDyn <- EC.validOnly id (EC.editValues Just (const editValue)) (R.constDyn testMap)
   RD.el "p" (RD.text "")
   RD.el "br" RD.blank
-  RD.dynText $ fmap (T.pack . show) editValuesDyn
+  RD.dynText $ fmap (T.pack . show) editMapDyn
   let editValueWidget _ vDyn = R.fmapMaybe id . R.updated <$> editValue vDyn
       editAndDeleteWidget = EC.editWithDeleteButton editValueWidget M.empty (EC.buttonNoSubmit "-") (R.constDyn True)
       editDeletableWidget = flip EC.ecListViewWithKey editAndDeleteWidget
       newMapItemWidget = EC.newItemWidget (const $ fmap (maybe (Left "Invalid (Text,String)") Right) <$> editPair)
   RD.el "p" (RD.text "")
   RD.el "br" RD.blank
-  editStructureDyn <- EC.editStructure editDeletableWidget newMapItemWidget (const $ R.constDyn M.empty) id id editValuesDyn
+  editMapStructureDyn <- EC.editStructure editDeletableWidget newMapItemWidget (const $ R.constDyn M.empty) id id editMapDyn
   RD.el "p" (RD.text "")
   RD.el "br" RD.blank
-  RD.dynText $ fmap (T.pack . show) editStructureDyn
+  RD.dynText $ fmap (T.pack . show) editMapStructureDyn
+  RD.el "p" (RD.text "")
+  RD.el "br" RD.blank
+  editListDyn <- EC.validOnly id (EC.editValues Just (const editValue)) (R.constDyn testList)
+  RD.el "p" (RD.text "")
+  RD.el "br" RD.blank
+  RD.dynText $ fmap (T.pack . show) editListDyn
+  let newListItemWidget = EC.newItemWidget $ EC.newKeyValueWidget (const $ fmap (maybe (Left "Invalid Text") Right) <$> editValue)
+  editListStructureDyn <- EC.editStructure editDeletableWidget newListItemWidget (const $ R.constDyn M.empty) id id editListDyn
+  RD.el "p" (RD.text "")
+  RD.el "br" RD.blank
+  RD.dynText $ fmap (T.pack . show) editListStructureDyn
 editableCollectionTab :: (R.Reflex t, RD.DomBuilder t m, MonadWidgetExtraC t m, RD.MonadHold t m, RD.PostBuild t m, MonadFix m) => TabInfo t m ()
 editableCollectionTab = TabInfo "Editable Collections" (R.constDyn ("Editable Collections", M.empty)) $ editableCollectionsWidget
 
