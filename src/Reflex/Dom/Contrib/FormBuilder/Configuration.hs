@@ -65,11 +65,12 @@ module Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation
 import           Reflex.Dom.Contrib.Layout.Types              (CssClasses, LayoutDirection (..),
                                                                LayoutOrientation (..))
+{-
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WrappedWidgetResult,
                                                                constWidgetResult,
                                                                dynamicToWidgetResult,
                                                                widgetResultToDynamic)
-
+-}
 import qualified DataBuilder                                  as B
 import           Reflex                                       (Dynamic, Event,
                                                                Reflex, constDyn)
@@ -98,13 +99,13 @@ data FormType = Interactive | ObserveOnly deriving (Eq)
 data CollapsibleInitialState = CollapsibleStartsOpen | CollapsibleStartsClosed deriving (Show,Eq,Ord,Enum,Bounded)
 
 type FR t m = ReaderT (FormConfiguration t m) m
-type FormValue t = WrappedWidgetResult t FValidation
+type FormValue t = Compose (Dynamic t) FValidation
 
 constFormValue :: Reflex t => a -> FormValue t a
 constFormValue = dynamicToFormValue . constDyn
 
 formValueErrors :: Reflex t => FormErrors -> FormValue t a
-formValueErrors = Compose . constWidgetResult . AccFailure
+formValueErrors = Compose . constDyn . AccFailure
 
 formValueError :: Reflex t => FormError -> FormValue t a
 formValueError = formValueErrors . pure
@@ -113,7 +114,7 @@ formValueNothing :: Reflex t => FormValue t a
 formValueNothing = formValueError FNothing
 
 dynamicToFormValue :: Reflex t => Dynamic t a -> FormValue t a
-dynamicToFormValue = Compose . dynamicToWidgetResult . fmap AccSuccess
+dynamicToFormValue = Compose . fmap AccSuccess
 
 fvMapFormValue :: Reflex t => (a -> FValidation b) -> FormValue t a -> FormValue t b
 fvMapFormValue f = Compose . fmap (mergeAccValidation . fmap f) . getCompose
@@ -122,10 +123,10 @@ maybeMapFormValue :: Reflex t => (a -> Maybe b) -> FormValue t a -> FormValue t 
 maybeMapFormValue f = fvMapFormValue (maybeToFV . f)
 
 dynMaybeToFormValue :: Reflex t => DynMaybe t a -> FormValue t a
-dynMaybeToFormValue = Compose . dynamicToWidgetResult . fmap maybeToFV . getCompose
+dynMaybeToFormValue = Compose . fmap maybeToFV . getCompose
 
 formValueToDynMaybe :: Reflex t => FormValue t a -> DynMaybe t a
-formValueToDynMaybe = Compose . widgetResultToDynamic . fmap avToMaybe . getCompose
+formValueToDynMaybe = Compose . fmap avToMaybe . getCompose
 
 addFormValueDefault :: Reflex t => a -> FormValue t a -> FormValue t a
 addFormValueDefault x = Compose . fmap (accValidation (const $ AccSuccess x) AccSuccess) . getCompose
