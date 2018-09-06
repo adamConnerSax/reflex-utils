@@ -92,32 +92,18 @@ newLine = RD.el "p" (RD.text "") >> RD.el "br" RD.blank
 
 editableCollectionsWidget :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.MonadHold t m, RD.PostBuild t m, MonadFix m) => m ()
 editableCollectionsWidget = do
-  let editValueWidget _ vDyn = R.fmapMaybe id . R.updated <$> editValue vDyn -- Dynamic Maybe -> Event
-      editAndDeleteWidget = EC.editWithDeleteButton editValueWidget M.empty (EC.buttonNoSubmit "-") (R.constDyn True)
-      editDeletableWidget = flip EC.ecListViewWithKey editAndDeleteWidget
-      testMap :: M.Map T.Text Int = M.fromList [("A",1),("B",2),("C",3)]
+  let testMap :: M.Map T.Text Int = M.fromList [("A",1),("B",2),("C",3)]
       testList :: [T.Text] = ["Hello","Goodbye","Cat"]
-  editMapDyn <- EC.validOnly id (EC.editValues Just (const editValue)) (R.constDyn testMap)
-  newLine
-  RD.dynText $ fmap (T.pack . show) editMapDyn
-  newLine
-  let newMapItemWidget = EC.newItemWidget $ EC.newKeyValueWidget (maybe (Left "Invalid (Text,String)") Right) inputPair
-  editMapStructureDyn <- EC.editStructure editDeletableWidget newMapItemWidget (const $ R.constDyn M.empty) id id editMapDyn
-  newLine
-  RD.dynText $ fmap (T.pack . show) editMapStructureDyn
-  newLine
-  let selectEditDeletableWidget = EC.selectEditValues M.empty (EC.updateKeyLabelMap (Proxy :: Proxy (M.Map k))) editAndDeleteWidget
-  editMapStructureDyn' <- EC.editStructure selectEditDeletableWidget newMapItemWidget (const $ R.constDyn M.empty) id id editMapDyn
-  newLine
-  RD.dynText $ fmap (T.pack . show) editMapStructureDyn'
-  newLine
-  editListDyn <- EC.validOnly id (EC.editValues Just (const editValue)) (R.constDyn testList)
-  newLine
-  RD.dynText $ fmap (T.pack . show) editListDyn
-  let newListItemWidget = EC.newItemWidget $ EC.newKeyValueWidget (maybe (Left "Invalid Text") Right) inputValue
-  editListStructureDyn <- EC.editStructure editDeletableWidget newListItemWidget (const $ R.constDyn M.empty) id id editListDyn
-  newLine
-  RD.dynText $ fmap (T.pack . show) editListStructureDyn
+  editMapDyn <- EC.simpleCollectionValueEditor EC.DisplayAll (const editValue) (R.constDyn testMap)
+  newLine >> (RD.dynText $ fmap (T.pack . show) editMapDyn)
+  editMapStructureDyn <- newLine >> EC.simpleCollectionEditor EC.DisplayAll (const editValue) inputPair editMapDyn
+  newLine >> (RD.dynText $ fmap (T.pack . show) editMapStructureDyn)
+  editMapStructureDyn' <- newLine >> EC.simpleCollectionEditor (EC.DisplayEach (R.constDyn M.empty) (T.pack . show)) (const editValue) inputPair editMapDyn
+  newLine >> (RD.dynText $ fmap (T.pack . show) editMapStructureDyn')
+  editListDyn <- newLine >> EC.simpleCollectionValueEditor EC.DisplayAll (const editValue) (R.constDyn testList)
+  newLine >> (RD.dynText $ fmap (T.pack . show) editListDyn)
+  editListStructureDyn <- newLine >> EC.simpleCollectionEditor EC.DisplayAll (const editValue) inputValue editListDyn
+  newLine >> (RD.dynText $ fmap (T.pack . show) editListStructureDyn)
 
 
 editableCollectionTab :: (R.Reflex t, RD.DomBuilder t m, MonadWidgetExtraC t m, RD.MonadHold t m, RD.PostBuild t m, MonadFix m) => TabInfo t m ()

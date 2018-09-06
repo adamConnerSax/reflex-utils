@@ -13,7 +13,6 @@ module Reflex.Dom.Contrib.Widgets.SafeDropdown
     SafeDropdown(..)
   , safeDropdown_value
   , safeDropdown_change
-  , safeDropdownWrappedWidgetResult
   , SafeDropdownConfig(..)
   , safeDropdownConfig_setValue
   , safeDropdownConfig_attributes
@@ -21,22 +20,18 @@ module Reflex.Dom.Contrib.Widgets.SafeDropdown
   , safeDropdownOfLabelKeyedValue
   ) where
 
-import Reflex.Dom.Contrib.DynamicUtils (dynAsEv, dynPlusEvent)
-import Reflex.Dom.Contrib.EventUtils (fanBool)
-import Reflex.Dom.Contrib.Widgets.WidgetResult (WrappedWidgetResult, unsafeBuildWrappedWidgetResult)
-
-import Reflex (Dynamic,Event,Reflex,never,attachWithMaybe,leftmost)
-import Reflex.Dynamic (updated,constDyn,current,tagPromptlyDyn)
-import Reflex.Dom (widgetHold,dropdown,DropdownConfig(..))
+import           Reflex (Dynamic,Event,Reflex,never,attachWithMaybe,leftmost)
+import           Reflex.Dynamic (updated,constDyn,current,tagPromptlyDyn)
+import           Reflex.Dom (widgetHold,dropdown,DropdownConfig(..))
 import qualified Reflex.Dom as RD
 import qualified Reflex as R
 
-import Control.Lens (makeLenses)
-import Control.Monad (join)
-import Control.Monad.Fix (MonadFix)
-import Data.Default
---import Data.Bool (bool)
-import Safe (headMay)
+import           Control.Lens (makeLenses)
+import           Control.Monad (join)
+import           Control.Monad.Fix (MonadFix)
+import           Data.Default
+import           Safe (headMay)
+import           Data.Bool (bool)
 import qualified Data.Map as M
 import qualified Data.Text as T
 
@@ -129,9 +124,19 @@ safeDropdownOfLabelKeyedValue labelToText l0m optionsDyn cfg = do
   SafeDropdown valDyn changeEv <- safeDropdown l0m sdOptionsDyn cfg -- SafeDropdown t l
   return $ SafeDropdown (mapDynamic valDyn) (mapEvent changeEv)
 
--- this is safe because of how SafeDropDown is built. 
-safeDropdownWrappedWidgetResult :: Reflex t => SafeDropdown t k -> WrappedWidgetResult t Maybe k
-safeDropdownWrappedWidgetResult sdd = unsafeBuildWrappedWidgetResult (_safeDropdown_value sdd) (_safeDropdown_change sdd) 
+-- NB: This means that if d is updated and e fires in the same frame, the update to d will be the result here.
+dynPlusEvent :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
+dynPlusEvent d e = R.buildDynamic (R.sample . R.current $ d) $ R.leftmost [R.updated d, e]
+
+-- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
+-- that's the value we want not the tagged current value.
+dynAsEv :: RD.PostBuild t m => R.Dynamic t a -> m (R.Event t a)
+dynAsEv d = (\x -> R.leftmost [R.updated d, R.tag (R.current d) x]) <$> RD.getPostBuild
+
+-- NB: right event fires if true, left if false--(FalseEv,TrueEv)--which fits Either but is not intuitive, at least to me
+fanBool :: R.Reflex t => R.Event t Bool -> (R.Event t (), R.Event t ())
+fanBool = R.fanEither . fmap (bool (Left ()) (Right ()))
+
 
 concat <$> mapM makeLenses
   [ ''SafeDropdown

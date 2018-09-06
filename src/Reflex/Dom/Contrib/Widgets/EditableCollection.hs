@@ -24,7 +24,7 @@ module Reflex.Dom.Contrib.Widgets.EditableCollection
   , validOnly
   ) where
 
---import Reflex.Dom.Contrib.DynamicUtils (dynAsEv, dynPlusEvent)
+-- These need to go so that the widget piece of reflex-utils can be its own lib
 import           Reflex.Dom.Contrib.EventUtils (fanBool)
 import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult (dynamicToWidgetResult)
@@ -48,7 +48,6 @@ import           Data.Monoid ((<>))
 import           Data.Kind (Type)
 import           Data.Bool (bool)
 import           Data.Proxy (Proxy (..))
---import           Data.Default (Default (def)) 
 
 import qualified Data.Map          as M
 import qualified Data.Text         as T
@@ -60,9 +59,6 @@ import qualified Data.Array as A
 import qualified Data.Tree as T
 
 data DisplayCollection t k = DisplayAll | DisplayEach (R.Dynamic t (M.Map T.Text T.Text)) (k -> T.Text) 
-
-dynamicPlusEvent :: (R.Reflex t, RD.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
-dynamicPlusEvent aDyn aEv = R.buildDynamic (R.sample . R.current $ aDyn) $ R.leftmost [R.updated aDyn, aEv]
 
 -- | Create a collection editing widget for modifying values only.  No adds or deletes from the collection.
 -- For supported types (Map, HashMap, IntMap, [], Seq, Array, Tree), we need a widget to edit an item as input.
@@ -323,7 +319,7 @@ addNewItemWidget :: ( R.Reflex t
   -> R.Dynamic t (f a)
   -> m (R.Event t (Diff f b))
 addNewItemWidget editPairW mapDyn = mdo
-  let modalEditW = const $ dynamicToWidgetResult <$> editPairW mapDyn
+  let modalEditW = const $ editPairW mapDyn
       blankInput = R.constDyn $ Left mempty
       pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
   newPairEv <- ME.modalEditor_change <$> ME.modalEditorEither modalEditW blankInput newItemEditorConfig
@@ -339,19 +335,6 @@ hiddenCSS  = "style" =: "display: none !important"
 visibleCSS :: M.Map T.Text T.Text
 visibleCSS = "style" =: "display: inline"
 
-{-
-editDeletable ::  ( RD.Adjustable t m
-                  , RD.PostBuild t m
-                  , RD.MonadHold t m
-                  , MonadFix m
-                  , RC.Mergeable f (Maybe b)
-                  , EditableCollection f)
-  => (f a -> f b)
-  -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe b))) -- function to edit (Just b) or Delete (Nothing)
-  -> R.Dynamic t (f a) -- input collection
-  -> m (R.Dynamic t (f b))
-editDeletable faTofb widget fDyn = do
-  editDeleteDiffEv <- ecListViewWithKey fDyn widget
-  let newFEv = R.attachWith (flip applyDiff) (R.current $ fmap faTofb fDyn) editDeleteDiffEv 
-  R.buildDynamic (R.sample . R.current $ fmap faTofb fDyn) newFEv     
--}
+dynamicPlusEvent :: (R.Reflex t, RD.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
+dynamicPlusEvent aDyn aEv = R.buildDynamic (R.sample . R.current $ aDyn) $ R.leftmost [R.updated aDyn, aEv]
+

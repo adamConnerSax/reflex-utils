@@ -18,7 +18,7 @@ import qualified Reflex.Dom as RD
 dynStartingFrom :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
 dynStartingFrom d = R.buildDynamic (R.sample $ R.current d)
 
--- NB: This means that is d is updated and e fires in the same frame, the update to d will be the result here.
+-- NB: This means that if d is updated and e fires in the same frame, the update to d will be the result here.
 dynPlusEvent :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
 dynPlusEvent d e = dynStartingFrom d $ R.leftmost [R.updated d, e]
 
@@ -29,7 +29,7 @@ hiccupDyn da = RD.getPostBuild >>= dynPlusEvent da . R.tagPromptlyDyn da
 -- NB: It's crucial that the updated event be first.  If the dyn is updated by the caller's use of postbuild then
 -- that's the value we want not the tagged current value.
 dynAsEv :: RD.PostBuild t m => R.Dynamic t a -> m (R.Event t a)
-dynAsEv dyn = (\x -> R.leftmost [R.updated dyn, R.tag (R.current dyn) x]) <$> RD.getPostBuild
+dynAsEv d = (\x -> R.leftmost [R.updated d, R.tag (R.current d) x]) <$> RD.getPostBuild
 
 traceDynAsEv :: RD.PostBuild t m => (a -> String) -> R.Dynamic t a -> m (R.Event t a)
 traceDynAsEv f dyn = do

@@ -24,8 +24,7 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.ReflexConstraints           (MonadWidgetExtraC)
 import           Reflex.Dom.Contrib.Widgets.ModalEditor         (ModalEditorConfig,
-                                                                 modalEditorEither,
-                                                                 modalEditor_WidgetResult)
+                                                                 modalEditorEither)
 import           Reflex.Dom.Contrib.Widgets.WidgetResult        (transformWrappedWidgetResult,
                                                                  widgetResultToDynamic)
 
@@ -57,8 +56,8 @@ modalizeWidget ::  ( RD.DomBuilder t m
                    , MonadWidgetExtraC t m
                    , RD.PostBuild t m
                    , MonadFix m
-                   , RD.MonadHold t m
-                   ) => ModalEditorConfig t FormErrors a -> (FormValue t a -> m (FormValue t a)) -> FormValue t a -> m (FormValue t a)
+                   , RD.MonadHold t m)
+  => ModalEditorConfig t FormErrors a -> (FormValue t a -> m (FormValue t a)) -> FormValue t a -> m (FormValue t a)
 modalizeWidget cfg w fva =
   let matchedWidget = fmap (fmap avToEither . getCompose) . w . dynMaybeToFormValue . Compose
       matchedInput = widgetResultToDynamic $ fValToEitherFE <$> getCompose fva
