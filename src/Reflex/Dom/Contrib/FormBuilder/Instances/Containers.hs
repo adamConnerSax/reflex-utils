@@ -138,14 +138,21 @@ showKeyEditVal k vDyn = makeForm $ do
   let showKey k = toReadOnly $ buildVForm Nothing (constFormValue k)
   fRow $ do
     _<- fItem . fFill LayoutRight . unF $ showKey k
-    unF $ buildVForm Nothing (Compose $ AccSuccess <$> vDyn)
+    fItem . fFill LayoutLeft . unF $ buildVForm Nothing (Compose $ AccSuccess <$> vDyn)
 
-intMapEditWidget :: ( FormInstanceC t m, VFormBuilderBoth t m Int a) => Form t m (EC.NewItem IM.IntMap a)
-intMapEditWidget = buildVForm Nothing formValueNothing
+-- we can make this polymorphic over (EditableCollection f) but that would require a type family to
+-- specify the correct VFormBuilder Constraints??
+intMapItemWidget :: ( FormInstanceC t m, VFormBuilderBoth t m Int a) => Form t m (EC.NewItem IM.IntMap a)
+intMapItemWidget = buildVForm Nothing formValueNothing
+
+newItemWidget :: (FormInstanceC t m, VFormBuilderC t m (EC.NewItem f a)) => Proxy f -> Proxy a -> Form t m (EC.NewItem f a)
+newItemWidget _ _ = buildVForm Nothing formValueNothing
 
 
 instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (IM.IntMap a) where
-  buildForm va mFN imFV = formCollectionEditor EC.DisplayAll showKeyEditVal intMapEditWidget imFV
+  buildForm va mFN imFV =
+    let newItemW =  newItemWidget (Proxy :: Proxy IM.IntMap) (Proxy :: Proxy a)
+    in formCollectionEditor EC.DisplayAll showKeyEditVal newItemW imFV
 
 
 
