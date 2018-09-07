@@ -1,12 +1,12 @@
 {-# LANGUAGE CPP                   #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE RecursiveDo       #-}
---{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE RecursiveDo           #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE AllowAmbiguousTypes   #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Main where
 
 import Reflex.Dom.Contrib.Layout.All
@@ -44,6 +44,8 @@ import qualified Data.List as L
 import qualified Data.Text as T
 import Data.Proxy (Proxy(Proxy))
 import Data.Default (def)
+
+import qualified System.Process                               as SP
 
 #ifdef USE_WKWEBVIEW
 import Language.Javascript.JSaddle.WKWebView (run)
@@ -273,7 +275,10 @@ main = run layoutMain
 
 #ifdef USE_WARP
 main::IO ()
-main = run 3709 layoutMain
+main = do
+  let port :: Int = 3702
+  _ <- SP.spawnProcess "open" ["http://localhost:" ++ show port]
+  run port layoutMain
 #endif
 
 #ifdef USE_GHCJS

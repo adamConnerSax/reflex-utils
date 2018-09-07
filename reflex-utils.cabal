@@ -58,9 +58,9 @@ library
                   Reflex.Dom.Contrib.FormBuilder.Builder
                   Reflex.Dom.Contrib.FormBuilder.Instances
                   Reflex.Dom.Contrib.FormBuilder.AllDefault
---                  Reflex.Dom.Contrib.FormBuilder.Instances.Containers
+                  Reflex.Dom.Contrib.FormBuilder.Instances.Containers
                   Reflex.Dom.Contrib.FormBuilder.Instances.Basic
---                  Reflex.Dom.Contrib.FormBuilder.Instances.ModalForm
+                  Reflex.Dom.Contrib.FormBuilder.Instances.ModalForm
   other-modules:
 
   if flag(wkwebview) || flag(warp)
@@ -302,6 +302,7 @@ executable reflex-utils-layout-warp
                      , lens
                      , transformers
                      , mtl
+                     , process                     
                      , file-embed
                      , clay
                      , text

@@ -16,35 +16,10 @@
 module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
   (
     -- * Container form builders
-    buildListWithSelect
-  , buildList
-  , buildEqList
-  , buildMap
-  , buildMapWithSelect
-  , buildMapEditOnly
-  , buildEqMap
-  , buildEqMapEditOnly
-  , buildSet
-  , buildIntMap
-  , buildEqIntMap
-  , buildSequence
-  , buildEqSequence
-  , buildHashMap
-  , buildEqHashMap
-  , buildEqHashSet
-  , buildArray
-  , buildEqArray
-
-  -- * Types for mapping containers to builders
-  , MapLike(..)
-  , MapElemWidgets(..)
-  , buildAdjustableContainer
-  , buildAdjustableContainerWithSelect
   ) where
 
 
-import           Reflex.Collections.Maps                        (LHFMap (..))
-import qualified Reflex.Collections.Maps                        as LHF
+import qualified Reflex.Collections.Collections                 as RC
 import           Reflex.Dom.Contrib.DynamicUtils                (dynAsEv,
                                                                  dynPlusEvent)
 import           Reflex.Dom.Contrib.EventUtils                  (fanBool, leftWhenNotRight)
@@ -63,28 +38,32 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder         (BuildForm, FR,
                                                                  constFormValue,
                                                                  fCol, fFill,
                                                                  fItem, fRow,
+                                                                 formValueError,
                                                                  formValueNothing,
                                                                  getFormType,
                                                                  makeForm,
                                                                  toReadOnly,
                                                                  unF,
                                                                  validateForm)
-import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FormError (FNothing),
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FormError (FInvalid, FNothing),
                                                                  FormErrors,
                                                                  avToEither,
+                                                                 avToMaybe,
                                                                  mergeAccValidation,
                                                                  printFormErrors)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.Layout.Types                (LayoutDirection (..))
 import qualified Reflex.Dom.Contrib.Widgets.EditableCollection  as EC
-import qualified Reflex.Dom.Contrib.Widgets.ModalEditor         as MW
-import qualified Reflex.Dom.Contrib.Widgets.SafeDropdown        as SD
+
+--import qualified Reflex.Dom.Contrib.Widgets.ModalEditor         as MW
+--import qualified Reflex.Dom.Contrib.Widgets.SafeDropdown        as SD
+{-
 import           Reflex.Dom.Contrib.Widgets.WidgetResult        (WidgetResult, buildWidgetResult,
                                                                  currentWidgetResult,
                                                                  dynamicToWidgetResult,
                                                                  updatedWidgetResult,
                                                                  widgetResultToDynamic)
-
+-}
 -- reflex imports
 import qualified Reflex                                         as R
 import           Reflex.Dom                                     ((=:))
@@ -94,8 +73,10 @@ import           Control.Arrow                                  ((&&&))
 import           Control.Lens                                   (view, (&),
                                                                  (.~))
 import           Control.Monad                                  (join)
+import           Control.Monad.Fix                              (MonadFix)
 import qualified Data.Foldable                                  as F
 import           Data.Functor.Compose                           (Compose (Compose, getCompose))
+import           Data.Proxy                                     (Proxy (..))
 import qualified Data.Text                                      as T
 import           Data.Validation                                (AccValidation (..))
 
@@ -111,12 +92,65 @@ import qualified Data.Map                                       as M
 import           Data.Maybe                                     (isNothing)
 import           Data.Monoid                                    ((<>))
 import qualified Data.Sequence                                  as Seq
-import qualified Data.Set                                       as S
+--import qualified Data.Set                                       as S
 
 -- my libs
 import qualified DataBuilder                                    as B
 
 
+-- I don't love the widgetHold here, so
+-- TODO: try and fix the widgetHold via the Maybe version of things?
+-- but it's also not so bad because the eitherDyn means we will only redo everything when we change from Invalid to Valid inputs.
+-- and that would require a redraw of everything anyway!
+formCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
+                                        , RD.PostBuild t m
+                                        , FormInstanceC t m
+                                        , R.Adjustable t m
+                                        , R.MonadHold t m
+                                        , MonadFix m
+                                        , RC.Mergeable f (Maybe a)
+                                        , EC.EditableCollection f
+                                        , Ord (RC.Key f)
+                                        , RC.Key f ~ RC.Key (RC.Diff f))
+  => EC.DisplayCollection t (RC.Key f) -- use a dropdown or show entire collection
+  -> (RC.Key f -> R.Dynamic t a -> Form t m a) -- display and edit existing
+  -> Form t m (EC.NewItem f a) -- input a new one
+  -> FormValue t (f a)
+  -> Form t m (f a)
+formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
+  postBuild <- RD.getPostBuild
+  let editWidget' k vDyn = R.fmapMaybe avToMaybe . R.updated . getCompose <$> unF (editWidget k vDyn) -- m (R.Event t a)
+      editAndDeleteWidget = EC.editWithDeleteButton editWidget' M.empty (EC.buttonNoSubmit "-") (R.constDyn True)
+      editDeletableWidget = case display of
+        EC.DisplayAll -> flip EC.ecListViewWithKey editAndDeleteWidget
+        EC.DisplayEach ddAttrs toText -> EC.selectEditValues ddAttrs toText (EC.updateKeyLabelMap (Proxy :: Proxy f)) editAndDeleteWidget
+      addNewWidget = EC.addNewItemWidget $ EC.newKeyValueWidget avToEither (getCompose <$> unF newItemWidget)
+      collWidget fDyn = fmap AccSuccess <$> EC.collectionEditor editDeletableWidget addNewWidget id id fDyn
+      invalidWidget = return . fmap AccFailure
+  davFa <-  R.eitherDyn . fmap avToEither . getCompose $ fvFa
+  let (errsDynEv, fDynEv) = R.fanEither $ R.leftmost [R.updated davFa, R.tag (R.current davFa) postBuild]
+  Compose . join <$> (RD.widgetHold (invalidWidget $ R.constDyn [FInvalid "Initial Widget"]) $ R.leftmost [invalidWidget <$> errsDynEv, collWidget <$> fDynEv])
+
+type VFormBuilderBoth t m a b = (VFormBuilderC t m a, VFormBuilderC t m b)
+
+showKeyEditVal :: (FormInstanceC t m, VFormBuilderBoth t m k v) => k -> R.Dynamic t v -> Form t m v
+showKeyEditVal k vDyn = makeForm $ do
+  let showKey k = toReadOnly $ buildVForm Nothing (constFormValue k)
+  fRow $ do
+    _<- fItem . fFill LayoutRight . unF $ showKey k
+    unF $ buildVForm Nothing (Compose $ AccSuccess <$> vDyn)
+
+intMapEditWidget :: ( FormInstanceC t m, VFormBuilderBoth t m Int a) => Form t m (EC.NewItem IM.IntMap a)
+intMapEditWidget = buildVForm Nothing formValueNothing
+
+
+instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (IM.IntMap a) where
+  buildForm va mFN imFV = formCollectionEditor EC.DisplayAll showKeyEditVal intMapEditWidget imFV
+
+
+
+
+{-
 -- Container instances
 -- Editing/Appendability requires that the container be isomorphic to something traversable, but traversable in the (key,value) pairs for maps.
 -- and the ability to make an empty traversable and insert new items/pairs.
@@ -694,5 +728,6 @@ selectWidgetWithDefault labelStrategy eW k0 dgv = mdo
   selDyn <- dropdownWidget k0
   editEv <- LHF.selectViewListWithKeyLHFMap selDyn dgv (toSVLWKWidget eW)  -- NB: this map doesn't need updating from edits or deletes
   return (Just <$> selDyn, editEv) -- we need the selection to make the delete button work
+-}
 -}
 -}
