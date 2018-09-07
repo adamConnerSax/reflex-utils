@@ -11,7 +11,6 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE UndecidableInstances  #-}
---{-# LANGUAGE DeriveGeneric         #-}
 {-# OPTIONS -fno-warn-orphans      #-}
 module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        (
@@ -30,6 +29,7 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        ) where
 
 import           Control.Lens                                 (over, view)
+import           Control.Monad                                (join)
 import           Control.Monad.Fix                            (MonadFix)
 import           Control.Monad.Reader                         (lift)
 import           Data.Functor.Compose                         (Compose (Compose, getCompose))
@@ -70,15 +70,21 @@ import           Reflex.Dom.Contrib.FormBuilder.DynValidation (dynMaybeAsEv)
 import           Reflex.Dom.Contrib.Layout.Types              (emptyCss,
                                                                toCssString)
 import           Reflex.Dom.Contrib.ReflexConstraints
+{-
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult, buildReadOnlyWidgetResult,
                                                                buildWidgetResult,
                                                                unsafeBuildWidgetResult,
                                                                widgetResultOfDynamicToWidgetResult)
+-}
 -- instances
 
 --some helpers
 showText :: Show a => a -> T.Text
 showText = T.pack . show
+
+-- NB: This means that if d is updated and e fires in the same frame, the update to d will be the result here.
+dynPlusEvent :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
+dynPlusEvent d e = R.buildDynamic (R.sample . R.current $ d) $ R.leftmost [R.updated d, e]
 
 type FormWidgetBase t m = (RD.DomBuilder t m, R.MonadHold t m, MonadFix m)
 type FormWidget t m = ({-RD.HasDocument m ,-} FormWidgetBase t m, MonadWidgetExtraC t m, RD.PostBuild t m)
@@ -87,20 +93,20 @@ type FormInstanceC t m = FormWidget t m
 instance {-# OVERLAPPABLE #-} B.Validatable FValidation a where
   validator = AccSuccess
 
-readOnlyW :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => (a -> T.Text) -> WidgetConfig t a -> m (WidgetResult t a)
+readOnlyW :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => (a -> T.Text) -> WidgetConfig t a -> m (R.Dynamic t a)
 readOnlyW f wc = do
   da <- R.holdDyn (_widgetConfig_initialValue wc) (_widgetConfig_setValue wc)
   let ds = f <$> da
   RD.elDynAttr "div" (_widgetConfig_attributes wc) $ RD.dynText ds
-  return $ buildReadOnlyWidgetResult da
+  return da
 
 formWidget :: forall t m a b. (R.Reflex t, RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m, MonadFix m)
   => (a -> b) -- map in/out type to widget type (int to text, e.g.,)
   -> (a -> T.Text) -- show in/out type
   -> Maybe FieldName -- field name ?
   -> WidgetConfig t a
-  -> (WidgetConfig t a -> m (WidgetResult t a)) -- underlying reflex-dom-contrib widget, in WidgetResult form
-  -> FR t m (WidgetResult t b)
+  -> (WidgetConfig t a -> m (R.Dynamic t a)) -- underlying reflex-dom-contrib widget, in WidgetResult form
+  -> FR t m (R.Dynamic t b)
 formWidget f fString mFN wc widget = do
   let addToAttrs :: R.Reflex t => T.Text -> Maybe T.Text -> RD.Dynamic t (M.Map T.Text T.Text) -> RD.Dynamic t (M.Map T.Text T.Text)
       addToAttrs attr mVal attrsDyn = case mVal of
@@ -129,7 +135,7 @@ formWidget' :: (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m, MonadFix m
   -> (b -> T.Text) -- showText for widget type
   -> Maybe FieldName -- field name ?
   -> Maybe T.Text -- type name ?
-  -> (WidgetConfig t b -> m (WidgetResult t b)) -- underlying reflex-dom-contrib widget
+  -> (WidgetConfig t b -> m (R.Dynamic t b)) -- underlying reflex-dom-contrib widget
   -> FR t m (FormValue t a)
 formWidget' updateEv initialWV toWT validateWT showWT mFN mTypeName widget = mdo
   attrsDyn <- fAttrs fva mFN mTypeName
@@ -143,11 +149,12 @@ item = fItem
 instance R.Reflex t => Functor (HtmlWidget t) where
   fmap f (HtmlWidget v c kp kd ku hf) = HtmlWidget (f <$> v) (f <$> c) kp kd ku hf
 
-textWidgetResult :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (WidgetResult t T.Text)
+textWidgetResult :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
 textWidgetResult mFN c = do
   inputDyn <- R.holdDyn (_widgetConfig_initialValue c) (_widgetConfig_setValue c)
   changeEv <- _hwidget_change <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
-  buildWidgetResult inputDyn changeEv
+  dynPlusEvent inputDyn changeEv -- this is different, I think.  buildWidgetResult would have same dynamic but updates would only fire on change
+--  buildWidgetResult inputDyn changeEv
 
 {-
 textWidgetResult' :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (WidgetResult t T.Text)
@@ -215,7 +222,7 @@ dynReadMaybeEditor va = Editor . buildDynReadMaybe va
 -- NB this will handle Dynamic t (Dynamic t a)) inputs
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (R.Dynamic t a) where
   buildForm va mFN fvda = makeForm $ do
-    fva <- widgetResultOfDynamicToWidgetResult $ fmap sequenceA $ getCompose fvda
+    let fva = join $ fmap sequenceA $ getCompose fvda
     unF . validateForm va . fmap R.constDyn $ buildVForm mFN (Compose fva)
 
 -- | String and Text
@@ -239,11 +246,13 @@ instance FormC e t m=>B.Builder (RFormWidget e t m) Char where
 -}
 
 
-htmlWidgetResult :: R.Reflex t => HtmlWidget t a -> WidgetResult t a
-htmlWidgetResult hw =
+htmlWidgetResult :: R.Reflex t => HtmlWidget t a -> R.Dynamic t a
+htmlWidgetResult hw = _hwidget_value hw
+{-
   let val = _hwidget_value hw
       changeEv = _hwidget_change hw
   in unsafeBuildWidgetResult val changeEv
+-}
 
 -- We don't need this.  If we leave it out, the Enum instance will work and we get a dropdown instead of a checkbox.  Which might be better...
 instance FormInstanceC t m => FormBuilder t m Bool where
@@ -329,11 +338,13 @@ buildFormIso isoAB vb mFN fvb = makeForm $ do
 instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b) => FormBuilder t m (AccValidation a b) where
   buildForm = buildFormIso (iso eitherToAV avToEither)
 
-widget0Result :: R.Reflex t => Widget0 t a -> WidgetResult t a
-widget0Result w0 =
+widget0Result :: R.Reflex t => Widget0 t a -> R.Dynamic t a
+widget0Result w0 = _widget0_value w0
+{-
   let val = _widget0_value w0
       chg = _widget0_change w0
   in unsafeBuildWidgetResult val chg
+-}
 
 buildEnumDropdown :: (FormInstanceC t m, Enum a, Bounded a, Eq a)
   => (a -> T.Text) -> FormValidator a -> Maybe FieldName -> FormValue t a -> Form t m a

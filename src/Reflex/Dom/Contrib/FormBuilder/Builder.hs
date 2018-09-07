@@ -74,7 +74,7 @@ module Reflex.Dom.Contrib.FormBuilder.Builder
 import           Reflex.Dom.Contrib.Layout.Types              (CssClasses (..),
                                                                IsCssClass (..),
                                                                LayoutOrientation (..))
-
+{-
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult,
                                                                constWidgetResult,
                                                                dynamicToWidgetResult,
@@ -82,7 +82,7 @@ import           Reflex.Dom.Contrib.Widgets.WidgetResult      (WidgetResult,
                                                                updatedWidgetResult,
                                                                widgetResultToDynamic,
                                                                wrDyn)
-
+-}
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation
 import           Reflex.Dom.Contrib.FormBuilder.FormEditor
@@ -102,6 +102,7 @@ import qualified Reflex.Dom                                   as RD
 import           Control.Lens                                 (Prism', has,
                                                                preview, review,
                                                                view)
+import           Control.Monad                                (join)
 import           Control.Monad.Fix                            (MonadFix)
 import           Control.Monad.Morph
 import           Control.Monad.Reader                         (MonadReader (..),
@@ -135,10 +136,10 @@ makeForm = Compose
 unF :: Form t m a -> FRW t m a
 unF = getCompose
 
-fgvToForm :: Functor m => B.FGV (FR t m) (WidgetResult t) FValidation a -> Form t m a
+fgvToForm :: Functor m => B.FGV (FR t m) (R.Dynamic t) FValidation a -> Form t m a
 fgvToForm = makeForm . fmap Compose . B.unFGV
 
-formToFGV :: Functor m => Form t m a -> B.FGV (FR t m) (WidgetResult t) FValidation a
+formToFGV :: Functor m => Form t m a -> B.FGV (FR t m) (R.Dynamic t) FValidation a
 formToFGV = B.FGV . fmap getCompose . unF
 
 type FormValidator a = B.Validator FValidation a
@@ -149,32 +150,33 @@ validateForm va = makeForm . fmap Compose . B.unFGV . B.validateFGV va . B.FGV .
 validateEditor :: (R.Reflex t, Functor m) => FormValidator b -> FormEditor t m a b -> FormEditor t m a b
 validateEditor v de = Editor $ validateForm v . runEditor de
 
-formValueToGBuildInput :: R.Reflex t => FormValue t a -> B.GV (WidgetResult t) FValidation a
+formValueToGBuildInput :: R.Reflex t => FormValue t a -> B.GV (R.Dynamic t) FValidation a
 formValueToGBuildInput = B.GV . getCompose
 
-distributeDMapOverWidgetResult :: forall t k. (R.Reflex t, DM.GCompare k) => DM.DMap k (WidgetResult t) -> WidgetResult t (DM.DMap k Identity)
+{-
+distributeDMapOverWidgetResult :: forall t k. (R.Reflex t, DM.GCompare k) => DM.DMap k (Dynamic t) -> WidgetResult t (DM.DMap k Identity)
 distributeDMapOverWidgetResult = dynamicToWidgetResult . R.distributeDMapOverDynPure . DM.map (view wrDyn)
-
+-}
 class (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => FormBuilder t m a where
   buildForm :: FormValidator a -> Maybe FieldName -> FormValue t a -> Form t m a
-  default buildForm :: (B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
+  default buildForm :: (B.GBuilderCS (FR t m) (R.Dynamic t) FValidation a)
     => FormValidator a -> Maybe FieldName -> FormValue t a -> Form t m a
-  buildForm va mFN = makeForm . fmap Compose . B.unFGV . B.gBuildValidatedCS (npSequenceViaDMap distributeDMapOverWidgetResult) va mFN . formValueToGBuildInput
+  buildForm va mFN = makeForm . fmap Compose . B.unFGV . B.gBuildValidatedCS (npSequenceViaDMap R.distributeDMapOverDynPure) va mFN . formValueToGBuildInput
 
 
 -- helper function for using the genericBuilder in an instance rather than as the instance.  Useful for additional layout, etc.
 gBuildFormValidated::( RD.DomBuilder t m
                      , RD.MonadHold t m
                      , RD.PostBuild t m
-                     , B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
+                     , B.GBuilderCS (FR t m) (R.Dynamic t) FValidation a)
   => FormValidator a -> Maybe FieldName -> FormValue t a -> Form t m a
-gBuildFormValidated va mFN = fgvToForm  . B.gBuildValidatedCS (npSequenceViaDMap distributeDMapOverWidgetResult) va mFN . formValueToGBuildInput
+gBuildFormValidated va mFN = fgvToForm  . B.gBuildValidatedCS (npSequenceViaDMap R.distributeDMapOverDynPure) va mFN . formValueToGBuildInput
 
 gBuildForm :: ( RD.DomBuilder t m
               , RD.MonadHold t m
               , RD.PostBuild t m
               , B.Validatable FValidation a
-              , B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
+              , B.GBuilderCS (FR t m) (R.Dynamic t) FValidation a)
   => Maybe FieldName -> FormValue t a -> Form t m a
 gBuildForm = gBuildFormValidated B.validator
 
@@ -182,13 +184,13 @@ gBuildForm = gBuildFormValidated B.validator
 gBuildEditorValidated :: ( RD.DomBuilder t m
                          , RD.MonadHold t m
                          , RD.PostBuild t m
-                         , B.GBuilderCS (FR t m) (WidgetResult t) FValidation a)
+                         , B.GBuilderCS (FR t m) (R.Dynamic t) FValidation a)
   => FormValidator a -> Maybe FieldName -> FormEditor t m a a
 gBuildEditorValidated va mFN = Editor $ gBuildFormValidated va mFN
 
 type VFormBuilderC t m a = (FormBuilder t m a, B.Validatable FValidation a)
 
-buildVForm :: VFormBuilderC t m a => Maybe FieldName ->FormValue t a -> Form t m a
+buildVForm :: VFormBuilderC t m a => Maybe FieldName -> FormValue t a -> Form t m a
 buildVForm = buildForm B.validator
 
 editField :: VFormBuilderC t m a => Maybe FieldName -> FormEditor t m a a
@@ -217,7 +219,7 @@ buildFMDWrappedList::( RD.DomBuilder t m
                      , RD.PostBuild t m
                      , B.Generic a
                      , B.HasDatatypeInfo a
-                     , B.All2 (B.And (B.Builder (FR t m) (WidgetResult t) FValidation) (B.Validatable FValidation)) (B.Code a))
+                     , B.All2 (B.And (B.Builder (FR t m) (R.Dynamic t) FValidation) (B.Validatable FValidation)) (B.Code a))
   => Maybe FieldName -> FormValue t a -> [FMDWrapped t m a]
 buildFMDWrappedList mFN = B.buildMDWrappedList mFN . formValueToGBuildInput
 
@@ -237,18 +239,18 @@ prismToSubformData mFN (SubformArgs vb name p) =
   let mappedEditor = Editor $ fmap (review p) . buildForm vb mFN . maybeMapFormValue (preview p)
   in makeSubformData mFN (has p) mappedEditor name
 
-editorFromSubForms ::  (R.Reflex t, Functor m, B.Buildable (FR t m) (WidgetResult t) FValidation)
+editorFromSubForms ::  (R.Reflex t, Functor m, B.Buildable (FR t m) (R.Dynamic t) FValidation)
   => FormValidator a -> [FormValue t a -> FMDWrapped t m a] -> FormEditor t m a a
 editorFromSubForms v subForms = Editor $ \fva -> validateForm v $ makeForm $ fmap Compose . B.unFGV . B.bSum $ fmap ($ fva) subForms
 
-actOnDBWidget :: Functor m => (FRW t m a -> FRW t m a) -> B.FGV (FR t m) (WidgetResult t) FValidation a -> B.FGV (FR t m) (WidgetResult t) FValidation a
+actOnDBWidget :: Functor m => (FRW t m a -> FRW t m a) -> B.FGV (FR t m) (R.Dynamic t) FValidation a -> B.FGV (FR t m) (R.Dynamic t) FValidation a
 actOnDBWidget f = B.FGV . fmap getCompose . f . fmap Compose . B.unFGV
 
 toReadOnly :: Monad m => Form t m a -> Form t m a
 toReadOnly form = makeForm . local setToObserve $ unF form
 
 -- We need this, but why?
-instance (RD.DomBuilder t m, FormBuilder t m a) => B.Builder (FR t m) (WidgetResult t) FValidation a where
+instance (RD.DomBuilder t m, FormBuilder t m a) => B.Builder (FR t m) (R.Dynamic t) FValidation a where
   buildValidated va mFN = B.FGV . fmap getCompose . unF . buildForm va mFN . Compose . B.unGV
 
 
@@ -259,7 +261,7 @@ runForm' :: Monad m => FormConfiguration t m -> Form t m a -> (FormValue t a -> 
 runForm' cfg fra f = runReaderT (fWrapper $ unF fra >>= lift . f) cfg
 
 joinDynOfFormValues :: R.Reflex t => R.Dynamic t (FormValue t a) -> FormValue t a
-joinDynOfFormValues = Compose . dynamicWidgetResultToWidgetResult . fmap getCompose
+joinDynOfFormValues = Compose . join . fmap getCompose
 
 switchingForm :: (RD.DomBuilder t m, R.MonadHold t m) => (a -> Form t m b) -> a -> R.Event t a -> Form t m b
 switchingForm widgetGetter widgetHolder0 newWidgetHolderEv = makeForm $ do
@@ -268,16 +270,16 @@ switchingForm widgetGetter widgetHolder0 newWidgetHolderEv = makeForm $ do
   lift $ joinDynOfFormValues <$> RD.widgetHold (f widgetHolder0) (fmap f newWidgetHolderEv)
 
 dynamicForm :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> Maybe a -> m (FormValue t a)
-dynamicForm cfg ma = runForm cfg $ buildVForm Nothing (Compose $ constWidgetResult $ maybeToFV ma)
+dynamicForm cfg ma = runForm cfg $ buildVForm Nothing (Compose $ R.constDyn $ maybeToFV ma)
 
 dynamicFormOfFormValue :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> FormValue t a -> m (FormValue t a)
 dynamicFormOfFormValue cfg fva = runForm cfg $ buildVForm Nothing fva
 
 dynamicFormOfDynamic :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> R.Dynamic t a -> m (FormValue t a)
-dynamicFormOfDynamic cfg da = runForm cfg $ buildVForm Nothing (Compose . dynamicToWidgetResult . fmap AccSuccess $ da)
+dynamicFormOfDynamic cfg da = runForm cfg $ buildVForm Nothing (Compose . fmap AccSuccess $ da)
 
 dynamicFormOfDynMaybe :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> DynMaybe t a -> m (FormValue t a)
-dynamicFormOfDynMaybe cfg dma = runForm cfg $ buildVForm Nothing (Compose . dynamicToWidgetResult . fmap maybeToFV . getCompose $ dma)
+dynamicFormOfDynMaybe cfg dma = runForm cfg $ buildVForm Nothing (Compose . fmap maybeToFV . getCompose $ dma)
 
 --TODO: is attachPromptlyDynWithMaybe the right thing here?
 formWithSubmitAction :: ( RD.DomBuilder t m
@@ -289,8 +291,8 @@ formWithSubmitAction :: ( RD.DomBuilder t m
 formWithSubmitAction cfg ma submitWidget = do
   let f fra = do
         submitEv <- submitWidget
-        return $ RD.attachPromptlyDynWithMaybe const (widgetResultToDynamic $ avToMaybe <$> getCompose fra) submitEv -- fires when control does but only if form entries are valid
-  runForm' cfg (buildVForm Nothing (Compose $ constWidgetResult $ maybeToFV ma)) f
+        return $ RD.attachPromptlyDynWithMaybe const (avToMaybe <$> getCompose fra) submitEv -- fires when control does but only if form entries are valid
+  runForm' cfg (buildVForm Nothing (Compose $ R.constDyn $ maybeToFV ma)) f
 
 
 observeDynamic :: (RD.DomBuilder t m, VFormBuilderC t m a) => FormConfiguration t m -> R.Dynamic t a -> m (FormValue t a)
@@ -311,7 +313,7 @@ observeFlow cfg flow initialA =
     let initialWidget = flow initialA
         obF = observeWidget cfg
     fva <- unF $ buildVForm Nothing (constFormValue initialA) -- FormValue t a
-    dwb <- lift $ R.foldDynMaybe (\ma _ -> flow <$> ma) initialWidget (avToMaybe <$> updatedWidgetResult (getCompose fva)) -- Dynamic t (m b)
+    dwb <- lift $ R.foldDynMaybe (\ma _ -> flow <$> ma) initialWidget (avToMaybe <$> R.updated (getCompose fva)) -- Dynamic t (m b)
     lift $ joinDynOfFormValues <$> RD.widgetHold (obF initialWidget) (obF <$> R.updated dwb)
 
 liftF :: FLayoutF t m -> Form t m a -> Form t m a
@@ -370,7 +372,7 @@ fAttrs' fra mFN mTypeS fixedCss = do
       invalidAttrs = titleAttr title <> cssClassAttr (invalidClasses <> fixedCss)
       f (AccSuccess _) = True
       f (AccFailure _) = False
-      validDyn = widgetResultToDynamic $ f <$> getCompose fra
+      validDyn = f <$> getCompose fra
   return . RD.ffor validDyn $ \x -> if x then validAttrs else invalidAttrs
 
 componentTitle :: Maybe FieldName -> Maybe T.Text -> T.Text
@@ -380,7 +382,7 @@ componentTitle mFN mType =
   in if isJust mFN && isJust mType then fnS <> "::" <> tnS else fnS <> tnS
 
 
-instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => B.Buildable (FR t m) (WidgetResult t) FValidation where
+instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => B.Buildable (FR t m) (R.Dynamic t) FValidation where
   bFail msg = B.FGV . fmap getCompose $ do
     failF <- failureF . _builderFunctions <$> ask
     failF $ T.pack msg
@@ -390,15 +392,14 @@ instance (RD.DomBuilder t m, R.MonadHold t m, RD.PostBuild t m) => B.Buildable (
     postbuild <- RD.getPostBuild
     let mapHasDefault = R.fmapMaybe (\x -> if x then Just () else Nothing)
         mapValue      = fmap Compose . B.unFGV
-        f (MDWrapped isConWR (conName, mFN) fgvWidget) =
-          let isConDyn = widgetResultToDynamic isConWR
-          in (conName, T.pack <$> mFN, mapHasDefault (R.leftmost [R.updated isConDyn, R.tag (R.current isConDyn) postbuild]), mapValue fgvWidget)
+        f (MDWrapped isConDyn (conName, mFN) fgvWidget) =
+          (conName, T.pack <$> mFN, mapHasDefault (R.leftmost [R.updated isConDyn, R.tag (R.current isConDyn) postbuild]), mapValue fgvWidget)
         constrList = f <$> mwWidgets
     sF <- sumF . _builderFunctions <$> ask
     sF constrList
 
 
-type FMDWrapped t m a = B.MDWrapped (FR t m) (WidgetResult t) FValidation a
+type FMDWrapped t m a = B.MDWrapped (FR t m) (R.Dynamic t) FValidation a
 
 
 {-
