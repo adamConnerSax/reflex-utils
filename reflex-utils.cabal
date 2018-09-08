@@ -186,7 +186,7 @@ executable reflex-utils-layout
 
 
 executable reflex-utils-formBuilder-warp
---  if flag(wkwebview)
+  if flag(wkwebview)
     buildable: False
   hs-source-dirs:      app/formBuilder
   main-is:             Main.hs

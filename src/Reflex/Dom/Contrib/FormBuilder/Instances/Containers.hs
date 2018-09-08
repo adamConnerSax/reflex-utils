@@ -16,86 +16,104 @@
 module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
   (
     -- * Container form builders
+    formCollectionEditor
+  , formCollectionValueEditor
+  , showKeyEditVal
+  , hideKeyEditVal
+  , newItemWidget
+  , DisplayCollection (..)
   ) where
 
 
 import qualified Reflex.Collections.Collections                 as RC
-import           Reflex.Dom.Contrib.DynamicUtils                (dynAsEv,
-                                                                 dynPlusEvent)
-import           Reflex.Dom.Contrib.EventUtils                  (fanBool, leftWhenNotRight)
-import           Reflex.Dom.Contrib.FormBuilder.Builder         (BuildForm, FR,
-                                                                 FRW,
-                                                                 FValidation,
-                                                                 FieldName,
-                                                                 Form,
-                                                                 FormBuilder (buildForm),
-                                                                 FormType (..),
-                                                                 FormValidator,
+import           Reflex.Dom.Contrib.Widgets.EditableCollection  (DisplayCollection (..))
+import qualified Reflex.Dom.Contrib.Widgets.EditableCollection  as EC
+
+import           Reflex.Dom.Contrib.FormBuilder.Builder         (Form, FormBuilder (buildForm),
                                                                  FormValue,
                                                                  VFormBuilderC,
                                                                  avToMaybe,
                                                                  buildVForm,
                                                                  constFormValue,
-                                                                 fCol, fFill,
-                                                                 fItem, fRow,
-                                                                 formValueError,
+                                                                 fFill, fItem,
+                                                                 fRow,
                                                                  formValueNothing,
-                                                                 getFormType,
                                                                  makeForm,
                                                                  toReadOnly,
-                                                                 unF,
-                                                                 validateForm)
-import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FormError (FInvalid, FNothing),
-                                                                 FormErrors,
-                                                                 avToEither,
-                                                                 avToMaybe,
-                                                                 mergeAccValidation,
-                                                                 printFormErrors)
+                                                                 unF)
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FormError (FInvalid),
+                                                                 avToEither)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.Layout.Types                (LayoutDirection (..))
-import qualified Reflex.Dom.Contrib.Widgets.EditableCollection  as EC
 
---import qualified Reflex.Dom.Contrib.Widgets.ModalEditor         as MW
---import qualified Reflex.Dom.Contrib.Widgets.SafeDropdown        as SD
-{-
-import           Reflex.Dom.Contrib.Widgets.WidgetResult        (WidgetResult, buildWidgetResult,
-                                                                 currentWidgetResult,
-                                                                 dynamicToWidgetResult,
-                                                                 updatedWidgetResult,
-                                                                 widgetResultToDynamic)
--}
+
+
 -- reflex imports
 import qualified Reflex                                         as R
-import           Reflex.Dom                                     ((=:))
 import qualified Reflex.Dom                                     as RD
 
-import           Control.Arrow                                  ((&&&))
-import           Control.Lens                                   (view, (&),
-                                                                 (.~))
 import           Control.Monad                                  (join)
 import           Control.Monad.Fix                              (MonadFix)
-import qualified Data.Foldable                                  as F
 import           Data.Functor.Compose                           (Compose (Compose, getCompose))
 import           Data.Proxy                                     (Proxy (..))
-import qualified Data.Text                                      as T
 import           Data.Validation                                (AccValidation (..))
 
 -- imports only to make instances
 import qualified Data.Array                                     as A
-import           Data.Bool                                      (bool)
 import           Data.Hashable                                  (Hashable)
 import qualified Data.HashMap.Lazy                              as HML
-import qualified Data.HashSet                                   as HS
 import qualified Data.IntMap                                    as IM
-import qualified Data.List                                      as L
 import qualified Data.Map                                       as M
-import           Data.Maybe                                     (isNothing)
-import           Data.Monoid                                    ((<>))
 import qualified Data.Sequence                                  as Seq
---import qualified Data.Set                                       as S
+import qualified Data.Tree                                      as Tree
 
--- my libs
-import qualified DataBuilder                                    as B
+
+type VFormBuilderBoth t m a b = (VFormBuilderC t m a, VFormBuilderC t m b)
+
+showKeyEditVal :: (FormInstanceC t m, VFormBuilderBoth t m k v) => k -> R.Dynamic t v -> Form t m v
+showKeyEditVal k vDyn = makeForm $ do
+  let showKey x = toReadOnly $ buildVForm Nothing (constFormValue x)
+  fRow $ do
+    _<- fItem . fFill LayoutRight . unF $ showKey k
+    fItem . fFill LayoutLeft . unF $ buildVForm Nothing (Compose $ AccSuccess <$> vDyn)
+
+hideKeyEditVal :: (FormInstanceC t m, VFormBuilderC t m v) => k -> R.Dynamic t v -> Form t m v
+hideKeyEditVal _ vDyn = makeForm $ do
+  fItem . unF $ buildVForm Nothing (Compose $ AccSuccess <$> vDyn)
+
+newItemWidget :: (EC.EditableCollection f, FormInstanceC t m, VFormBuilderC t m (EC.NewItem f a)) => Proxy f -> Proxy a -> Form t m (EC.NewItem f a)
+newItemWidget _ _ = buildVForm Nothing formValueNothing
+
+instance (Ord k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (M.Map k a) where
+  buildForm va mFN mFV =
+    let newItemW =  newItemWidget (Proxy :: Proxy (M.Map k)) (Proxy :: Proxy a)
+    in formCollectionEditor EC.DisplayAll showKeyEditVal newItemW mFV
+
+instance (Ord k, Hashable k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (HML.HashMap k a) where
+  buildForm va mFN hmFV =
+    let newItemW =  newItemWidget (Proxy :: Proxy (HML.HashMap k)) (Proxy :: Proxy a)
+    in formCollectionEditor EC.DisplayAll showKeyEditVal newItemW hmFV
+
+instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (IM.IntMap a) where
+  buildForm va mFN imFV =
+    let newItemW =  newItemWidget (Proxy :: Proxy IM.IntMap) (Proxy :: Proxy a)
+    in formCollectionEditor EC.DisplayAll showKeyEditVal newItemW imFV
+
+instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m [a] where
+  buildForm va mFN lFV =
+    let newItemW =  newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy a)
+    in formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV
+
+instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (Seq.Seq a) where
+  buildForm va mFN sFV =
+    let newItemW =  newItemWidget (Proxy :: Proxy Seq.Seq) (Proxy :: Proxy a)
+    in formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW sFV
+
+instance (A.Ix k, Enum k, Bounded k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (A.Array k a) where
+  buildForm va mFN aFV = formCollectionValueEditor EC.DisplayAll showKeyEditVal aFV
+
+instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (Tree.Tree a) where
+  buildForm va mFN tFV = formCollectionValueEditor EC.DisplayAll hideKeyEditVal tFV
 
 
 -- I don't love the widgetHold here, so
@@ -131,30 +149,29 @@ formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
   let (errsDynEv, fDynEv) = R.fanEither $ R.leftmost [R.updated davFa, R.tag (R.current davFa) postBuild]
   Compose . join <$> (RD.widgetHold (invalidWidget $ R.constDyn [FInvalid "Initial Widget"]) $ R.leftmost [invalidWidget <$> errsDynEv, collWidget <$> fDynEv])
 
-type VFormBuilderBoth t m a b = (VFormBuilderC t m a, VFormBuilderC t m b)
-
-showKeyEditVal :: (FormInstanceC t m, VFormBuilderBoth t m k v) => k -> R.Dynamic t v -> Form t m v
-showKeyEditVal k vDyn = makeForm $ do
-  let showKey k = toReadOnly $ buildVForm Nothing (constFormValue k)
-  fRow $ do
-    _<- fItem . fFill LayoutRight . unF $ showKey k
-    fItem . fFill LayoutLeft . unF $ buildVForm Nothing (Compose $ AccSuccess <$> vDyn)
-
--- we can make this polymorphic over (EditableCollection f) but that would require a type family to
--- specify the correct VFormBuilder Constraints??
-intMapItemWidget :: ( FormInstanceC t m, VFormBuilderBoth t m Int a) => Form t m (EC.NewItem IM.IntMap a)
-intMapItemWidget = buildVForm Nothing formValueNothing
-
-newItemWidget :: (FormInstanceC t m, VFormBuilderC t m (EC.NewItem f a)) => Proxy f -> Proxy a -> Form t m (EC.NewItem f a)
-newItemWidget _ _ = buildVForm Nothing formValueNothing
 
 
-instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (IM.IntMap a) where
-  buildForm va mFN imFV =
-    let newItemW =  newItemWidget (Proxy :: Proxy IM.IntMap) (Proxy :: Proxy a)
-    in formCollectionEditor EC.DisplayAll showKeyEditVal newItemW imFV
-
-
+formCollectionValueEditor :: forall t m f a. ( RD.DomBuilder t m
+                                             , RD.PostBuild t m
+                                             , FormInstanceC t m
+                                             , R.Adjustable t m
+                                             , R.MonadHold t m
+                                             , MonadFix m
+                                             , RC.Mergeable f (Maybe a)
+                                             , EC.EditableCollection f
+                                             , Ord (RC.Key f))
+  => EC.DisplayCollection t (RC.Key f) -- use a dropdown or show entire collection
+  -> (RC.Key f -> R.Dynamic t a -> Form t m a) -- display and edit existing
+  -> FormValue t (f a)
+  -> Form t m (f a)
+formCollectionValueEditor display editWidget fvFa = makeForm $ do
+  postBuild <- RD.getPostBuild
+  let editWidget' k vDyn = fmap avToMaybe . getCompose <$> unF (editWidget k vDyn) -- m (R.Dynamic t (Maybe a))
+      collWidget fDyn = fmap AccSuccess <$> EC.simpleCollectionValueEditor display editWidget' fDyn
+      invalidWidget = return . fmap AccFailure
+  davFa <- R.eitherDyn . fmap avToEither . getCompose $ fvFa
+  let (errsDynEv, fDynEv) = R.fanEither $ R.leftmost [R.updated davFa, R.tag (R.current davFa) postBuild]
+  Compose . join <$> (RD.widgetHold (invalidWidget $ R.constDyn [FInvalid "Initial Widget"]) $ R.leftmost [invalidWidget <$> errsDynEv, collWidget <$> fDynEv])
 
 
 {-

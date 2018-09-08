@@ -80,8 +80,11 @@ import           DataBuilder                                         as B
 import           Reflex.Dom.Contrib.FormBuilder
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.Instances            (FormInstanceC)
-import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (buildList, buildListWithSelect,
-                                                                      buildMapWithSelect)
+import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (DisplayCollection,
+                                                                      formCollectionEditor,
+                                                                      hideKeyEditVal,
+                                                                      newItemWidget,
+                                                                      showKeyEditVal)
 
 import           Css
 
@@ -198,12 +201,11 @@ instance HasDatatypeInfo ListOfA
 instance FormInstanceC t m => FormBuilder t m ListOfA
 -}
 
-convertValidator::FormValidator ListOfA -> FormValidator [A]
+convertValidator :: FormValidator ListOfA -> FormValidator [A]
 convertValidator vLA = fmap (\(ListOfA x) -> x) . vLA . ListOfA
 
-instance (FormInstanceC t m, VFormBuilderC t m A)=>FormBuilder t m ListOfA where
-  buildForm va mFN = fmap ListOfA . buildListWithSelect (convertValidator va) mFN . fmap (\(ListOfA x)->x)
-
+instance (FormInstanceC t m, VFormBuilderC t m A) => FormBuilder t m ListOfA where
+  buildForm va mFN = fmap ListOfA . formCollectionEditor (DisplayEach (R.constDyn Nothing) (T.pack . show)) hideKeyEditVal newItemW . fmap (\(ListOfA x)->x)
 
 instance Generic B
 instance HasDatatypeInfo B
