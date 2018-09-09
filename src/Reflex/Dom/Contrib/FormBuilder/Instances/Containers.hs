@@ -126,7 +126,7 @@ formCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
                                         , R.Adjustable t m
                                         , R.MonadHold t m
                                         , MonadFix m
-                                        , RC.Mergeable f (Maybe a)
+                                        , RC.Mergeable f
                                         , EC.EditableCollection f
                                         , Ord (RC.Key f)
                                         , RC.Key f ~ RC.Key (RC.Diff f))
@@ -157,7 +157,7 @@ formCollectionValueEditor :: forall t m f a. ( RD.DomBuilder t m
                                              , R.Adjustable t m
                                              , R.MonadHold t m
                                              , MonadFix m
-                                             , RC.Mergeable f (Maybe a)
+                                             , RC.Mergeable f
                                              , EC.EditableCollection f
                                              , Ord (RC.Key f))
   => EC.DisplayCollection t (RC.Key f) -- use a dropdown or show entire collection

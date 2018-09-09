@@ -68,7 +68,7 @@ simpleCollectionValueEditor :: forall t m f a. ( RD.DomBuilder t m
                                                , R.Adjustable t m
                                                , R.MonadHold t m                                               
                                                , MonadFix m
-                                               , RC.Mergeable f (Maybe a)
+                                               , RC.Mergeable f
                                                , EditableCollection f
                                                , Ord (Key f))
   => DisplayCollection t (Key f) -- use a dropdown or show entire collection
@@ -98,7 +98,7 @@ simpleCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
                                           , R.Adjustable t m
                                           , R.MonadHold t m
                                           , MonadFix m
-                                          , RC.Mergeable f (Maybe a)
+                                          , RC.Mergeable f
                                           , EditableCollection f
                                           , Ord (Key f)
                                           , Key f ~ Key (Diff f))
@@ -217,7 +217,7 @@ collectionEditor :: ( RD.Adjustable t m
                     , RD.MonadHold t m                 
                     , MonadFix m
                     , RD.DomBuilder t m
-                    , RC.Mergeable f (Maybe b))                 
+                    , RC.Mergeable f)                 
   => (R.Dynamic t (f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete widget.  Fires only on change. Something like Reflex.Collections.ListView.
   -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  add item widget.  Fires only on valid add.
   -> (f a -> f b) -- we need this to have a starting point for the output dynamics
