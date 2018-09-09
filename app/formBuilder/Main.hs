@@ -43,6 +43,7 @@ import           Data.Time.Clock                                     (UTCTime (.
 -- for a validation example...
 import           Control.Lens.Iso                                    (iso)
 import           Data.Validation                                     (AccValidation (..))
+import           Data.Proxy                                          (Proxy (..))
 
 import           Reflex
 import qualified Reflex.Dom.Contrib.Widgets.Common                   as RDC
@@ -84,7 +85,8 @@ import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (DisplayCol
                                                                       formCollectionEditor,
                                                                       hideKeyEditVal,
                                                                       newItemWidget,
-                                                                      showKeyEditVal)
+                                                                      showKeyEditVal,
+                                                                      DisplayCollection(..))
 
 import           Css
 
@@ -177,12 +179,12 @@ newtype ListOfA = ListOfA { unListOfA :: [A] } deriving (Show, GHC.Generic)
 --And then put those sum types in some other containerized contexts
 data B = B { int::Int, listOfA::ListOfA } deriving (Show,GHC.Generic)
 
-newtype MyMap = MyMap { map_String_B::M.Map String B } deriving (Show,GHC.Generic)
+newtype MyMap = MyMap { map_String_B :: M.Map String B } deriving (Show,GHC.Generic)
 
 newtype SMap a = SMap { unSMap :: M.Map T.Text a } deriving (Show, GHC.Generic)
 newtype LMap a = LMap { unLMap :: M.Map T.Text a } deriving (Show, GHC.Generic)
 
-data BRec = BRec { oneB::B, seqOfA::Seq.Seq A, hashSetOfString::HS.HashSet String } deriving (Show)
+data BRec = BRec { oneB::B, seqOfA::Seq.Seq A} deriving (Show)
 
 data C = C { doubleC::Double, myMap::MyMap,  brec::BRec } deriving (Show,GHC.Generic)
 
@@ -205,7 +207,11 @@ convertValidator :: FormValidator ListOfA -> FormValidator [A]
 convertValidator vLA = fmap (\(ListOfA x) -> x) . vLA . ListOfA
 
 instance (FormInstanceC t m, VFormBuilderC t m A) => FormBuilder t m ListOfA where
-  buildForm va mFN = fmap ListOfA . formCollectionEditor (DisplayEach (R.constDyn Nothing) (T.pack . show)) hideKeyEditVal newItemW . fmap (\(ListOfA x)->x)
+  buildForm va mFN =
+    let newItemW = newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy A) 
+    in fmap ListOfA . formCollectionEditor (DisplayEach (constDyn M.empty) (T.pack . show)) hideKeyEditVal newItemW . fmap (\(ListOfA x)->x) where
+    
+  
 
 instance Generic B
 instance HasDatatypeInfo B
@@ -215,12 +221,16 @@ instance FormInstanceC t m=>FormBuilder t m B where
 --instance Generic MyMap
 --instance HasDatatypeInfo MyMap
 instance FormInstanceC t m=>FormBuilder t m MyMap where
-  buildForm va mFN = fmap MyMap . buildMapWithSelect (fmap map_String_B . va . MyMap) mFN . fmap map_String_B
+  buildForm va mFN =
+    let va' = fmap map_String_B . va . MyMap 
+    in fmap MyMap . buildForm va' mFN . fmap map_String_B
 
 instance Generic (SMap a)
 instance HasDatatypeInfo (SMap a)
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (SMap a) where
-  buildForm va mFN = fmap SMap . buildMapWithSelect (fmap unSMap . va . SMap) mFN . fmap unSMap
+  buildForm va mFN =
+    let va' = fmap unSMap . va . SMap 
+    in fmap SMap . buildForm va' mFN . fmap unSMap
 
 instance Generic (LMap a)
 instance HasDatatypeInfo (LMap a)
@@ -238,8 +248,8 @@ instance FormInstanceC t m=>FormBuilder t m BRec where
   buildForm va mFN mBRecDyn = validateForm va . makeForm $ do
     let b1 = buildVForm Nothing (oneB <$> mBRecDyn)
         b2 = liftF (fCenter LayoutHorizontal) $ buildVForm Nothing (seqOfA <$> mBRecDyn)
-        b3 = liftF (fCenter LayoutHorizontal) $ buildVForm Nothing (hashSetOfString <$> mBRecDyn)
-    fRow . unF $ (BRec <$> b1 <*> b2 <*> b3)
+--        b3 = liftF (fCenter LayoutHorizontal) $ buildVForm Nothing (hashSetOfString <$> mBRecDyn)
+    fRow . unF $ (BRec <$> b1 <*> b2)
 
 
 -- handwritten sum instance for DateOrDateTime.  This is more complex because you need to know which, if any, matched the input.
@@ -270,7 +280,7 @@ b2 = B 4 $ lOfA2
 sm = SMap $ M.fromList [("a",1.0 :: Double),("b", 2)]
 lm = LMap $ M.fromList [("a",1.0 :: Double),("b", 2)]
 
-c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 (ListOfA [])) Seq.empty HS.empty)
+c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 (ListOfA [])) Seq.empty)
 
 testMap::M.Map T.Text Int
 testMap = M.fromList [("A",1),("B",2)]
@@ -294,7 +304,7 @@ seqA :: Seq.Seq A
 seqA = Seq.fromList (unListOfA lOfA2)
 
 bRec :: BRec
-bRec = BRec b1 (Seq.fromList (unListOfA lOfA2)) hs
+bRec = BRec b1 (Seq.fromList (unListOfA lOfA2))
 
 testForm :: (FormInstanceC t m, VFormBuilderC t m a, Show a) => FormConfiguration t m -> a -> m ()
 testForm cfg x = do
