@@ -198,7 +198,7 @@ modalEditorFrame cfg edEvs valueDyn = do
                                   , if cfg ^. modalEditor_updateOutput == Always then editedValueEv else okButtonValueEv
                                   ]
   dynOut <- dynPlusEvent valueDyn updateOutputEv
-  return $ WidgetState viewDyn editorInput dynOut (R.fmapMaybe e2m updateOutputEv)
+  return $ WidgetState viewDyn editorInput dynOut $ R.fmapMaybe e2m updateOutputEv
 
 -- | Modal Editor for a Dynamic a
 modalEditorEither :: forall t m e a. (  Reflex t
@@ -261,7 +261,9 @@ configuredModalWidget config editW eaDyn = do
     let okValueEv = Right <$> R.attachWithMaybe (\e _ -> preview _Right e)  (R.current bodyDyn) ok
     valueIfClosed <- dynPlusEvent eaDyn okValueEv
     let closeValueEv = R.tag (R.current valueIfClosed) $ R.leftmost [dismiss, cancel]
-    return $ EditorEvs R.never okValueEv closeValueEv (R.updated bodyDyn)
+    -- NB:  This used to use (updatedWidgetResult bodyDyn) for the final arg.  I think the leftWhenNotRight should cover the same issue.
+    return $ EditorEvs R.never okValueEv closeValueEv $ leftWhenNotRight (R.updated bodyDyn) (R.updated eaDyn)
+
 
 
 modalEditor :: forall t m a. ( RD.DomBuilder t m
@@ -327,6 +329,10 @@ dynStartingFrom d = R.buildDynamic (R.sample $ R.current d)
 -- NB: This means that if d is updated and e fires in the same frame, the update to d will be the result here.
 dynPlusEvent :: (R.Reflex t, R.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
 dynPlusEvent d e = R.buildDynamic (R.sample . R.current $ d) $ R.leftmost [R.updated d, e]
+
+-- Filter the firing of an event with another event.
+leftWhenNotRight :: R.Reflex t => R.Event t a -> R.Event t b -> R.Event t a
+leftWhenNotRight leftEv rightEv = R.fmapMaybe id $ R.leftmost [Nothing <$ rightEv, Just <$> leftEv]
 
 
 {-

@@ -368,8 +368,8 @@ instance {-# OVERLAPPABLE #-} (FormInstanceC t m, Enum a, Show a, Bounded a, Eq 
 -}
 
 -- |  Tuples. 2,3,4,5 tuples are here.
-deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b)=>FormBuilder t m (a,b)
-deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c)=>FormBuilder t m (a,b,c)
-deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d)=>FormBuilder t m (a,b,c,d)
-deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d, VFormBuilderC t m e)=>FormBuilder t m (a,b,c,d,e)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b) => FormBuilder t m (a,b)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c) => FormBuilder t m (a,b,c)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d) => FormBuilder t m (a,b,c,d)
+deriving instance (FormInstanceC t m, VFormBuilderC t m a, VFormBuilderC t m b, VFormBuilderC t m c, VFormBuilderC t m d, VFormBuilderC t m e) => FormBuilder t m (a,b,c,d,e)
 

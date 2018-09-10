@@ -19,6 +19,7 @@ module Reflex.Dom.Contrib.Widgets.EditableCollection
   , selectEditValues
   , editWithDeleteButton
   , addNewItemWidget
+  , addNewItemWidgetModal
   , buttonNoSubmit
   , updateKeyLabelMap
   , validOnly
@@ -48,6 +49,7 @@ import           Data.Monoid ((<>))
 import           Data.Kind (Type)
 import           Data.Bool (bool)
 import           Data.Proxy (Proxy (..))
+import           Data.Either (either)
 
 import qualified Data.Map          as M
 import qualified Data.Text         as T
@@ -113,7 +115,7 @@ simpleCollectionEditor display editWidget newItemWidget fDyn =
       editDeletableWidget = case display of
         DisplayAll -> flip ecListViewWithKey editAndDeleteWidget
         DisplayEach ddAttrs toText -> selectEditValues ddAttrs toText (updateKeyLabelMap (Proxy :: Proxy f)) editAndDeleteWidget
-      addNewWidget = addNewItemWidget $ newKeyValueWidget (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget 
+      addNewWidget = addNewItemWidgetModal $ newKeyValueWidget (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget 
   in collectionEditor editDeletableWidget addNewWidget id id fDyn
 
 -- | This class allows the collection editing functions to be polymorphic over the types supported by Reflex.Collections
@@ -290,9 +292,10 @@ editWithDeleteButton :: ( R.Reflex t
 editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
   let widgetAttrs = (\x -> attrs <> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
   (visibleDyn', outEv') <- RD.elDynAttr "div" widgetAttrs $ do
-    editedEv <- RD.el "span" $ editWidget k vDyn
+    editedEvRaw <- RD.el "span" $ editWidget k vDyn
     delButtonEv <- RD.el "span" $ delButton
-    let outEv = R.leftmost [Just <$> editedEv, Nothing <$ delButtonEv]  
+    let editedEvFiltered = leftWhenNotRight editedEvRaw (R.updated vDyn)
+        outEv = R.leftmost [Just <$> editedEvFiltered, Nothing <$ delButtonEv]  
     visDyn <- R.buildDynamic (R.sample $ R.current visibleDyn) $ (isJust <$> outEv) 
     return (visDyn, outEv)
   return outEv'
@@ -306,6 +309,25 @@ newItemEditorConfig = RD.def
                       & ME.modalEditor_OkButton .~ flip (ME.disableAndDisplayIfError (T.pack . show)) (ME.ButtonConfig "OK" M.empty (Just "fa fa-check"))
                       & ME.modalEditor_CancelButton .~ const (ME.ButtonConfig "Cancel" M.empty (Just "fa fa-window-close"))
 
+addNewItemWidgetModal :: ( R.Reflex t
+                         , RD.DomBuilder t m
+                         , RD.PostBuild t m
+                         , RD.MonadHold t m
+                         , MonadFix m
+                         , MonadWidgetExtraC t m
+                         , Diffable f
+                         , Show e
+                         , Monoid e)
+  => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (Diff f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
+  -> R.Dynamic t (f a)
+  -> m (R.Event t (Diff f b))
+addNewItemWidgetModal editPairW mapDyn = do
+  let modalEditW = const $ editPairW mapDyn
+      blankInput = R.constDyn $ Left mempty
+      pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
+  newPairEv <- ME.modalEditor_change <$> ME.modalEditorEither modalEditW blankInput newItemEditorConfig
+  return $ pairEvToDiffMaybeEv newPairEv
+
 addNewItemWidget :: ( R.Reflex t
                     , RD.DomBuilder t m
                     , RD.PostBuild t m
@@ -318,11 +340,9 @@ addNewItemWidget :: ( R.Reflex t
   => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (Diff f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
   -> R.Dynamic t (f a)
   -> m (R.Event t (Diff f b))
-addNewItemWidget editPairW mapDyn = mdo
-  let modalEditW = const $ editPairW mapDyn
-      blankInput = R.constDyn $ Left mempty
-      pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
-  newPairEv <- ME.modalEditor_change <$> ME.modalEditorEither modalEditW blankInput newItemEditorConfig
+addNewItemWidget editPairW mapDyn = do
+  let pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
+  newPairEv <- R.fmapMaybe (either (const Nothing) Just) . R.updated <$> editPairW mapDyn
   return $ pairEvToDiffMaybeEv newPairEv
 
 
@@ -338,3 +358,5 @@ visibleCSS = "style" =: "display: inline"
 dynamicPlusEvent :: (R.Reflex t, RD.MonadHold t m) => R.Dynamic t a -> R.Event t a -> m (R.Dynamic t a)
 dynamicPlusEvent aDyn aEv = R.buildDynamic (R.sample . R.current $ aDyn) $ R.leftmost [R.updated aDyn, aEv]
 
+leftWhenNotRight :: R.Reflex t => R.Event t a -> R.Event t b -> R.Event t a
+leftWhenNotRight fstEv sndEv = R.fmapMaybe id $ R.leftmost [Nothing <$ sndEv, Just <$> fstEv]

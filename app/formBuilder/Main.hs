@@ -42,8 +42,8 @@ import           Data.Time.Calendar                                  (Day (..), 
 import           Data.Time.Clock                                     (UTCTime (..))
 -- for a validation example...
 import           Control.Lens.Iso                                    (iso)
-import           Data.Validation                                     (AccValidation (..))
 import           Data.Proxy                                          (Proxy (..))
+import           Data.Validation                                     (AccValidation (..))
 
 import           Reflex
 import qualified Reflex.Dom.Contrib.Widgets.Common                   as RDC
@@ -82,11 +82,11 @@ import           Reflex.Dom.Contrib.FormBuilder
 import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.Instances            (FormInstanceC)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (DisplayCollection,
+                                                                      DisplayCollection (..),
                                                                       formCollectionEditor,
                                                                       hideKeyEditVal,
                                                                       newItemWidget,
-                                                                      showKeyEditVal,
-                                                                      DisplayCollection(..))
+                                                                      showKeyEditVal)
 
 import           Css
 
@@ -208,10 +208,10 @@ convertValidator vLA = fmap (\(ListOfA x) -> x) . vLA . ListOfA
 
 instance (FormInstanceC t m, VFormBuilderC t m A) => FormBuilder t m ListOfA where
   buildForm va mFN =
-    let newItemW = newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy A) 
+    let newItemW = newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy A)
     in fmap ListOfA . formCollectionEditor (DisplayEach (constDyn M.empty) (T.pack . show)) hideKeyEditVal newItemW . fmap (\(ListOfA x)->x) where
-    
-  
+
+
 
 instance Generic B
 instance HasDatatypeInfo B
@@ -222,14 +222,14 @@ instance FormInstanceC t m=>FormBuilder t m B where
 --instance HasDatatypeInfo MyMap
 instance FormInstanceC t m=>FormBuilder t m MyMap where
   buildForm va mFN =
-    let va' = fmap map_String_B . va . MyMap 
+    let va' = fmap map_String_B . va . MyMap
     in fmap MyMap . buildForm va' mFN . fmap map_String_B
 
 instance Generic (SMap a)
 instance HasDatatypeInfo (SMap a)
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (SMap a) where
   buildForm va mFN =
-    let va' = fmap unSMap . va . SMap 
+    let va' = fmap unSMap . va . SMap
     in fmap SMap . buildForm va' mFN . fmap unSMap
 
 instance Generic (LMap a)
@@ -272,6 +272,7 @@ instance FormInstanceC t m=>FormBuilder t m DateOrDateTime where
   buildForm = buildDateOrDateTime
 
 -- put some data in for demo purposes
+lOfInt :: [Int] = [12,10,5,12]
 lOfA1 = ListOfA [AI 10, AS "Hello" Square, AC Green, AI 4, AS "Goodbye" Circle]
 lOfA2 = ListOfA [AI 1, AS "Hola" Triangle, AS "Adios" Circle, ADT (D (fromGregorian 1991 6 3)) ]
 b1 = B 12 $ lOfA1
@@ -294,12 +295,6 @@ hs = HS.fromList ["a","b"]
 hseq :: Seq.Seq String
 hseq = Seq.fromList ["a","b"]
 
-setString :: Set.Set String
-setString = Set.fromList ["a","b"]
-
-setInt :: Set.Set Int
-setInt = Set.fromList [1,2]
-
 seqA :: Seq.Seq A
 seqA = Seq.fromList (unListOfA lOfA2)
 
@@ -311,27 +306,32 @@ testForm cfg x = do
   el "p" $ text ""
   fv <- flexFill LayoutRight $ dynamicForm cfg (Just x)
   el "p" $ text "dynText:"
-  dynText ((T.pack . ppShow) <$> (widgetResultToDynamic $ getCompose fv))
+  dynText ((T.pack . ppShow) <$> getCompose fv)
   el "p" $ text "Input into new form:"
   el "p" blank
   fv' <- flexFill LayoutRight $ dynamicFormOfFormValue cfg fv
   el "p" $ text "Observed:"
   el "p" blank
-  _ <- flexFill LayoutRight $ observeDynamic cfg (widgetResultToDynamic $ avToMaybe <$> getCompose fv')
+  _ <- flexFill LayoutRight $ observeDynamic cfg (avToMaybe <$> getCompose fv')
   return ()
 
 testContainers :: FormInstanceC t m => FormConfiguration t m -> m ()
 testContainers cfg = do
-  let tests = [ ("List of A", testForm cfg lOfA1)
-              , ("Seq of A", testForm cfg seqA)
-              , ("Map Text Int", testForm cfg testMap)
-              , ("Map Text (Map Text Text)", testForm cfg testMap2)
-              , ("HashSet String", testForm cfg hs)
-              , ("Seq String", testForm cfg hseq)
-              , ("SelectView Map", testForm cfg sm)
-              , ("Record with Container", testForm cfg b1)
-              , ("Record of Containers", testForm cfg bRec)
-              , ("Combo", testForm cfg c)
+  let tests =
+        [
+          ("One Int", testForm cfg (2 :: Int))
+        , ("List of Int" , testForm cfg lOfInt)
+        , ("Seq of String" , testForm cfg hseq)
+--          , ("List of A", testForm cfg lOfA1)
+--              , ("Seq of A", testForm cfg seqA)
+--              , ("Map Text Int", testForm cfg testMap)
+--              , ("Map Text (Map Text Text)", testForm cfg testMap2)
+--              , ("HashSet String", testForm cfg hs)
+--             , ("Seq String", testForm cfg hseq)
+--             , ("SelectView Map", testForm cfg sm)
+--              , ("Record with Container", testForm cfg b1)
+--              , ("Record of Containers", testForm cfg bRec)
+--              , ("Combo", testForm cfg c)
               ]
       tabs = (\(n,w) -> TabInfo n (constDyn (n,M.empty)) w) <$> tests
   _ <- staticTabbedLayout def (head tabs) tabs

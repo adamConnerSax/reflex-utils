@@ -100,9 +100,9 @@ instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (IM.
     in formCollectionEditor EC.DisplayAll showKeyEditVal newItemW imFV
 
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m [a] where
-  buildForm va mFN lFV =
-    let newItemW =  newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy a)
-    in formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV
+  buildForm va mFN lFV = formCollectionValueEditor EC.DisplayAll hideKeyEditVal lFV
+{-    let newItemW =  newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy a)
+    in formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV -}
 
 instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (Seq.Seq a) where
   buildForm va mFN sFV =
