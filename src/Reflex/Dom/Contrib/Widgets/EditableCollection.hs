@@ -290,15 +290,16 @@ editWithDeleteButton :: ( R.Reflex t
   -> R.Dynamic t a -- input element
   -> m (R.Event t (Maybe b)) -- 'Just b' if changed, 'Nothing' if deleted.
 editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
+  postBuild <- R.getPostBuild
   let widgetAttrs = (\x -> attrs <> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
   (visibleDyn', outEv') <- RD.elDynAttr "div" widgetAttrs $ do
-    editedEvRaw <- RD.el "span" $ editWidget k vDyn
+    editedEv <- RD.el "span" $ editWidget k vDyn
     delButtonEv <- RD.el "span" $ delButton
-    let editedEvFiltered = leftWhenNotRight editedEvRaw (R.updated vDyn)
-        outEv = R.leftmost [Just <$> editedEvFiltered, Nothing <$ delButtonEv]  
+    let outEv = R.leftmost [Just <$> editedEv, Nothing <$ delButtonEv]
     visDyn <- R.buildDynamic (R.sample $ R.current visibleDyn) $ (isJust <$> outEv) 
+--    visDyn <- R.holdDyn True $ R.leftmost [R.tag (R.current visibleDyn) postBuild, isJust <$> outEv]
     return (visDyn, outEv)
-  return outEv'
+  return $ leftWhenNotRight outEv' $ R.leftmost [() <$ R.updated vDyn, postBuild]
 
 newItemEditorConfig :: (Show e, R.Reflex t) => ME.ModalEditorConfig t e a
 newItemEditorConfig = RD.def
@@ -340,10 +341,10 @@ addNewItemWidget :: ( R.Reflex t
   => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (Diff f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
   -> R.Dynamic t (f a)
   -> m (R.Event t (Diff f b))
-addNewItemWidget editPairW mapDyn = do
+addNewItemWidget editPairW fDyn = do
   let pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
-  newPairEv <- R.fmapMaybe (either (const Nothing) Just) . R.updated <$> editPairW mapDyn
-  return $ pairEvToDiffMaybeEv newPairEv
+  newPairEv <- R.fmapMaybe (either (const Nothing) Just) . R.updated <$> editPairW fDyn
+  return $ pairEvToDiffMaybeEv $ newPairEv --leftWhenNotRight newPairEv (R.updated fDyn)
 
 
 -- one possible button widget
@@ -359,4 +360,8 @@ dynamicPlusEvent :: (R.Reflex t, RD.MonadHold t m) => R.Dynamic t a -> R.Event t
 dynamicPlusEvent aDyn aEv = R.buildDynamic (R.sample . R.current $ aDyn) $ R.leftmost [R.updated aDyn, aEv]
 
 leftWhenNotRight :: R.Reflex t => R.Event t a -> R.Event t b -> R.Event t a
-leftWhenNotRight fstEv sndEv = R.fmapMaybe id $ R.leftmost [Nothing <$ sndEv, Just <$> fstEv]
+leftWhenNotRight leftEv rightEv = R.fmapMaybe id $ R.leftmost [Nothing <$ rightEv, Just <$> leftEv]
+
+
+rightWhenNotLeft :: R.Reflex t => R.Event t a -> R.Event t b -> R.Event t b
+rightWhenNotLeft leftEv rightEv = R.fmapMaybe id $ R.leftmost [Nothing <$ leftEv, Just <$> rightEv]

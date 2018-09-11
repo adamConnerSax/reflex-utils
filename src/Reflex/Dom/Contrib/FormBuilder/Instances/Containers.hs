@@ -29,7 +29,9 @@ import qualified Reflex.Collections.Collections                 as RC
 import           Reflex.Dom.Contrib.Widgets.EditableCollection  (DisplayCollection (..))
 import qualified Reflex.Dom.Contrib.Widgets.EditableCollection  as EC
 
-import           Reflex.Dom.Contrib.FormBuilder.Builder         (Form, FormBuilder (buildForm),
+import           Reflex.Dom.Contrib.FormBuilder.Builder         (FieldName,
+                                                                 Form,
+                                                                 FormBuilder (buildForm),
                                                                  FormValue,
                                                                  VFormBuilderC,
                                                                  avToMaybe,
@@ -41,22 +43,29 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder         (Form, FormBuild
                                                                  makeForm,
                                                                  toReadOnly,
                                                                  unF)
-import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FormError (FInvalid),
-                                                                 avToEither)
-import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FValidation, FormError (FInvalid),
+                                                                 avToEither,
+                                                                 maybeToFV)
+import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC, blurOrEnterNotPrompt,
+                                                                 restrictWidget',
+                                                                 textWidgetResult)
 import           Reflex.Dom.Contrib.Layout.Types                (LayoutDirection (..))
+import           Reflex.Dom.Contrib.ReflexConstraints           (MonadWidgetExtraC)
 
 
 
 -- reflex imports
 import qualified Reflex                                         as R
 import qualified Reflex.Dom                                     as RD
+import qualified Reflex.Dom.Contrib.Widgets.Common              as RDC
 
 import           Control.Monad                                  (join)
 import           Control.Monad.Fix                              (MonadFix)
 import           Data.Functor.Compose                           (Compose (Compose, getCompose))
 import           Data.Proxy                                     (Proxy (..))
+import qualified Data.Text                                      as T
 import           Data.Validation                                (AccValidation (..))
+import           Text.Read                                      (readMaybe)
 
 -- imports only to make instances
 import qualified Data.Array                                     as A
@@ -67,6 +76,70 @@ import qualified Data.Map                                       as M
 import qualified Data.Sequence                                  as Seq
 import qualified Data.Tree                                      as Tree
 
+
+--
+inputValue :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Read v) => m (R.Dynamic t (Maybe v))
+inputValue = do
+  let config = RD.TextInputConfig "text" "" R.never (R.constDyn M.empty)
+  fmap (readMaybe . T.unpack) . RD._textInput_value <$> RD.textInput config
+
+editValue :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Show v, Read v) => R.Dynamic t v -> m (R.Dynamic t (Maybe v))
+editValue valDyn = do
+  postBuild <- RD.getPostBuild
+  let inputEv = T.pack . show <$> R.leftmost [R.updated valDyn, R.tag (R.current valDyn) postBuild]
+      config = RD.TextInputConfig "text" "" inputEv (R.constDyn M.empty)
+  fmap (readMaybe . T.unpack) . RD._textInput_value <$> RD.textInput config
+
+textWidgetResult' :: FormInstanceC t m => Maybe FieldName -> RDC.WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
+textWidgetResult' mFN c = do
+  changeEv <- RDC._hwidget_change <$> {- RDC.restrictWidget RDC.blurOrEnter -} (RDC.htmlTextInput (maybe "" T.pack mFN)) c
+  R.holdDyn (RDC._widgetConfig_initialValue c) $ R.leftmost [RDC._widgetConfig_setValue c, changeEv]
+
+textWidgetResult'' :: FormInstanceC t m => Maybe FieldName -> RDC.WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
+textWidgetResult'' mFN c =  do
+  changeEv <- RDC._hwidget_change <$> RDC.restrictWidget RDC.blurOrEnter (RDC.htmlTextInput (maybe "" T.pack mFN)) c
+  R.holdDyn (RDC._widgetConfig_initialValue c) $ R.leftmost [RDC._widgetConfig_setValue c, changeEv]
+
+textWidgetResult''' :: FormInstanceC t m => Maybe FieldName -> RDC.WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
+textWidgetResult''' mFN c =   RDC.inputOnEnter (RDC.htmlTextInput (maybe "" T.pack mFN)) c
+
+textWidgetResult'''' :: FormInstanceC t m => Maybe FieldName -> RDC.WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
+textWidgetResult'''' mFN c =  RDC._hwidget_value <$> RDC.restrictWidget RDC.blurOrEnter  (RDC.htmlTextInput (maybe "" T.pack mFN)) c
+
+editValue' :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m, Show v, Read v)
+  => R.Dynamic t v -> m (R.Dynamic t (Maybe v))
+editValue' valDyn = do
+  postBuild <- RD.getPostBuild
+  let inputEv = T.pack . show <$> R.leftmost [R.updated valDyn, R.tag (R.current valDyn) postBuild]
+      config = RDC.WidgetConfig  inputEv "" (R.constDyn M.empty)
+  fmap (readMaybe . T.unpack) <$> textWidgetResult'''' Nothing config
+
+inputPair :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Read k, Read v) => m (R.Dynamic t (Maybe (k,v)))
+inputPair = do
+  let config = RD.TextInputConfig "text" "" R.never (R.constDyn M.empty)
+  RD.el "div" $ do
+    kMDyn <- fmap (readMaybe . T.unpack) . RD._textInput_value <$> RD.textInput config
+    vMDyn <- fmap (readMaybe . T.unpack) . RD._textInput_value <$> RD.textInput config
+    let pairDynMaybe = R.zipDyn kMDyn vMDyn
+    return $ fmap (\(ma,mb) -> (,) <$> ma <*> mb) pairDynMaybe
+--
+
+-- Filter the firing of an event with another event.
+leftWhenNotRight :: R.Reflex t => R.Event t a -> R.Event t b -> R.Event t a
+leftWhenNotRight leftEv rightEv = R.fmapMaybe id $ R.leftmost [Nothing <$ rightEv, Just <$> leftEv]
+
+changeOnlyEv :: R.Reflex t => R.Dynamic t a -> R.Dynamic t b -> R.Event t b
+changeOnlyEv input result = leftWhenNotRight (R.updated result) (R.updated input)
+
+changeOnlyWidget :: FormInstanceC t m => (R.Dynamic t a -> m (R.Dynamic t b)) -> R.Dynamic t a -> m (R.Event t b)
+changeOnlyWidget dynamicWidget inputDyn =  changeOnlyEv inputDyn <$> dynamicWidget inputDyn
+
+changeOnlyFormWidget :: FormInstanceC t m => (FormValue t a -> m (FormValue t b)) -> FormValue t a -> m (R.Event t (FValidation b))
+changeOnlyFormWidget formW inputFV =
+  let widget = fmap getCompose . formW . Compose
+      inputDyn = getCompose inputFV
+  in changeOnlyWidget widget inputDyn
+--
 
 type VFormBuilderBoth t m a b = (VFormBuilderC t m a, VFormBuilderC t m b)
 
@@ -104,9 +177,11 @@ instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m [a] where
 {-    let newItemW =  newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy a)
     in formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV -}
 
-instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (Seq.Seq a) where
+instance (FormInstanceC t m, VFormBuilderBoth t m Int a, Show a, Read a) => FormBuilder t m (Seq.Seq a) where
   buildForm va mFN sFV =
-    let newItemW =  newItemWidget (Proxy :: Proxy Seq.Seq) (Proxy :: Proxy a)
+--    let newItemW =  newItemWidget (Proxy :: Proxy Seq.Seq) (Proxy :: Proxy a)
+    let newItemW = newItemWidget (Proxy :: Proxy Seq.Seq) (Proxy :: Proxy a) --makeForm $ (Compose . fmap maybeToFV <$> inputValue)
+--        editValW k vDyn = makeForm $ fmap (Compose . fmap maybeToFV) $ editValue' vDyn
     in formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW sFV
 
 instance (A.Ix k, Enum k, Bounded k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (A.Array k a) where
@@ -138,17 +213,23 @@ formCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
 formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
   postBuild <- RD.getPostBuild
   let editWidget' k vDyn = R.fmapMaybe avToMaybe . R.updated . getCompose <$> unF (editWidget k vDyn) -- m (R.Event t a)
-      editAndDeleteWidget = EC.editWithDeleteButton editWidget' M.empty (EC.buttonNoSubmit "-") (R.constDyn True)
+      editAndDeleteWidget k vDyn = EC.editWithDeleteButton editWidget' M.empty (EC.buttonNoSubmit "-") (R.constDyn True) k vDyn
       editDeletableWidget = case display of
         EC.DisplayAll -> flip EC.ecListViewWithKey editAndDeleteWidget
         EC.DisplayEach ddAttrs toText -> EC.selectEditValues ddAttrs toText (EC.updateKeyLabelMap (Proxy :: Proxy f)) editAndDeleteWidget
-      addNewWidget = EC.addNewItemWidget $ EC.newKeyValueWidget avToEither (getCompose <$> unF newItemWidget)
+      addNewWidget = EC.addNewItemWidgetModal $ EC.newKeyValueWidget avToEither (getCompose <$> unF newItemWidget)
       collWidget fDyn = fmap AccSuccess <$> EC.collectionEditor editDeletableWidget addNewWidget id id fDyn
       invalidWidget = return . fmap AccFailure
   davFa <-  R.eitherDyn . fmap avToEither . getCompose $ fvFa
   let (errsDynEv, fDynEv) = R.fanEither $ R.leftmost [R.updated davFa, R.tag (R.current davFa) postBuild]
   Compose . join <$> (RD.widgetHold (invalidWidget $ R.constDyn [FInvalid "Initial Widget"]) $ R.leftmost [invalidWidget <$> errsDynEv, collWidget <$> fDynEv])
 
+
+{-
+fixEditWidget :: (RC.Key f -> R.Dynamic t a -> Form t m a) -> (RC.Key f -> R.Dynamic t a -> R.Event t a)
+fixEditWidget widget k vDyn = do
+  widgetEvents <-  R.fmapMaybe avToMaybe . R.updated . getCompose <$> unF (editWidget k vDyn)
+-}
 
 
 formCollectionValueEditor :: forall t m f a. ( RD.DomBuilder t m

@@ -93,7 +93,7 @@ import           Css
 import qualified System.Process                                      as SP
 
 --It's easy to add validation (via newtype wrapper)
-newtype Age = Age { unAge::Int } deriving (Show)
+newtype Age = Age { unAge::Int } deriving (Show, Read)
 
 liftValidation :: (a->Bool)->(a->T.Text)->FormValidator a
 liftValidation test msg = (\a -> if test a then AccSuccess a else AccFailure [FInvalid (msg a)])
@@ -158,11 +158,11 @@ buttonNoSubmit'::DomBuilder t m=>T.Text -> m (Event t ())
 buttonNoSubmit' t = (domEvent Click . fst) <$> elAttr' "button" ("type" =: "button") (text t)
 
 -- Some types to demonstrate what we can make into a form
-data Color = Green | Yellow | Red deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
+data Color = Green | Yellow | Red deriving (Show,Read,Enum,Bounded,Eq,Ord,GHC.Generic)
 
-data Shape = Square | Circle | Triangle deriving (Show,Enum,Bounded,Eq,Ord,GHC.Generic)
+data Shape = Square | Circle | Triangle deriving (Show,Read,Enum,Bounded,Eq,Ord,GHC.Generic)
 
-data DateOrDateTime = D Day | DT UTCTime deriving (Show, GHC.Generic)
+data DateOrDateTime = D Day | DT UTCTime deriving (Show, Read, GHC.Generic)
 
 
 -- Anything with a Read instance can be built using buildReadMaybe
@@ -172,7 +172,7 @@ instance FormInstanceC t m=>FormBuilder t m ReadableType where
 
 
 --We'll put these all in a Sum type to show how the form building handles that
-data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType | AA Age deriving (Show,GHC.Generic)
+data A = AI Int | AS String Shape | AC Color | AM (Maybe Double) | AB Bool | ADT DateOrDateTime | AET (Either (Shape,Color) (Shape,Int,Int)) | ART ReadableType | AA Age deriving (Show,GHC.Generic,Read)
 
 newtype ListOfA = ListOfA { unListOfA :: [A] } deriving (Show, GHC.Generic)
 
@@ -359,13 +359,52 @@ testFlow cfg = do
 flowTestTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 flowTestTab cfg = TabInfo "flowTestTab" (constDyn ("Flow Example", M.empty)) $ testFlow cfg
 
+-- Filter the firing of an event with another event.
+leftWhenNotRight :: Reflex t => Event t a -> Event t b -> Event t a
+leftWhenNotRight leftEv rightEv = fmapMaybe id $ leftmost [Nothing <$ rightEv, Just <$> leftEv]
+
+changeOnlyEv :: Reflex t => Dynamic t a -> Dynamic t b -> Event t b
+changeOnlyEv input result = leftWhenNotRight (updated result) (updated input)
+
+changeOnlyWidget :: FormInstanceC t m => (Dynamic t a -> m (Dynamic t b)) -> Dynamic t a -> m (Event t b)
+changeOnlyWidget dynamicWidget inputDyn =  changeOnlyEv inputDyn <$> dynamicWidget inputDyn
+
+changeOnlyFormWidget :: FormInstanceC t m => (FormValue t a -> m (FormValue t b)) -> FormValue t a -> m (Event t (FValidation b))
+changeOnlyFormWidget formW inputFV =
+  let widget = fmap getCompose . formW . Compose
+      inputDyn = getCompose inputFV
+  in changeOnlyWidget widget inputDyn
+
+testCycleBreaker :: FormInstanceC t m => FormConfiguration t m -> m ()
+testCycleBreaker cfg = do
+  let startValue = 2 :: Int
+  el "p" (text "")
+  el "p" (text "Input to both widgets")
+  inputFV <- runForm cfg $ buildVForm Nothing (constFormValue startValue)
+  el "p" (text "")
+  el "p" (text "Regular form")
+  regularEv <- updated . getCompose <$> (runForm cfg $ buildVForm Nothing inputFV)
+  regularDyn <- holdDyn (AccSuccess startValue) regularEv
+  dynText (T.pack . show <$> regularDyn)
+  el "p" (text "")
+  el "p" (text "Change only form")
+  changeOnlyEvent <- changeOnlyFormWidget (runForm cfg . buildVForm Nothing) inputFV
+  changeOnlyDyn <- holdDyn (AccSuccess startValue) changeOnlyEvent
+  dynText (T.pack . show <$> changeOnlyDyn)
+
+cycleBreakerTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
+cycleBreakerTab cfg = TabInfo "cycleBreakerTestTab" (constDyn ("Cycle Breaker Example", M.empty)) $ testCycleBreaker cfg
+
+
+
 test :: FormInstanceC t m => FormConfiguration t m -> m ()
 test cfg = do
   el "p" (text "")
   el "br" blank
   staticTabbedLayout def (containersTab cfg)
     [
-      userFormTab cfg
+      cycleBreakerTab cfg
+    , userFormTab cfg
     , containersTab cfg
     , flowTestTab cfg
     ]

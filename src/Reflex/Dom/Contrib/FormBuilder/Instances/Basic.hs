@@ -26,6 +26,10 @@ module Reflex.Dom.Contrib.FormBuilder.Instances.Basic
        , buildFormIso
        , buildEnumDropdown
        , enumDropdownEditor
+       -- *
+       , restrictWidget'
+       , textWidgetResult
+       , blurOrEnterNotPrompt
        ) where
 
 import           Control.Lens                                 (over, view)
@@ -151,10 +155,23 @@ instance R.Reflex t => Functor (HtmlWidget t) where
 
 textWidgetResult :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (R.Dynamic t T.Text)
 textWidgetResult mFN c = do
-  inputDyn <- R.holdDyn (_widgetConfig_initialValue c) (_widgetConfig_setValue c)
+  editEv <- _hwidget_change <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
+  R.holdDyn (_widgetConfig_initialValue c) $ R.leftmost [_widgetConfig_setValue c, editEv]
+{- do
+  w <- htmlTextInput (maybe "" T.pack mFN) c
+  R.holdDyn (_widgetConfig_initialValue c) $ blurOrEnterNotPrompt w
+-}
+--
+{-do
+--  inputDyn <- R.holdDyn (_widgetConfig_initialValue c) (_widgetConfig_setValue c)
   changeEv <- _hwidget_change <$> restrictWidget blurOrEnter (htmlTextInput (maybe "" T.pack mFN)) c
-  dynPlusEvent inputDyn changeEv -- this is different, I think.  buildWidgetResult would have same dynamic but updates would only fire on change
+  R.holdDyn (_widgetConfig_initialValue c) $ R.leftmost [_widgetConfig_setValue c, changeEv]
+--  dynPlusEvent inputDyn changeEv -- this is different, I think.  buildWidgetResult would have same dynamic but updates would only fire on change
 --  buildWidgetResult inputDyn changeEv
+-}
+
+blurOrEnterNotPrompt :: R.Reflex t => HtmlWidget t a -> R.Event t a
+blurOrEnterNotPrompt w = R.tag (R.current . _hwidget_value $ w) $ blurOrEnterEvent w
 
 {-
 textWidgetResult' :: FormInstanceC t m => Maybe FieldName -> WidgetConfig t T.Text -> m (WidgetResult t T.Text)
@@ -162,7 +179,7 @@ textWidgetResult' mFN c = do
   inputDyn <- R.holdDyn (_widgetConfig_initialValue c) (_widgetConfig_setValue c)
   changeEv <- _hwidget_change <$> htmlTextInput (maybe "" T.pack mFN) c
   buildWidgetResult inputDyn changeEv
-
+-}
 -- this does what restrictWidget does but allows the set event to change the "authoritative value"
 restrictWidget' :: (RD.DomBuilder t m, R.MonadHold t m)
   => (HtmlWidget t a -> R.Event t a)
@@ -175,7 +192,7 @@ restrictWidget' restrictFunc wFunc cfg = do
   return $ w { _hwidget_value = v
              , _hwidget_change = e
              }
--}
+
 
 parseError :: Maybe FieldName -> T.Text -> T.Text
 parseError mFN x = T.pack (fromMaybe "N/A" mFN) <> ": " <> x
@@ -194,6 +211,7 @@ buildDynReadable :: (FormInstanceC t m, Readable a, Show a)
 buildDynReadable va mFN fva = makeForm $ do
   let vfwt = parseAndValidate mFN fromText va
   inputEv <- dynMaybeAsEv $ formValueToDynMaybe fva
+--  let inputEv = R.fmapMaybe id . R.updated . getCompose $ formValueToDynMaybe fva
   formWidget' inputEv "" showText vfwt showText mFN Nothing $ textWidgetResult mFN
 
 dynReadableEditor :: (FormInstanceC t m, Readable a, Show a)
