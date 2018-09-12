@@ -306,13 +306,13 @@ testForm cfg x = do
   el "p" $ text ""
   fv <- flexFill LayoutRight $ dynamicForm cfg (Just x)
   el "p" $ text "dynText:"
-  dynText ((T.pack . ppShow) <$> getCompose fv)
+  dynText (fmap (T.pack . ppShow) . widgetResultToDynamic $ getCompose fv)
   el "p" $ text "Input into new form:"
   el "p" blank
   fv' <- flexFill LayoutRight $ dynamicFormOfFormValue cfg fv
   el "p" $ text "Observed:"
   el "p" blank
-  _ <- flexFill LayoutRight $ observeDynamic cfg (avToMaybe <$> getCompose fv')
+  _ <- flexFill LayoutRight $ observeDynamic cfg (fmap avToMaybe . widgetResultToDynamic $ getCompose fv')
   return ()
 
 testContainers :: FormInstanceC t m => FormConfiguration t m -> m ()
@@ -359,7 +359,8 @@ testFlow cfg = do
 flowTestTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 flowTestTab cfg = TabInfo "flowTestTab" (constDyn ("Flow Example", M.empty)) $ testFlow cfg
 
--- Filter the firing of an event with another event.
+{-
+-- test WidgetResult
 leftWhenNotRight :: Reflex t => Event t a -> Event t b -> Event t a
 leftWhenNotRight leftEv rightEv = fmapMaybe id $ leftmost [Nothing <$ rightEv, Just <$> leftEv]
 
@@ -394,7 +395,7 @@ testCycleBreaker cfg = do
 
 cycleBreakerTab :: FormInstanceC t m => FormConfiguration t m -> TabInfo t m ()
 cycleBreakerTab cfg = TabInfo "cycleBreakerTestTab" (constDyn ("Cycle Breaker Example", M.empty)) $ testCycleBreaker cfg
-
+-}
 
 
 test :: FormInstanceC t m => FormConfiguration t m -> m ()
@@ -403,8 +404,8 @@ test cfg = do
   el "br" blank
   staticTabbedLayout def (containersTab cfg)
     [
-      cycleBreakerTab cfg
-    , userFormTab cfg
+  --    cycleBreakerTab cfg
+      userFormTab cfg
     , containersTab cfg
     , flowTestTab cfg
     ]

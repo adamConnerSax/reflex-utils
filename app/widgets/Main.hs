@@ -94,15 +94,17 @@ editableCollectionsWidget :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.Monad
 editableCollectionsWidget = do
   let testMap :: M.Map T.Text Int = M.fromList [("A",1),("B",2),("C",3)]
       testList :: [T.Text] = ["Hello","Goodbye","Cat"]
-  editMapDyn <- EC.simpleCollectionValueEditor EC.DisplayAll (const editValue) (R.constDyn testMap)
+      displayEach = (EC.DisplayEach (R.constDyn M.empty) (T.pack . show))
+      display = EC.DisplayAll
+  editMapDyn <- EC.simpleCollectionValueEditor display (const editValue) (R.constDyn testMap)
   newLine >> (RD.dynText $ fmap (T.pack . show) editMapDyn)
-  editMapStructureDyn <- newLine >> EC.simpleCollectionEditor EC.DisplayAll (const editValue) inputPair editMapDyn
+  editMapStructureDyn <- newLine >> EC.simpleCollectionEditor display (const editValue) inputPair editMapDyn
   newLine >> (RD.dynText $ fmap (T.pack . show) editMapStructureDyn)
-  editMapStructureDyn' <- newLine >> EC.simpleCollectionEditor (EC.DisplayEach (R.constDyn M.empty) (T.pack . show)) (const editValue) inputPair editMapDyn
+  editMapStructureDyn' <- newLine >> EC.simpleCollectionEditor display (const editValue) inputPair editMapStructureDyn
   newLine >> (RD.dynText $ fmap (T.pack . show) editMapStructureDyn')
-  editListDyn <- newLine >> EC.simpleCollectionValueEditor EC.DisplayAll (const editValue) (R.constDyn testList)
+  editListDyn <- newLine >> EC.simpleCollectionValueEditor displayEach (const editValue) (R.constDyn testList)
   newLine >> (RD.dynText $ fmap (T.pack . show) editListDyn)
-  editListStructureDyn <- newLine >> EC.simpleCollectionEditor EC.DisplayAll (const editValue) inputValue editListDyn
+  editListStructureDyn <- newLine >> EC.simpleCollectionEditor display (const editValue) inputValue editListDyn
   newLine >> (RD.dynText $ fmap (T.pack . show) editListStructureDyn)
 
 

@@ -7,13 +7,11 @@ module Reflex.Dom.Contrib.Widgets.WidgetResult
     WidgetResult
   , WrappedWidgetResult
   , wrDyn
---  , wrInternalEv,
   , widgetResultToDynamic
   , updatedWidgetResult
   , currentWidgetResult
   , constWidgetResult
   , buildWidgetResult
---  , updateWidgetResult
   , dynamicWidgetResultToWidgetResult
   , widgetResultOfDynamicToWidgetResult
   , dynamicToWidgetResult
@@ -29,7 +27,7 @@ module Reflex.Dom.Contrib.Widgets.WidgetResult
 import           Reflex                        (Behavior, Dynamic, Event,
                                                 MonadHold, Reflex, buildDynamic,
                                                 constDyn, current, leftmost,
-                                                never, sample, switch,
+                                                never, sample, switch, tag,
                                                 tagPromptlyDyn, updated)
 
 import           Reflex.Dom.Contrib.EventUtils (leftWhenNotRight)
@@ -68,14 +66,6 @@ buildWidgetResult d0 updateEv = do
   d <- buildDynamic (sample $ current d0) $ leftmost [d0Ev, updateEv] -- order reversed
   return $ WidgetResult d (() <$ leftWhenNotRight updateEv d0Ev)
 
-{-
--- this adds events to the WidgetResult, keeping the old
-updateWidgetResult :: (Reflex t, MonadHold t m) => WidgetResult t a -> Event t a -> m (WidgetResult t a)
-updateWidgetResult (WidgetResult d0 e0) e = do
-  let updatedEv = leftmost [e0, () <$ e]
-  updatedDyn <- buildDynamic (sample $ current d0) $ leftmost [updated d0, e]
-  return $ WidgetResult updatedDyn updatedEv
--}
 
 dynamicWidgetResultToWidgetResult :: Reflex t => Dynamic t (WidgetResult t a) -> WidgetResult t a
 dynamicWidgetResultToWidgetResult dwr =
@@ -83,11 +73,47 @@ dynamicWidgetResultToWidgetResult dwr =
       e = switch $ current $ _wrInternalEv <$> dwr
   in WidgetResult d e
 
+instance Reflex t => Functor (WidgetResult t) where
+  fmap h (WidgetResult d e) = WidgetResult (h <$> d) e
+
+instance Reflex t => Applicative (WidgetResult t) where
+  pure a = WidgetResult (constDyn a) never
+  (WidgetResult dF e1) <*> (WidgetResult da e2) = WidgetResult (dF <*> da) (leftmost [e1, e2])
+{-
+   let apDyn df dx = (\(g,y) -> g y) <$> zipDyn df dx -- equivalent to df <*> dx
+   in WidgetResult (apDyn dF da) (leftmost [e1, e2])
+-}
+
+instance Reflex t => Monad (WidgetResult t) where
+  return = pure
+  (WidgetResult da e) >>= f =
+    let dwr = f <$> da
+        WidgetResult db de = dynamicWidgetResultToWidgetResult dwr
+    in WidgetResult db (leftmost [e, de])
+
+
+{- Let's check the laws:
+Functor
+1. fmap id (WidgetResult d e) = WidgetResult (fmap id d) e = WidgetResult d e
+2. fmap (g . f) (WidgetResult d e) = WidgetResult (fmap (g .f) d) e = WidgetResult (fmap g . fmap f d) e = fmap g . WidgetResult (fmap f d) e = fmap g . fmap f $ WidgetResult d ed
+
+Applicative
+1. pure id <*> (WidgetResult d e) = WidgetResult (constDyn id <*> d) (leftmost [never, e]) = WidgetResult d e
+2. pure f <*> pure x = WidgetResult (constDyn f <*> constDyn x) (leftmost [never, never]) = WidgetResult (constDyn (f x)) never = pure (f x)
+3. u <*> pure y = WidgetResult uDyn e <*> WidgetResult y never = WidgetResult (uDyn <*> constDyn y) e = WidgetResult (constDyn ($ y) <*> uDyn) e = pure ($ y) <*> u
+4. pure (.) <*> u <*> v <*> w = WidgetResult (constDyn (.) never) <*> WidgetResult (uDyn uEv) <*> WidgetResult (vDyn vEv) <*> WidgetResult (wDyn wEv)
+                              = WidgetResult (constDyn (.) <*> uDyn) uEv <*> WidgetResult (vDyn vEv) <*> WidgetResult (wDyn wEv)
+                              = WidgetResult (constDyn (.) <*> uDyn <*> vDyn <*> wDyn) (leftmost [uEv, vEv, wEv]
+                              = WidgetResult (uDyn <*> (vDyn <*> wDyn)) (leftmost [uEv, leftmost [vEv, wEv]])
+                              = u <*> (v <*> w)
+-}
+
 widgetResultOfDynamicToWidgetResult :: (Reflex t, MonadHold t m) => WidgetResult t (Dynamic t a) -> m (WidgetResult t a)
 widgetResultOfDynamicToWidgetResult wrd = do
   let d = join $ _wrDyn wrd
   ed <- buildDynamic (sample $ current $ _wrDyn wrd) $ updatedWidgetResult wrd
   return $ WidgetResult d (() <$ updated ed) -- ??
+
 
 -- here so a widget which returns just a Dynamic can return a WidgetResult
 dynamicToWidgetResult :: Reflex t => Dynamic t a -> WidgetResult t a
@@ -114,19 +140,6 @@ unsafeBuildWidgetResult :: Reflex t => Dynamic t a -> Event t a -> WidgetResult 
 unsafeBuildWidgetResult d e = WidgetResult d (() <$ e)
 
 
-instance Reflex t => Functor (WidgetResult t) where
-  fmap h (WidgetResult d e) = WidgetResult (h <$> d) e
-
-instance Reflex t => Applicative (WidgetResult t) where
-  pure a = WidgetResult (constDyn a) never
-  (WidgetResult dF e1) <*> (WidgetResult da e2) = WidgetResult (dF <*> da) (leftmost [e1, e2])
-
-instance Reflex t => Monad (WidgetResult t) where
-  return = pure
-  (WidgetResult da e) >>= f =
-    let dwr = f <$> da
-        WidgetResult db de = dynamicWidgetResultToWidgetResult dwr
-    in WidgetResult db (leftmost [e, de])
 
 
 -- this is only here so we can operate on the a directly via fmap or <*> when we need to.

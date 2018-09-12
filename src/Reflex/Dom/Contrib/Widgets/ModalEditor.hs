@@ -16,6 +16,7 @@ module Reflex.Dom.Contrib.Widgets.ModalEditor
   , modalEditor_value
   , modalEditor_mValue
   , modalEditor_change
+  , modalEditor_WidgetResult
   , OnExternalChange (..)
   , UpdateOutput (..)
   , ButtonConfig (..)
@@ -37,36 +38,36 @@ module Reflex.Dom.Contrib.Widgets.ModalEditor
   , modalEditorEither
   ) where
 
-import           Reflex                               (Dynamic, Event,
-                                                       MonadHold, Reflex)
-import qualified Reflex                               as R
-import qualified Reflex.Dom                           as RD
+import           Reflex                                  (Dynamic, Event,
+                                                          MonadHold, Reflex)
+import qualified Reflex                                  as R
+import qualified Reflex.Dom                              as RD
 
-import           Reflex.Dynamic                       (constDyn)
+import           Reflex.Dynamic                          (constDyn)
 
 --import           Reflex.Dom.Contrib.DynamicUtils         (dynPlusEvent,
 --                                                          dynStartingFrom)
-import qualified Reflex.Dom.Contrib.Layout.FlexLayout as L
-import qualified Reflex.Dom.Contrib.Layout.Types      as L
-import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
-{-import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult,
-                                                          WrappedWidgetResult,
+import qualified Reflex.Dom.Contrib.Layout.FlexLayout    as L
+import qualified Reflex.Dom.Contrib.Layout.Types         as L
+import           Reflex.Dom.Contrib.ReflexConstraints    (MonadWidgetExtraC)
+import           Reflex.Dom.Contrib.Widgets.WidgetResult (WidgetResult,
                                                           currentWidgetResult,
+                                                          unsafeBuildWidgetResult,
                                                           unsafeBuildWrappedWidgetResult,
                                                           updatedWidgetResult,
                                                           widgetResultToDynamic)
--}
 
-import           Control.Lens                         (makeLenses, preview,
-                                                       view, (%~), (&), (^.),
-                                                       _Left, _Right)
-import           Control.Monad.Fix                    (MonadFix)
+
+import           Control.Lens                            (makeLenses, preview,
+                                                          view, (%~), (&), (^.),
+                                                          _Left, _Right)
+import           Control.Monad.Fix                       (MonadFix)
 import           Data.Default
-import           Data.Either                          (isRight)
-import qualified Data.Map                             as M
-import           Data.Monoid                          ((<>))
-import qualified Data.Text                            as T
-
+import           Data.Either                             (isRight)
+import           Data.Functor.Compose                    (Compose (Compose))
+import qualified Data.Map                                as M
+import           Data.Monoid                             ((<>))
+import qualified Data.Text                               as T
 
 data ModalEditor t e a = ModalEditor { _modalEditor_value  :: Dynamic t (Either e a)
                                      , _modalEditor_change :: Event t a -- only fire when there is a valid value
@@ -82,8 +83,8 @@ modalEditor_change = _modalEditor_change
 modalEditor_mValue :: Reflex t => ModalEditor t e a -> Dynamic t (Maybe a)
 modalEditor_mValue = fmap e2m . modalEditor_value
 
---modalEditor_WidgetResult :: Reflex t => ModalEditor t e a -> WrappedWidgetResult t (Either e) a
---modalEditor_WidgetResult me = unsafeBuildWrappedWidgetResult (modalEditor_value me) (Right <$> modalEditor_change me)
+modalEditor_WidgetResult :: Reflex t => ModalEditor t e a -> Compose (WidgetResult t) (Either e) a
+modalEditor_WidgetResult me = Compose $ unsafeBuildWidgetResult (modalEditor_value me) (Right <$> modalEditor_change me)
 
 e2m :: Either e a -> Maybe a
 e2m = either (const Nothing) Just

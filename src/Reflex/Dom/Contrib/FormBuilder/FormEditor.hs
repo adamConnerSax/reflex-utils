@@ -65,12 +65,10 @@ import           Reflex.Dom.Contrib.Widgets.SafeDropdown      (SafeDropdown (..)
                                                                SafeDropdownConfig (..),
                                                                safeDropdownConfig_setValue,
                                                                safeDropdownOfLabelKeyedValue)
-{-
 import           Reflex.Dom.Contrib.Widgets.WidgetResult      (constWidgetResult,
                                                                dynamicToWidgetResult,
                                                                dynamicWidgetResultToWidgetResult,
                                                                widgetResultToDynamic)
--}
 import           Reflex.Dynamic.FactorDyn                     (factorDynGeneric)
 
 
@@ -123,10 +121,10 @@ instance (Reflex t, Monad m, DomBuilder t m, MonadHold t m, PostBuild t m) => Co
   combine :: FormValue t (Form t m a) -> Form t m a
   combine x = Compose $ do
     let fvfr2fr = Compose . fmap mergeAccValidation . sequenceA . fmap getCompose
-    let x1 = fmap (fmap fvfr2fr . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t ((FR t m) (FormValue t a))
+    let x1 = widgetResultToDynamic . fmap (fmap fvfr2fr . sequenceA) . getCompose . fmap getCompose $ x -- Dynamic t ((FR t m) (FormValue t a))
     x2 <- dyn x1 -- Event t (FormValue t a)
-    x4 <- holdDyn (constDyn $ AccFailure [FNothing]) (getCompose <$> x2) -- Dynamic t (Dynamic t (FValidation a))
-    return $ Compose $ join x4
+    x4 <- holdDyn (constWidgetResult $ AccFailure [FNothing]) (getCompose <$> x2) -- Dynamic t (WidgetResult t (FValidation a))
+    return $ Compose $ dynamicWidgetResultToWidgetResult x4
 
 
 data AccValEither e a b = F e | SL a | SR b deriving (Generic)
@@ -147,7 +145,7 @@ instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormValue t) m 
   distribute :: forall t a b m. (Reflex t, MonadHold t m, MonadFix m) => FormValue t (Either a b) -> m (FormValue t (Either (FormValue t a) (FormValue t b)))
   distribute x = do
     let x1 :: Dynamic t (AccValEither FormErrors a b)
-        x1 = fmap toAccValEither $ getCompose x
+        x1 = widgetResultToDynamic . fmap toAccValEither $ getCompose x
     x2 :: Dynamic t (AccValEither (Dynamic t FormErrors) (Dynamic t a) (Dynamic t b)) <- factorAccValEither x1
     let x3 :: Dynamic t (AccValidation (Dynamic t FormErrors) (Either (Dynamic t a) (Dynamic t b)))
         x3 = fromAccValEither <$> x2
@@ -156,7 +154,7 @@ instance (Reflex t, MonadHold t m, MonadFix m) => Distributable (FormValue t) m 
           AccFailure de -> fmap AccFailure de
           AccSuccess y  -> constDyn $ AccSuccess y
         x4 :: FormValue t (Either (Dynamic t a) (Dynamic t b))
-        x4 = Compose $ join $ fmap f x3
+        x4 = Compose $ dynamicToWidgetResult $ join $ fmap f x3
     return $ fmap (bimap (dynMaybeToFormValue . Compose . fmap pure) (dynMaybeToFormValue . Compose . fmap pure)) x4
 
 -- utilities
@@ -185,16 +183,16 @@ chooseAmong choices =
       runMaybeEditorOn x =  maybe (Compose $ return formValueNothing) (flip runEditor x)
   in Editor $ \fva -> Compose $ flexRow $ do
     let mIntFromA a = fst <$> (headMay $ filter (\(_,bc) -> isA bc a) chooserList)
-    newMAEv <- dynAsEv $ avToMaybe <$> (getCompose $ fva)
+    newMAEv <- dynAsEv $ widgetResultToDynamic $ avToMaybe <$> (getCompose $ fva)
     let newChoiceEv = fmapMaybe (>>= mIntFromA) newMAEv
         ddConfig = def
                    & safeDropdownConfig_setValue .~ (Just <$> newChoiceEv)
     choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> bName cc) Nothing (constDyn chooserMap) ddConfig)
     x <- dyn (getCompose . runMaybeEditorOn fva . fmap edAB <$> choice) -- Event t (FormResult t s)
     y <- holdDyn formValueNothing x
-    return $ Compose $ join $ getCompose <$> y
+    return $ Compose $ dynamicWidgetResultToWidgetResult $ getCompose <$> y
 
-{-
+
 chooseAmong' :: (Reflex t, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => [BuilderChoice t m a b] -> FormEditor t m a b
 chooseAmong' choices =
   let chooserList = zip ([0..] :: [Int]) choices
@@ -202,13 +200,12 @@ chooseAmong' choices =
       runMaybeEditorOn x =  maybe (Compose $ return formValueNothing) (flip runEditor x)
   in Editor $ \fva -> Compose $ flexRow $ do
     let fValBoolToMaybe = accValidation (const Nothing) (bool Nothing (Just ()))
-        fvBoolToMaybeEv fvb = updated $ fmap fValBoolToMaybe (getCompose fvb)
+        fvBoolToMaybeEv fvb = updated $ widgetResultToDynamic $ fmap fValBoolToMaybe (getCompose fvb)
         chooserListItemToIntEvent (k, BuilderChoice _ ic _) = k <$ (fmapMaybe id $ fvBoolToMaybeEv $ fmap ic fva)
         changeToEv = leftmost $ chooserListItemToIntEvent <$> chooserList
         ddConfig = def { _safeDropdownConfig_setValue = Just <$> changeToEv }
     choice <- _safeDropdown_value <$> (flexItem $ safeDropdownOfLabelKeyedValue (\_ cc -> bName cc) Nothing (constDyn chooserMap) ddConfig)
     x <- dyn (getCompose . runMaybeEditorOn fva . fmap edAB <$> choice) -- Event t (FormResult t s)
     y <- holdDyn formValueNothing x
-    return $ Compose $ getCompose <$> y
+    return $ Compose $ dynamicWidgetResultToWidgetResult $ getCompose <$> y
 
--}

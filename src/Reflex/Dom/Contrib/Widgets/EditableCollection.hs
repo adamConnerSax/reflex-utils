@@ -16,6 +16,7 @@ module Reflex.Dom.Contrib.Widgets.EditableCollection
   , DisplayCollection (..)
   , EditableCollection(..)
   , collectionEditor
+  , collectionEditorWR
   , selectEditValues
   , editWithDeleteButton
   , addNewItemWidget
@@ -28,7 +29,7 @@ module Reflex.Dom.Contrib.Widgets.EditableCollection
 -- These need to go so that the widget piece of reflex-utils can be its own lib
 import           Reflex.Dom.Contrib.EventUtils (fanBool)
 import           Reflex.Dom.Contrib.ReflexConstraints (MonadWidgetExtraC)
-import           Reflex.Dom.Contrib.Widgets.WidgetResult (dynamicToWidgetResult)
+import qualified Reflex.Dom.Contrib.Widgets.WidgetResult as WR
 
 import qualified Reflex.Dom.Contrib.Widgets.ModalEditor as ME
 import qualified Reflex.Dom.Contrib.Widgets.SafeDropdown as SD
@@ -214,6 +215,33 @@ which must be reflected in 2 places:
 2. The output of this widget (curDyn)
 And we must not feed edits or deletes back into the edit/Delete widget or we get a causality loop.
 -}
+collectionEditorWR :: ( RD.Adjustable t m
+                      , RD.PostBuild t m
+                      , RD.MonadHold t m                 
+                      , MonadFix m
+                      , RD.DomBuilder t m
+                      , RC.Mergeable f)                 
+  => (R.Dynamic t (f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete widget.  Fires only on change. Something like Reflex.Collections.
+  -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  add item widget.  Fires only on valid add.
+  -> (f a -> f b) -- we need this to have a starting point for the output dynamics
+  -> (f b -> f a) -- we need this to feed the changes back in to the collection functions
+  -> R.Dynamic t (f a) -- input collection
+  -> m (WR.WidgetResult t (f b))
+collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
+  editDeleteDiffMaybeEv <- editDeleteWidget (fbTofa <$> editDeleteInputDyn)
+  addDiffMaybeEv <- fmap (fmap Just) <$> addWidget fDyn
+  let inputFbBeh = faTofb <$> R.current fDyn 
+      inputFbEv = faTofb <$> R.updated fDyn
+      editDeleteAddDiffEv = R.leftmost [editDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
+      addFEv = R.attachWith (flip applyDiff) (R.current curDyn) addDiffMaybeEv
+      internalChangeEv = R.attachWith (flip applyDiff) (R.current curDyn) editDeleteAddDiffEv
+      newFEv = R.leftmost [inputFbEv, internalChangeEv]
+      updatedEditDeleteInputEv = R.leftmost [addFEv, inputFbEv]
+  curDyn <- R.buildDynamic (R.sample inputFbBeh) newFEv -- always has current value
+  editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) updatedEditDeleteInputEv -- updates to current on add or carries completely new input
+  WR.buildWidgetResult curDyn internalChangeEv 
+
+
 collectionEditor :: ( RD.Adjustable t m
                     , RD.PostBuild t m
                     , RD.MonadHold t m                 
@@ -226,17 +254,9 @@ collectionEditor :: ( RD.Adjustable t m
   -> (f b -> f a) -- we need this to feed the changes back in to the collection functions
   -> R.Dynamic t (f a) -- input collection
   -> m (R.Dynamic t (f b))
-collectionEditor editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
-  editDeleteDiffMaybeEv <- editDeleteWidget (fbTofa <$> editDeleteInputDyn)
-  addDiffMaybeEv <- fmap (fmap Just) <$> addWidget fDyn
-  let inputFbBeh = faTofb <$> R.current fDyn 
-      inputFbEv = faTofb <$> R.updated fDyn
-      editDeleteAddDiffEv = R.leftmost [editDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
-      newFEv = R.leftmost [inputFbEv, R.attachWith (flip applyDiff) (R.current curDyn) editDeleteAddDiffEv]
-      newCollectionInputEv = R.leftmost [() <$ R.updated fDyn, () <$ addDiffMaybeEv]
-  curDyn <- R.buildDynamic (R.sample inputFbBeh) newFEv -- always has current value
-  editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) (R.tagPromptlyDyn curDyn newCollectionInputEv) -- updates to current value (in this frame) on adds or new input
-  return curDyn
+collectionEditor editDeleteWidget addWidget faTofb fbTofa fDyn =
+  WR.widgetResultToDynamic <$>  collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn 
+
 
 -- This can be plugged into edit Structure in place of ecListViewWithKey to get a selection with drodown in place of the entire list
 selectEditValues :: ( RD.Adjustable t m
