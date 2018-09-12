@@ -324,7 +324,7 @@ testContainers cfg = do
         , ("Seq of String" , testForm cfg hseq)
 --          , ("List of A", testForm cfg lOfA1)
 --              , ("Seq of A", testForm cfg seqA)
---              , ("Map Text Int", testForm cfg testMap)
+              , ("Map Text Int", testForm cfg testMap)
 --              , ("Map Text (Map Text Text)", testForm cfg testMap2)
 --              , ("HashSet String", testForm cfg hs)
 --             , ("Seq String", testForm cfg hseq)

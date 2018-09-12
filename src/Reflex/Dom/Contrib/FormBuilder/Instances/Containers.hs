@@ -160,9 +160,9 @@ instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (IM.
     in formCollectionEditor EC.DisplayAll showKeyEditVal newItemW imFV
 
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m [a] where
-  buildForm va mFN lFV = formCollectionValueEditor EC.DisplayAll hideKeyEditVal lFV
-{-    let newItemW =  newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy a)
-    in formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV -}
+  buildForm va mFN lFV =
+    let newItemW =  newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy a)
+    in formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV
 
 instance (FormInstanceC t m, VFormBuilderBoth t m Int a, Show a, Read a) => FormBuilder t m (Seq.Seq a) where
   buildForm va mFN sFV =
@@ -200,7 +200,9 @@ formCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
 formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
   postBuild <- RD.getPostBuild
   let editWidget' k vDyn = R.fmapMaybe avToMaybe . WR.updatedWidgetResult . getCompose <$> unF (editWidget k vDyn) -- m (R.Event t a)
-      editAndDeleteWidget k vDyn = EC.editWithDeleteButton editWidget' M.empty (EC.buttonNoSubmit "-") (R.constDyn True) k vDyn
+      editAndDeleteWidget k vDyn = do
+        widgetVisDyn <- R.holdDyn True $ True <$ R.updated vDyn
+        EC.editWithDeleteButton editWidget' M.empty (EC.buttonNoSubmit "-") widgetVisDyn k vDyn
       editDeletableWidget = case display of
         EC.DisplayAll -> flip EC.ecListViewWithKey editAndDeleteWidget
         EC.DisplayEach ddAttrs toText -> EC.selectEditValues ddAttrs toText (EC.updateKeyLabelMap (Proxy :: Proxy f)) editAndDeleteWidget

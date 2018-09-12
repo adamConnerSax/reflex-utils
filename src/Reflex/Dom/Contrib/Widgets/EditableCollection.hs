@@ -112,7 +112,9 @@ simpleCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
   -> m (R.Dynamic t (f a))
 simpleCollectionEditor display editWidget newItemWidget fDyn =
   let editValueWidget k vDyn = R.fmapMaybe id . R.updated <$> editWidget k vDyn -- m (R.Event t (f a))
-      editAndDeleteWidget = editWithDeleteButton editValueWidget M.empty (buttonNoSubmit "-") (R.constDyn True)
+      editAndDeleteWidget k vDyn = do
+        widgetVis <- R.holdDyn True $ True <$ R.updated vDyn
+        editWithDeleteButton editValueWidget M.empty (buttonNoSubmit "-") widgetVis k vDyn
       editDeletableWidget = case display of
         DisplayAll -> flip ecListViewWithKey editAndDeleteWidget
         DisplayEach ddAttrs toText -> selectEditValues ddAttrs toText (updateKeyLabelMap (Proxy :: Proxy f)) editAndDeleteWidget
@@ -316,7 +318,7 @@ editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
     editedEv <- RD.el "span" $ editWidget k vDyn
     delButtonEv <- RD.el "span" $ delButton
     let outEv = R.leftmost [Just <$> editedEv, Nothing <$ delButtonEv]
-    visDyn <- R.buildDynamic (R.sample $ R.current visibleDyn) $ (isJust <$> outEv) 
+    visDyn <- R.buildDynamic (R.sample $ R.current visibleDyn) $ R.leftmost [R.updated visibleDyn, isJust <$> outEv] 
 --    visDyn <- R.holdDyn True $ R.leftmost [R.tag (R.current visibleDyn) postBuild, isJust <$> outEv]
     return (visDyn, outEv)
   return $ leftWhenNotRight outEv' $ R.leftmost [() <$ R.updated vDyn, postBuild]
