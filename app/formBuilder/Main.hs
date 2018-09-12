@@ -319,20 +319,18 @@ testContainers :: FormInstanceC t m => FormConfiguration t m -> m ()
 testContainers cfg = do
   let tests =
         [
-          ("One Int", testForm cfg (2 :: Int))
-        , ("List of Int" , testForm cfg lOfInt)
+          ("List of Int" , testForm cfg lOfInt)
         , ("Seq of String" , testForm cfg hseq)
---          , ("List of A", testForm cfg lOfA1)
---              , ("Seq of A", testForm cfg seqA)
-              , ("Map Text Int", testForm cfg testMap)
---              , ("Map Text (Map Text Text)", testForm cfg testMap2)
---              , ("HashSet String", testForm cfg hs)
---             , ("Seq String", testForm cfg hseq)
---             , ("SelectView Map", testForm cfg sm)
---              , ("Record with Container", testForm cfg b1)
---              , ("Record of Containers", testForm cfg bRec)
---              , ("Combo", testForm cfg c)
-              ]
+--        , ("List of A", testForm cfg lOfA1)
+--        , ("Seq of A", testForm cfg seqA)
+        , ("Map Text Int", testForm cfg testMap)
+--        , ("Map Text (Map Text Text)", testForm cfg testMap2)
+        , ("Seq String", testForm cfg hseq)
+--        , ("SelectView Map", testForm cfg sm)
+--        , ("Record with Container", testForm cfg b1)
+--        , ("Record of Containers", testForm cfg bRec)
+--        , ("Combo", testForm cfg c)
+        ]
       tabs = (\(n,w) -> TabInfo n (constDyn (n,M.empty)) w) <$> tests
   _ <- staticTabbedLayout def (head tabs) tabs
   return ()

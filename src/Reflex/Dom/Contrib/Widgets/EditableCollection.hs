@@ -19,6 +19,7 @@ module Reflex.Dom.Contrib.Widgets.EditableCollection
   , collectionEditorWR
   , selectEditValues
   , editWithDeleteButton
+  , reappearingEditWithDeleteButton
   , addNewItemWidget
   , addNewItemWidgetModal
   , buttonNoSubmit
@@ -297,8 +298,23 @@ updateKeyLabelMap :: (RC.Diffable f, RC.Key f ~ RC.Key (RC.Diff f), Ord (Key (Di
 updateKeyLabelMap _ d x =
   let mapOfDeletes = M.filter isNothing . M.fromList . RC.toKeyValueList $ d
   in M.difference x mapOfDeletes
-    
--- add a delete action to a widget that edits the (key/)value.  
+
+
+reappearingEditWithDeleteButton :: ( R.Reflex t
+                                   , R.MonadHold t m
+                                   , R.PostBuild t m
+                                   , RD.DomBuilder t m
+                                   , MonadFix m)
+  => (k -> R.Dynamic t a -> m (R.Event t b)) -- widget to edit one element, fires only on valid change
+  -> M.Map T.Text T.Text -- attrs for the div surrounding the widget with button
+  -> m (R.Event t ()) -- delete button widget
+  -> k -- key in collection
+  -> R.Dynamic t a -- input element
+  -> m (R.Event t (Maybe b)) -- 'Just b' if changed, 'Nothing' if deleted.                                   
+reappearingEditWithDeleteButton editWidget attrs delButton k vDyn = do
+  widgetVisDyn <- R.holdDyn True $ True <$ R.updated vDyn
+  editWithDeleteButton editWidget attrs delButton widgetVisDyn k vDyn 
+                                
 editWithDeleteButton :: ( R.Reflex t
                         , R.MonadHold t m
                         , R.PostBuild t m
@@ -310,7 +326,7 @@ editWithDeleteButton :: ( R.Reflex t
   -> R.Dynamic t Bool -- visibility of widget
   -> k -- key in collection
   -> R.Dynamic t a -- input element
-  -> m (R.Event t (Maybe b)) -- 'Just b' if changed, 'Nothing' if deleted.
+  -> m (R.Event t (Maybe b)) -- 'Just b' if changed, 'Nothing' if deleted. Only fire on edits.
 editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
   postBuild <- R.getPostBuild
   let widgetAttrs = (\x -> attrs <> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
@@ -319,9 +335,8 @@ editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
     delButtonEv <- RD.el "span" $ delButton
     let outEv = R.leftmost [Just <$> editedEv, Nothing <$ delButtonEv]
     visDyn <- R.buildDynamic (R.sample $ R.current visibleDyn) $ R.leftmost [R.updated visibleDyn, isJust <$> outEv] 
---    visDyn <- R.holdDyn True $ R.leftmost [R.tag (R.current visibleDyn) postBuild, isJust <$> outEv]
     return (visDyn, outEv)
-  return $ leftWhenNotRight outEv' $ R.leftmost [() <$ R.updated vDyn, postBuild]
+  return $ leftWhenNotRight outEv' $ R.leftmost [() <$ R.updated vDyn, postBuild] -- this leftWhenNotRight is crucial. ??
 
 newItemEditorConfig :: (Show e, R.Reflex t) => ME.ModalEditorConfig t e a
 newItemEditorConfig = RD.def

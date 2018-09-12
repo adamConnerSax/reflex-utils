@@ -200,9 +200,7 @@ formCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
 formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
   postBuild <- RD.getPostBuild
   let editWidget' k vDyn = R.fmapMaybe avToMaybe . WR.updatedWidgetResult . getCompose <$> unF (editWidget k vDyn) -- m (R.Event t a)
-      editAndDeleteWidget k vDyn = do
-        widgetVisDyn <- R.holdDyn True $ True <$ R.updated vDyn
-        EC.editWithDeleteButton editWidget' M.empty (EC.buttonNoSubmit "-") widgetVisDyn k vDyn
+      editAndDeleteWidget = EC.reappearingEditWithDeleteButton editWidget' M.empty (EC.buttonNoSubmit "-")
       editDeletableWidget = case display of
         EC.DisplayAll -> flip EC.ecListViewWithKey editAndDeleteWidget
         EC.DisplayEach ddAttrs toText -> EC.selectEditValues ddAttrs toText (EC.updateKeyLabelMap (Proxy :: Proxy f)) editAndDeleteWidget
