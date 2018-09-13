@@ -329,12 +329,13 @@ editWithDeleteButton :: ( R.Reflex t
   -> m (R.Event t (Maybe b)) -- 'Just b' if changed, 'Nothing' if deleted. Only fire on edits.
 editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
   postBuild <- R.getPostBuild
-  let widgetAttrs = (\x -> attrs <> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
-  (visibleDyn', outEv') <- RD.elDynAttr "div" widgetAttrs $ do
+  let widgetAttrsDyn = (\x -> attrs <> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
+  (visibleDyn', outEv') <- RD.elDynAttr "div" widgetAttrsDyn $ do
     editedEv <- RD.el "span" $ editWidget k vDyn
     delButtonEv <- RD.el "span" $ delButton
     let outEv = R.leftmost [Just <$> editedEv, Nothing <$ delButtonEv]
-    visDyn <- R.buildDynamic (R.sample $ R.current visibleDyn) $ R.leftmost [R.updated visibleDyn, isJust <$> outEv] 
+--    visDyn <- R.buildDynamic (R.sample $ R.current visibleDyn) $ R.leftmost [R.updated visibleDyn, isJust <$> outEv]
+    visDyn <- R.holdDyn True $ R.leftmost [R.updated visibleDyn, False <$ delButtonEv]
     return (visDyn, outEv)
   return $ leftWhenNotRight outEv' $ R.leftmost [() <$ R.updated vDyn, postBuild] -- this leftWhenNotRight is crucial. ??
 
