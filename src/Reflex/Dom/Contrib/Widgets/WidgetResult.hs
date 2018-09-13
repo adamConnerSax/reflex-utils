@@ -111,8 +111,8 @@ Applicative
 widgetResultOfDynamicToWidgetResult :: (Reflex t, MonadHold t m) => WidgetResult t (Dynamic t a) -> m (WidgetResult t a)
 widgetResultOfDynamicToWidgetResult wrd = do
   let d = join $ _wrDyn wrd
-  ed <- buildDynamic (sample $ current $ _wrDyn wrd) $ updatedWidgetResult wrd
-  return $ WidgetResult d (() <$ updated ed) -- ??
+--  ed <- buildDynamic (sample $ current $ _wrDyn wrd) $ updatedWidgetResult wrd
+  return $ WidgetResult d (() <$ updatedWidgetResult wrd) -- ??
 
 
 -- here so a widget which returns just a Dynamic can return a WidgetResult

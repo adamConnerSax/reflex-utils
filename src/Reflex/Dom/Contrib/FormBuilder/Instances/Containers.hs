@@ -30,9 +30,11 @@ import           Reflex.Dom.Contrib.Widgets.EditableCollection  (DisplayCollecti
 import qualified Reflex.Dom.Contrib.Widgets.EditableCollection  as EC
 import qualified Reflex.Dom.Contrib.Widgets.WidgetResult        as WR
 
+import qualified DataBuilder                                    as B
 import           Reflex.Dom.Contrib.FormBuilder.Builder         (FieldName,
                                                                  Form,
                                                                  FormBuilder (buildForm),
+                                                                 FormValidator,
                                                                  FormValue,
                                                                  VFormBuilderC,
                                                                  avToMaybe,
@@ -44,14 +46,15 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder         (FieldName,
                                                                  formValueNothing,
                                                                  makeForm,
                                                                  toReadOnly,
-                                                                 unF)
+                                                                 unF,
+                                                                 validateForm)
 import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FValidation, FormError (FInvalid),
                                                                  avToEither,
-                                                                 maybeToFV)
+                                                                 maybeToFV,
+                                                                 mergeAccValidation)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Basic (FormInstanceC)
 import           Reflex.Dom.Contrib.Layout.Types                (LayoutDirection (..))
 import           Reflex.Dom.Contrib.ReflexConstraints           (MonadWidgetExtraC)
-
 
 
 -- reflex imports
@@ -142,39 +145,61 @@ hideKeyEditVal :: (FormInstanceC t m, VFormBuilderC t m v) => k -> R.Dynamic t v
 hideKeyEditVal _ vDyn = makeForm $ do
   fItem . unF $ buildVForm Nothing (dynamicToFormValue vDyn)
 
-newItemWidget :: (EC.EditableCollection f, FormInstanceC t m, VFormBuilderC t m (EC.NewItem f a)) => Proxy f -> Proxy a -> Form t m (EC.NewItem f a)
+newItemWidget :: (EC.EditableCollection f, FormInstanceC t m, VFormBuilderC t m (EC.NewItem f a))
+  => Proxy f -> Proxy a -> Form t m (EC.NewItem f a)
 newItemWidget _ _ = buildVForm Nothing formValueNothing
+
+instance (Ord k, B.Validatable FValidation k, B.Validatable FValidation a) => B.Validatable FValidation (M.Map k a) where
+  validator = M.traverseWithKey (\k a -> mergeAccValidation (B.validator a <$ B.validator k))
 
 instance (Ord k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (M.Map k a) where
   buildForm va mFN mFV =
     let newItemW =  newItemWidget (Proxy :: Proxy (M.Map k)) (Proxy :: Proxy a)
-    in formCollectionEditor EC.DisplayAll showKeyEditVal newItemW mFV
+    in validateForm va $ formCollectionEditor EC.DisplayAll showKeyEditVal newItemW mFV
+
+instance (Ord k, Hashable k, B.Validatable FValidation k, B.Validatable FValidation a) => B.Validatable FValidation (HML.HashMap k a) where
+  validator = HML.traverseWithKey (\k a -> mergeAccValidation (B.validator a <$ B.validator k))
 
 instance (Ord k, Hashable k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (HML.HashMap k a) where
   buildForm va mFN hmFV =
     let newItemW =  newItemWidget (Proxy :: Proxy (HML.HashMap k)) (Proxy :: Proxy a)
-    in formCollectionEditor EC.DisplayAll showKeyEditVal newItemW hmFV
+    in validateForm va $ formCollectionEditor EC.DisplayAll showKeyEditVal newItemW hmFV
+
+instance B.Validatable FValidation a => B.Validatable FValidation (IM.IntMap a) where
+  validator = traverse B.validator
 
 instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (IM.IntMap a) where
   buildForm va mFN imFV =
     let newItemW =  newItemWidget (Proxy :: Proxy IM.IntMap) (Proxy :: Proxy a)
-    in formCollectionEditor EC.DisplayAll showKeyEditVal newItemW imFV
+    in validateForm va $ formCollectionEditor EC.DisplayAll showKeyEditVal newItemW imFV
+
+instance B.Validatable FValidation a => B.Validatable FValidation [a] where
+  validator = traverse B.validator
 
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m [a] where
   buildForm va mFN lFV =
     let newItemW =  newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy a)
-    in formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV
+    in validateForm va $ formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV
 
-instance (FormInstanceC t m, VFormBuilderBoth t m Int a, Show a, Read a) => FormBuilder t m (Seq.Seq a) where
+instance B.Validatable FValidation a => B.Validatable FValidation (Seq.Seq a) where
+  validator = traverse B.validator
+
+instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (Seq.Seq a) where
   buildForm va mFN sFV =
     let newItemW = newItemWidget (Proxy :: Proxy Seq.Seq) (Proxy :: Proxy a)
-    in formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW sFV
+    in validateForm va $ formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW sFV
+
+instance (A.Ix k, B.Validatable FValidation a) => B.Validatable FValidation (A.Array k a) where
+  validator = traverse B.validator
 
 instance (A.Ix k, Enum k, Bounded k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (A.Array k a) where
-  buildForm va mFN aFV = formCollectionValueEditor EC.DisplayAll showKeyEditVal aFV
+  buildForm va mFN aFV = validateForm va $ formCollectionValueEditor EC.DisplayAll showKeyEditVal aFV
+
+instance B.Validatable FValidation a => B.Validatable FValidation (Tree.Tree a) where
+  validator = traverse B.validator
 
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (Tree.Tree a) where
-  buildForm va mFN tFV = formCollectionValueEditor EC.DisplayAll hideKeyEditVal tFV
+  buildForm va mFN tFV = validateForm va $ formCollectionValueEditor EC.DisplayAll hideKeyEditVal tFV
 
 
 -- I don't love the widgetHold here, so

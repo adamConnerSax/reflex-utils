@@ -85,7 +85,7 @@ simpleCollectionValueEditor display editWidget fDyn =
       -- change (Key f -> Dynamic t a -> m (Dynamic t (Maybe a))) into (Key f -> Dynamic t a -> m (Dynamic t a))
       let editValueWidget k vDyn = do
             aDynM <- editWidget k vDyn
-            dynamicPlusEvent vDyn $ R.fmapMaybe id (R.updated aDynM)
+            R.buildDynamic (R.sample $ R.current vDyn) $ R.fmapMaybe id (R.updated aDynM)
       in editOnlyValues id editValueWidget fDyn
     DisplayEach attrsDyn labelKey -> do
       let editValueWidget k vDyn = R.fmapMaybe id . R.updated <$> editWidget k vDyn

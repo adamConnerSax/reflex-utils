@@ -304,12 +304,15 @@ seqA = Seq.fromList (unListOfA lOfA2)
 bRec :: BRec
 bRec = BRec b1 (Seq.fromList (unListOfA lOfA2))
 
+tupleOfMaps :: (M.Map T.Text T.Text, M.Map Int Int) = (M.fromList [("A","a"),("B","b")],M.fromList [(1,10),(2,20)])
+listOfTuples :: [(T.Text,Int)] = [("A",1),("B",2)]
+
 testForm :: (FormInstanceC t m, VFormBuilderC t m a, Show a) => FormConfiguration t m -> a -> m ()
 testForm cfg x = do
   el "p" $ text ""
   fv <- flexFill LayoutRight $ dynamicForm cfg (Just x)
   el "p" $ text "dynText:"
-  dynText (fmap (T.pack . ppShow) . widgetResultToDynamic $ getCompose fv)
+  dynText (fmap (T.pack . ppShow) . traceDynWith (const "initialFormOutput") . widgetResultToDynamic $ getCompose fv)
   el "p" $ text "Input into new form:"
   el "p" blank
   fv' <- flexFill LayoutRight $ dynamicFormOfFormValue cfg fv
@@ -326,10 +329,12 @@ testContainers cfg = do
 --        , ("Seq of String" , testForm cfg hseq)
 --        , ("List of A", testForm cfg lOfA1)
 --        , ("Seq of A", testForm cfg seqA)
-            ("[[Int]]", testForm cfg listOfList)
+           ("[(Text,Int)]", testForm cfg listOfTuples)
+        ,  ("[[Int]]", testForm cfg listOfList)
 --        , ("Map Text Int", testForm cfg testMap)
-          ,  ("Map Text [Text]", testForm cfg mapOfList)
-          , ("Map Text (Map Text Text)", testForm cfg mapOfMap)
+--          , ("(Map T.Text T.Text, Map Int Int)", testForm cfg tupleOfMaps)
+--          ,  ("Map Text [Text]", testForm cfg mapOfList)
+--          , ("Map Text (Map Text Text)", testForm cfg mapOfMap)
 --        , ("Seq String", testForm cfg hseq)
 --        , ("SelectView Map", testForm cfg sm)
 --        , ("Record with Container", testForm cfg b1)
