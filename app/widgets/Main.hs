@@ -88,12 +88,16 @@ inputPair = do
     let pairDynMaybe = R.zipDyn kMDyn vMDyn
     return $ fmap (\(ma,mb) -> (,) <$> ma <*> mb) pairDynMaybe
 
+
+
+
 newLine = RD.el "p" (RD.text "") >> RD.el "br" RD.blank
 
 editableCollectionsWidget :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.MonadHold t m, RD.PostBuild t m, MonadFix m) => m ()
 editableCollectionsWidget = do
   let testMap :: M.Map T.Text Int = M.fromList [("A",1),("B",2),("C",3)]
       testList :: [T.Text] = ["Hello","Goodbye","Cat"]
+      testListOfLists :: [[Int]] = [[1,2],[3,4]]
       displayEach = (EC.DisplayEach (R.constDyn M.empty) (T.pack . show))
       display = EC.DisplayAll
   editMapDyn <- EC.simpleCollectionValueEditor display (const editValue) (R.constDyn testMap)
@@ -106,7 +110,10 @@ editableCollectionsWidget = do
   newLine >> (RD.dynText $ fmap (T.pack . show) editListDyn)
   editListStructureDyn <- newLine >> EC.simpleCollectionEditor display (const editValue) inputValue editListDyn
   newLine >> (RD.dynText $ fmap (T.pack . show) editListStructureDyn)
-
+  let editListAsValue cDyn = fmap Just <$> EC.simpleCollectionEditor display (const editValue) inputValue cDyn
+      inputList = editListAsValue (R.constDyn [])
+  editListOfListsDyn <- newLine >> EC.simpleCollectionEditor display (const editListAsValue) inputList (R.constDyn testListOfLists)
+  newLine >> (RD.dynText $ fmap (T.pack . show) editListOfListsDyn)
 
 editableCollectionTab :: (R.Reflex t, RD.DomBuilder t m, MonadWidgetExtraC t m, RD.MonadHold t m, RD.PostBuild t m, MonadFix m) => TabInfo t m ()
 editableCollectionTab = TabInfo "Editable Collections" (R.constDyn ("Editable Collections", M.empty)) $ editableCollectionsWidget
@@ -129,26 +136,30 @@ linkedCss = CssLinks []
 toLink = linkedCss {- <> (cssToLink includedCss) -}
 toEmbed = {- flexCssBS <> -} tabCssBS {- <> (cssToEmbed includedCss) -}
 
-editorMain  :: JSM ()
-editorMain  =
+widgetMain  :: JSM ()
+widgetMain  =
   RD.mainWidgetWithHead (headElt "widgets demo" toLink toEmbed) $ test
 
-
+{-
 #ifdef USE_WKWEBVIEW
 main::IO ()
 main = run editorMain
 #endif
+-}
 
-#ifdef USE_WARP
+--this needs fixing if I want support webkit or whatever else as well.
+#ifndef ghcjs_HOST_OS
 main::IO ()
 main = do
   let port :: Int = 3702
-  _ <- SP.spawnProcess "open" ["http://localhost:" ++ show port]
-  run port editorMain
+  _ <- SP.spawnProcess "open" ["-a","/Applications/Safari.App/Contents/MacOs/Safari", "http://localhost:" ++ show port]
+--  _ <- SP.spawnProcess "open" ["http://localhost:" ++ show port]
+  run port widgetMain
 #endif
 
-#ifdef USE_GHCJS
+
+#ifdef ghcjs_HOST_OS
 main :: IO ()
-main = editorMain
+main = widgetMain
 #endif
 
