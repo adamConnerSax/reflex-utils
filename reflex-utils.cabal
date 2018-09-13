@@ -66,8 +66,10 @@ library
   if flag(wkwebview) || flag(warp)
    build-depends: ghcjs-dom 
                 , jsaddle
+                , unordered-containers >= 0.2.8.0
   else
    build-depends: ghcjs-dom
+                , unordered-containers
   build-depends:       base >= 4.7 && < 5
                      , dependent-map
                      , array
@@ -104,7 +106,6 @@ library
                      , tuple
                      , hashable
                      , safe
-                     , unordered-containers >= 0.2.8.0
                      , validation
 
   if impl(ghcjs)

@@ -2,6 +2,7 @@
 self: super: {
 #  reflex = nixpkgs.pkgs.haskell.lib.appendConfigureFlag super.reflex "--ghc-option=-DDEBUG_CYCLES";
   validation = super.callHackage "validation" "0.6.0" {}; #fix doctest error
+  unordered-containers = super.callHackage "unordered-containers" "0.2.8.0" {};
   perConstructor-sop = super.callCabal2nix "perConstructor-sop" (nixpkgs.pkgs.fetchFromGitHub {
     owner = "adamConnerSax";
     repo = "perConstructor-sop";

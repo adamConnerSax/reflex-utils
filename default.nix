@@ -9,7 +9,7 @@ in
   shells = {
    ghc = ["reflex-utils"];
    ghc8_2_1 = ["reflex-utils"];
-   #ghcjs = ["common" "frontend"];
+   ghcjs = ["reflex-utils"];
   };
 
   overrides = import ./package-overlay.nix {};

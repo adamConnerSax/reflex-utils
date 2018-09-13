@@ -112,9 +112,10 @@ inputPair = do
 --
 
 -- Filter the firing of an event with another event.
+{-
 leftWhenNotRight :: R.Reflex t => R.Event t a -> R.Event t b -> R.Event t a
 leftWhenNotRight leftEv rightEv = R.fmapMaybe id $ R.leftmost [Nothing <$ rightEv, Just <$> leftEv]
-{-
+
 changeOnlyEv :: R.Reflex t => R.Dynamic t a -> R.Dynamic t b -> R.Event t b
 changeOnlyEv input result = leftWhenNotRight (R.updated result) (R.updated input)
 

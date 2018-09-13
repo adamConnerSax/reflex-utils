@@ -211,8 +211,6 @@ instance (FormInstanceC t m, VFormBuilderC t m A) => FormBuilder t m ListOfA whe
     let newItemW = newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy A)
     in fmap ListOfA . formCollectionEditor (DisplayEach (constDyn M.empty) (T.pack . show)) hideKeyEditVal newItemW . fmap (\(ListOfA x)->x) where
 
-
-
 instance Generic B
 instance HasDatatypeInfo B
 instance FormInstanceC t m=>FormBuilder t m B where
@@ -283,11 +281,16 @@ lm = LMap $ M.fromList [("a",1.0 :: Double),("b", 2)]
 
 c = C 3.14159 (MyMap (M.fromList [("b1",b1),("b2",b2)])) (BRec (B 42 (ListOfA [])) Seq.empty)
 
+listOfList :: [[Int]] = [[1,2],[3,4]]
+
 testMap::M.Map T.Text Int
 testMap = M.fromList [("A",1),("B",2)]
 
-testMap2::M.Map T.Text (M.Map T.Text T.Text)
-testMap2 = M.fromList [("MapA",M.fromList [("A","a"),("B","b")]),("MapB",M.fromList [("C","c"),("E","e")])]
+mapOfMap :: M.Map T.Text (M.Map T.Text T.Text)
+mapOfMap = M.fromList [("MapA",M.fromList [("A","a"),("B","b")]),("MapB",M.fromList [("C","c"),("E","e")])]
+
+mapOfList :: M.Map T.Text [T.Text]
+mapOfList = M.fromList [("ListA",["a","b"]),("ListB",["c","e"])]
 
 hs :: HS.HashSet String
 hs = HS.fromList ["a","b"]
@@ -319,13 +322,15 @@ testContainers :: FormInstanceC t m => FormConfiguration t m -> m ()
 testContainers cfg = do
   let tests =
         [
-          ("List of Int" , testForm cfg lOfInt)
-        , ("Seq of String" , testForm cfg hseq)
+--          ("List of Int" , testForm cfg lOfInt)
+--        , ("Seq of String" , testForm cfg hseq)
 --        , ("List of A", testForm cfg lOfA1)
 --        , ("Seq of A", testForm cfg seqA)
-        , ("Map Text Int", testForm cfg testMap)
---        , ("Map Text (Map Text Text)", testForm cfg testMap2)
-        , ("Seq String", testForm cfg hseq)
+            ("[[Int]]", testForm cfg listOfList)
+--        , ("Map Text Int", testForm cfg testMap)
+          ,  ("Map Text [Text]", testForm cfg mapOfList)
+          , ("Map Text (Map Text Text)", testForm cfg mapOfMap)
+--        , ("Seq String", testForm cfg hseq)
 --        , ("SelectView Map", testForm cfg sm)
 --        , ("Record with Container", testForm cfg b1)
 --        , ("Record of Containers", testForm cfg bRec)
@@ -431,17 +436,20 @@ main = run formBuilderMain
 #endif
 --}
 
-#ifdef USE_WARP
+
+--this needs fixing if I want support webkit or whatever else as well.
+#ifndef ghcjs_HOST_OS
 main::IO ()
 main = do
   let port :: Int = 3702
-  _ <- SP.spawnProcess "open" ["http://localhost:" ++ show port]
+  _ <- SP.spawnProcess "open" ["-a","/Applications/Safari.App/Contents/MacOs/Safari", "http://localhost:" ++ show port]
+--  _ <- SP.spawnProcess "open" ["http://localhost:" ++ show port]
   run port formBuilderMain
 #endif
 
-{--
-#ifdef USE_GHCJS
+
+#ifdef ghcjs_HOST_OS
 main :: IO ()
 main = formBuilderMain
 #endif
---}
+

@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes        #-}
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -27,7 +28,7 @@ module Reflex.Dom.Contrib.Layout.LayoutM
        , addNewLayoutNode
        ) where
 
-import           GHCJS.DOM.Types                 (MonadJSM (liftJSM'))
+import           GHCJS.DOM.Types                 (MonadJSM)
 import qualified Reflex                          as R
 import qualified Reflex.Dom                      as RD
 import qualified Reflex.Host.Class               as RC
@@ -55,6 +56,13 @@ import           Reflex.Dom.Contrib.Layout.Types
 import           Control.Lens                    (use, (^.))
 
 import           Data.Monoid                     ((<>))
+
+#ifndef ghcjs_HOST_OS
+import           GHCJS.DOM.Types                 (MonadJSM (..))
+
+instance MonadJSM m => MonadJSM (LayoutM t m) where
+  liftJSM' = liftLM . liftJSM'
+#endif
 
 
 data LayoutNodeCss = LayoutNodeCss { _lncStatic::CssClasses, _lncDynamic::CssClasses }
@@ -265,8 +273,6 @@ instance RD.HasWebView m => RD.HasWebView (LayoutM t m) where
   askWebView = lift RD.askWebView
 -}
 
-instance MonadJSM m => MonadJSM (LayoutM t m) where
-  liftJSM' = liftLM . liftJSM'
 
 
 instance RD.HasJSContext m => RD.HasJSContext (LayoutM t m) where
