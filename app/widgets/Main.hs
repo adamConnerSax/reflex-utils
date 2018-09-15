@@ -95,7 +95,7 @@ newLine = RD.el "p" (RD.text "") >> RD.el "br" RD.blank
 
 editableCollectionsWidget :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.MonadHold t m, RD.PostBuild t m, MonadFix m) => m ()
 editableCollectionsWidget = do
-  let testMap :: M.Map T.Text Int = M.fromList [("A",1),("B",2),("C",3)]
+  let testMap :: M.Map T.Text Int = M.fromList [("A",1),("B",2),("C",3),("D",4)]
       testList :: [T.Text] = ["Hello","Goodbye","Cat"]
       testListOfLists :: [[Int]] = [[1,2],[3,4]]
       displayEach = (EC.DisplayEach (R.constDyn M.empty) (T.pack . show))
