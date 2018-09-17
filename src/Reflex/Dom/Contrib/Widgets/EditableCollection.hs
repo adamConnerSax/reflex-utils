@@ -288,14 +288,30 @@ collectionEditorWR' :: forall t m f a b. ( RD.Adjustable t m
                                          , RC.Mergeable f
                                          , EditableCollection f
                                          , RC.MapLike (Diff f))                 
-  => (R.Dynamic t (f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete widget.  Fires only on change. Something like Reflex.Collections.
+  => (R.Event t (Diff f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete widget.
   -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  add item widget.  Fires only on valid add.
   -> (f a -> f b) -- we need this to have a starting point for the output dynamics
-  -> (f b -> f a) -- we need this to feed the changes back in to the collection functions
+  -> (Diff f (Maybe b) -> Diff f (Maybe a)) -- we need this to feed the changes back in to the collection functions
   -> R.Dynamic t (f a) -- input collection
   -> m (WR.WidgetResult t (f b))
-collectionEditorWR' editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
+collectionEditorWR' editDeleteWidget addWidget faTofb diffMaybebTodiffMaybea fDyn = mdo
+  editDeleteDiffMaybeEv <- editDeleteWidget editDeleteInputEv
+  addDiffMaybebEv <- fmap (fmap Just) <$> addWidget fDyn
+  let inputFbBeh = faTofb <$> R.current fDyn
+      inputFbEv = faTofb <$> R.updated fDyn
+      inputFaDiffEv = R.attachWith RC.diff (fbTofa <$> R.current curDyn) (R.updated fDyn)
+      deletedKeysEv = fmap fst . RC.toKeyValueList . RC.mlFilter isNothing <$> editDeleteDiffMaybeEv -- R.Event t [Key (Diff f)]
+      shiftedEditDeleteDiffMaybeEv = R.attachWith (diffAfterDeletes (Proxy :: Proxy f)) (R.current deletedKeysDyn) editDeleteDiffMaybeEv
+      editDeleteAddDiffEv = R.leftmost [shiftedEditDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
+      internalChangeEv = R.attachWith (flip applyDiff) (R.current curDyn) editDeleteAddDiffEv
+      
+      newFEv = R.leftmost [inputFbEv, internalChangeEv]
+      editDeleteInputEv = R.leftmost [diffMaybebToDiffMaybea <$> addDiffMaybebEv, inputFaDiffEv]
+  curDyn <- R.buildDynamic (R.sample inputFbBeh) newFEv -- always has current value
+  deletedKeysDyn <- R.foldDyn (\mdk cdk -> maybe [] (cdk <>) mdk) [] $ R.leftmost [Just <$> deletedKeysEv, Nothing <$ updatedEditDeleteInputEv]
+  WR.buildWidgetResult curDyn internalChangeEv 
 -}
+
 
 collectionEditor :: ( RD.Adjustable t m
                     , RD.PostBuild t m
