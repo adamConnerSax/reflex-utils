@@ -139,7 +139,7 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
 
   --
   ecListViewWithKeyShallowDiff :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
-    => R.Event t (Diff f (Maybe v)) -> (Key f -> v -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t a)
+    => Proxy f -> R.Event t (Diff f (Maybe v)) -> (Key f -> v -> R.Event t v -> m (R.Event t a)) -> m (R.Event t (Diff f a))
 
   -- required for the select version of the full structure editor
   ecSelectViewListWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
@@ -160,7 +160,7 @@ instance Ord k => EditableCollection (M.Map k) where
   type NewItem (M.Map k) b = (k,b)
   editOnlyValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff (Proxy :: Proxy (M.Map k))
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff
   ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget nat = const . fmap (fmap nat)
   diffAfterDeletes _ _ = id
@@ -169,7 +169,7 @@ instance (Hashable k, Ord k) => EditableCollection (HM.HashMap k) where
   type NewItem (HM.HashMap k) b = (k,b)
   editOnlyValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff (Proxy :: Proxy (HM.HashMap k))
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff 
   ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget nat = const . fmap (fmap nat)
   diffAfterDeletes _ _ = id
@@ -178,7 +178,7 @@ instance EditableCollection IM.IntMap where
   type NewItem IM.IntMap b = (Int,b)
   editOnlyValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff (Proxy :: Proxy IntMap)  
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff 
   ecSelectViewListWithKey = RC.selectViewListWithKey 
   newKeyValueWidget nat = const . fmap (fmap nat)
   diffAfterDeletes _ _ = id
@@ -187,7 +187,7 @@ instance EditableCollection [] where
   type NewItem [] b = b
   editOnlyValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff (Proxy :: Proxy [])
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff 
   ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget nat inputgbW fDyn = do
     newEitherbDyn <- fmap nat <$> inputgbW 
@@ -201,7 +201,7 @@ instance EditableCollection S.Seq where
   type NewItem S.Seq b = b 
   editOnlyValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff (Proxy :: Proxy S.Seq)  
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff 
   ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget nat inputgbW fDyn = do
     newEitherbDyn <- fmap nat <$> inputgbW    
@@ -215,7 +215,7 @@ instance (A.Ix k, Enum k, Bounded k) => EditableCollection (A.Array k) where
   type NewItem (A.Array k) b = (k,b) 
   editOnlyValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial
   ecListViewWithKey = RC.listViewWithKeyMaybe
-  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiffMaybe (Proxy :: Proxy (A.Array k))
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiffMaybe 
   ecSelectViewListWithKey = RC.selectViewListWithKeyMaybe  
   newKeyValueWidget _ _ = undefined -- can't add (or delete) in (Array k) collections
   diffAfterDeletes _ _ = id
@@ -224,7 +224,7 @@ instance EditableCollection T.Tree where
   type NewItem T.Tree b = b
   editOnlyValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial     
   ecListViewWithKey = RC.listViewWithKeyMaybe
-  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiffMaybe (Proxy :: Proxy T.Tree)
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiffMaybe 
   ecSelectViewListWithKey = RC.selectViewListWithKeyMaybe  
   newKeyValueWidget _ _ = undefined -- add to where?  Delete all below?  For now undefined.
   diffAfterDeletes _ _ = undefined -- this might make sense but unimplemented for now
@@ -264,7 +264,7 @@ collectionEditorWR :: forall t m f a b. ( RD.Adjustable t m
   -> m (WR.WidgetResult t (f b))
 collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
   editDeleteDiffMaybeEv <- editDeleteWidget (fbTofa <$> editDeleteInputDyn)
-  addDiffMaybeEv <- fmap (fmap Just) <$> addWidget fDyn
+  addDiffMaybeEv <- fmap (fmap Just) <$> addWidget (fbTofa <$> curDyn)
   let inputFbBeh = faTofb <$> R.current fDyn 
       inputFbEv = faTofb <$> R.updated fDyn
       deletedKeysEv = fmap fst . RC.toKeyValueList . RC.mlFilter isNothing <$> editDeleteDiffMaybeEv -- R.Event t [Key (Diff f)]
@@ -294,21 +294,45 @@ collectionEditorWR' :: forall t m f a b. ( RD.Adjustable t m
   -> (Diff f (Maybe b) -> Diff f (Maybe a)) -- we need this to feed the changes back in to the collection functions
   -> R.Dynamic t (f a) -- input collection
   -> m (WR.WidgetResult t (f b))
-collectionEditorWR' editDeleteWidget addWidget faTofb diffMaybebTodiffMaybea fDyn = mdo
-  editDeleteDiffMaybeEv <- editDeleteWidget editDeleteInputEv
-  addDiffMaybebEv <- fmap (fmap Just) <$> addWidget fDyn
-  let inputFbBeh = faTofb <$> R.current fDyn
-      inputFbEv = faTofb <$> R.updated fDyn
-      inputFaDiffEv = R.attachWith RC.diff (fbTofa <$> R.current curDyn) (R.updated fDyn)
-      deletedKeysEv = fmap fst . RC.toKeyValueList . RC.mlFilter isNothing <$> editDeleteDiffMaybeEv -- R.Event t [Key (Diff f)]
-      shiftedEditDeleteDiffMaybeEv = R.attachWith (diffAfterDeletes (Proxy :: Proxy f)) (R.current deletedKeysDyn) editDeleteDiffMaybeEv
+collectionEditorWR' editDeleteWidget addWidget faTofb dfMbTodfMa faDyn = mdo
+  -- we start with all the events, splitting the edits into deletes, which are not tracked inside the editDelete widget,
+  -- and edits, which are. 
+  editDeleteDiffFMbEv <- editDeleteWidget editDeleteInputEv
+  addDiffFbEv <- addWidget fDyn
+  let inputFbEv = faTofb <$> R.updated faDyn
+      deleteOnlyDiffFMbEv = RC.mlFilter isNothing <$> editDeleteDiffFMbEv
+      editOnlyDiffFMbEv =  RC.mlFilter isJust <$> editDeleteDiffFMbEv
+      inputFaDiffEv = R.attachWith RC.diff (fbTofa <$> R.current curFbDyn) (R.updated faDyn)
+  -- we construct a dyn with the current dynamic value of Fb. We need to track deletes since the keys from
+  -- the edit/delete widget may not match the output keys because of deletes (e.g., [])
+      deletedKeysEv = fmap fst . RC.toKeyValueList $ deleteOnlyDiffFMbEv -- R.Event t [Key (Diff f)]
+  -- deleted keys since last widget input update    
+  deletedKeysDyn <- R.foldDyn (\mdk cdk -> maybe [] (cdk <>) mdk) [] $ R.leftmost [Just <$> deletedKeysEv, Nothing <$ editDeleteInputEv]
+  let shiftedEditDeleteDiffFMbEv = R.attachWith (diffAfterDeletes (Proxy :: Proxy f)) (R.current deletedKeysDyn) editDeleteDiffMaybeEv
+      editDeleteFbEv = R.attachWith (flip R.applyDiff) (R.current curFbDyn) shiftedEditDeleteDiffFMbEv
+      addFbEv = R.attachWith (flip RC.applyDiff) (R.current curFbDyn) (fmap Just <$> addDiffFb)
+  let inputFbBeh = faTofb <$> R.current faDyn      
+  curFbDyn <- R.buildDynamic (R.sample inputFbBeh) $ R.leftmost [editDeleteFbEv, addFbEv, inputFbEv]
+  -- we construct a dyn to reflect the current internal state of the collection *as the edit/delete widget knows it*
+  -- which is without deletes until an add or new input updates the widget.  And 
+  let editsOnlyFbEv <- R.attachWith (flip RC.applyDiff) (R.current editDeleteStateFbDyn) editsOnlyFbEv      
+  editDeleteStateFbDyn <- R.buildDynamic (R.sample inputFBeh) $ R.leftmost [editsOnlyFbEv, addFbEv, inputFbEv]
+  -- now we construct the event used to update the edit/delete widget
+  -- this is tricky since the widget takes a diffs *relative to what it knows (adds, edits but not deletes)*
+  -- first we track deletes since the internal state has been updated
+
+
+      
+      
+
       editDeleteAddDiffEv = R.leftmost [shiftedEditDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
       internalChangeEv = R.attachWith (flip applyDiff) (R.current curDyn) editDeleteAddDiffEv
-      
+      editDiffFbEv = R.attachWith (flip applyDiff) (R.current curDyn) $ (RC.mlFilter isJust editDeleteDiffMaybeEv)
       newFEv = R.leftmost [inputFbEv, internalChangeEv]
-      editDeleteInputEv = R.leftmost [diffMaybebToDiffMaybea <$> addDiffMaybebEv, inputFaDiffEv]
-  curDyn <- R.buildDynamic (R.sample inputFbBeh) newFEv -- always has current value
-  deletedKeysDyn <- R.foldDyn (\mdk cdk -> maybe [] (cdk <>) mdk) [] $ R.leftmost [Just <$> deletedKeysEv, Nothing <$ updatedEditDeleteInputEv]
+      
+
+
+  
   WR.buildWidgetResult curDyn internalChangeEv 
 -}
 
