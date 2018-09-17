@@ -137,6 +137,10 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
   ecListViewWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => R.Dynamic t (f v) -> (Key f -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t (Diff f a))
 
+  --
+  ecListViewWithKeyShallowDiff :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
+    => R.Event t (Diff f (Maybe v)) -> (Key f -> v -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t a)
+
   -- required for the select version of the full structure editor
   ecSelectViewListWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => R.Dynamic t (Key f)    -- Current selection key
@@ -156,6 +160,7 @@ instance Ord k => EditableCollection (M.Map k) where
   type NewItem (M.Map k) b = (k,b)
   editOnlyValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff (Proxy :: Proxy (M.Map k))
   ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget nat = const . fmap (fmap nat)
   diffAfterDeletes _ _ = id
@@ -164,7 +169,8 @@ instance (Hashable k, Ord k) => EditableCollection (HM.HashMap k) where
   type NewItem (HM.HashMap k) b = (k,b)
   editOnlyValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  ecSelectViewListWithKey = RC.selectViewListWithKey  
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff (Proxy :: Proxy (HM.HashMap k))
+  ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget nat = const . fmap (fmap nat)
   diffAfterDeletes _ _ = id
 
@@ -172,7 +178,8 @@ instance EditableCollection IM.IntMap where
   type NewItem IM.IntMap b = (Int,b)
   editOnlyValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  ecSelectViewListWithKey = RC.selectViewListWithKey  
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff (Proxy :: Proxy IntMap)  
+  ecSelectViewListWithKey = RC.selectViewListWithKey 
   newKeyValueWidget nat = const . fmap (fmap nat)
   diffAfterDeletes _ _ = id
 
@@ -180,7 +187,8 @@ instance EditableCollection [] where
   type NewItem [] b = b
   editOnlyValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  ecSelectViewListWithKey = RC.selectViewListWithKey  
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff (Proxy :: Proxy [])
+  ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget nat inputgbW fDyn = do
     newEitherbDyn <- fmap nat <$> inputgbW 
     return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right . length <$> fDyn) newEitherbDyn
@@ -193,7 +201,8 @@ instance EditableCollection S.Seq where
   type NewItem S.Seq b = b 
   editOnlyValues _ widget initial = join . fmap distributeOverDynPure <$> RC.listWithKey initial widget
   ecListViewWithKey = RC.listViewWithKey
-  ecSelectViewListWithKey = RC.selectViewListWithKey  
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff (Proxy :: Proxy S.Seq)  
+  ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget nat inputgbW fDyn = do
     newEitherbDyn <- fmap nat <$> inputgbW    
     return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right . S.length <$> fDyn) newEitherbDyn
@@ -206,6 +215,7 @@ instance (A.Ix k, Enum k, Bounded k) => EditableCollection (A.Array k) where
   type NewItem (A.Array k) b = (k,b) 
   editOnlyValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial
   ecListViewWithKey = RC.listViewWithKeyMaybe
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiffMaybe (Proxy :: Proxy (A.Array k))
   ecSelectViewListWithKey = RC.selectViewListWithKeyMaybe  
   newKeyValueWidget _ _ = undefined -- can't add (or delete) in (Array k) collections
   diffAfterDeletes _ _ = id
@@ -214,6 +224,7 @@ instance EditableCollection T.Tree where
   type NewItem T.Tree b = b
   editOnlyValues aTob widget initial = RC.simplifyDynMaybe aTob (flip RC.listWithKeyMaybe widget) initial     
   ecListViewWithKey = RC.listViewWithKeyMaybe
+  ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiffMaybe (Proxy :: Proxy T.Tree)
   ecSelectViewListWithKey = RC.selectViewListWithKeyMaybe  
   newKeyValueWidget _ _ = undefined -- add to where?  Delete all below?  For now undefined.
   diffAfterDeletes _ _ = undefined -- this might make sense but unimplemented for now
@@ -268,6 +279,23 @@ collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
   editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) updatedEditDeleteInputEv -- updates to current on add or carries completely new input
   WR.buildWidgetResult curDyn internalChangeEv 
 
+{-
+collectionEditorWR' :: forall t m f a b. ( RD.Adjustable t m
+                                         , RD.PostBuild t m
+                                         , RD.MonadHold t m                 
+                                         , MonadFix m
+                                         , RD.DomBuilder t m
+                                         , RC.Mergeable f
+                                         , EditableCollection f
+                                         , RC.MapLike (Diff f))                 
+  => (R.Dynamic t (f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete widget.  Fires only on change. Something like Reflex.Collections.
+  -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  add item widget.  Fires only on valid add.
+  -> (f a -> f b) -- we need this to have a starting point for the output dynamics
+  -> (f b -> f a) -- we need this to feed the changes back in to the collection functions
+  -> R.Dynamic t (f a) -- input collection
+  -> m (WR.WidgetResult t (f b))
+collectionEditorWR' editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
+-}
 
 collectionEditor :: ( RD.Adjustable t m
                     , RD.PostBuild t m
