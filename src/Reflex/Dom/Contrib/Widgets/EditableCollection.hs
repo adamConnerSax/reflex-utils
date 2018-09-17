@@ -277,7 +277,7 @@ collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
   curDyn <- R.buildDynamic (R.sample inputFbBeh) newFEv -- always has current value
   deletedKeysDyn <- R.foldDyn (\mdk cdk -> maybe [] (cdk <>) mdk) [] $ R.leftmost [Just <$> deletedKeysEv, Nothing <$ updatedEditDeleteInputEv]
   editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) updatedEditDeleteInputEv -- updates to current on add or carries completely new input
-  WR.buildWidgetResult curDyn internalChangeEv 
+  WR.buildWidgetResult (faTofb <$> fDyn) internalChangeEv 
 
 {-
 collectionEditorWR' :: forall t m f a b. ( RD.Adjustable t m

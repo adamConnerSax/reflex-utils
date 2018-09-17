@@ -176,11 +176,20 @@ instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (IM.
 instance B.Validatable FValidation a => B.Validatable FValidation [a] where
   validator = traverse B.validator
 
+
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m [a] where
   buildForm va mFN lFV =
     let newItemW =  newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy a)
     in validateForm va $ formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV
 
+{-
+instance (FormInstanceC t m, VFormBuilderC t m a, Read a, Show a) => FormBuilder t m [a] where
+  buildForm va mFN lFV =
+    let newItemW = makeForm $ (Compose . WR.dynamicToWidgetResult . fmap maybeToFV) <$> inputValue
+--        editValW _ vDyn = makeForm $ (Compose . WR.dynamicToWidgetResult . fmap maybeToFV) <$> editValue vDyn
+    in validateForm va $ formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV
+-}
+  
 instance B.Validatable FValidation a => B.Validatable FValidation (Seq.Seq a) where
   validator = traverse B.validator
 
@@ -236,7 +245,10 @@ formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
       invalidWidget = return . WR.dynamicToWidgetResult . fmap AccFailure
   davFa <-  R.eitherDyn . fmap avToEither . WR.widgetResultToDynamic . getCompose $ fvFa
   let (errsDynEv, fDynEv) = R.fanEither $ R.leftmost [R.updated davFa, R.tag (R.current davFa) postBuild]
-  Compose . WR.dynamicWidgetResultToWidgetResult  <$> (RD.widgetHold (invalidWidget $ R.constDyn [FInvalid "Initial Widget"]) $ R.leftmost [invalidWidget <$> errsDynEv, collWidget <$> fDynEv])
+      initialWidget = invalidWidget $ R.constDyn [FInvalid "Initial Widget"]
+      updatedWidgetEv = R.leftmost [invalidWidget <$> errsDynEv, collWidget <$> fDynEv]
+  Compose . WR.dynamicWidgetResultToWidgetResult  <$> (RD.widgetHold initialWidget updatedWidgetEv)
+
 
 
 formCollectionValueEditor :: forall t m f a. ( RD.DomBuilder t m
