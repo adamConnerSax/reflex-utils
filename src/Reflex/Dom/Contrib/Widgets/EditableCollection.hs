@@ -369,8 +369,8 @@ editWithDeleteButton editWidget attrs delButton visibleDyn k vDyn = mdo
   postBuild <- R.getPostBuild
   let widgetAttrsDyn = (\x -> attrs <> if x then visibleCSS else hiddenCSS) <$> visibleDyn'
   (visibleDyn', outEv') <- RD.elDynAttr "div" widgetAttrsDyn $ do
-    editedEv <- R.traceEventWith (const "edited") <$> (RD.el "span" $ editWidget k vDyn)
-    delButtonEv <- R.traceEventWith (const "delete button") <$> (RD.el "span" $ delButton)
+    editedEv <- RD.el "span" $ editWidget k vDyn
+    delButtonEv <- RD.el "span" $ delButton
     let outEv = R.leftmost [Just <$> editedEv, Nothing <$ delButtonEv]
 --    visDyn <- R.buildDynamic (R.sample $ R.current visibleDyn) $ R.leftmost [R.updated visibleDyn, isJust <$> outEv]
     visDyn <- R.holdDyn True $ R.leftmost [R.updated visibleDyn, True <$ editedEv, False <$ delButtonEv]
