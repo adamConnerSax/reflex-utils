@@ -312,7 +312,7 @@ testForm cfg x = do
   el "p" $ text ""
   fv <- flexFill LayoutRight $ dynamicForm cfg (Just x)
   el "p" $ text "dynText:"
-  dynText (fmap (T.pack . ppShow) . traceDynWith (const "initialFormOutput") . widgetResultToDynamic $ getCompose fv)
+  dynText (fmap (T.pack . ppShow) . widgetResultToDynamic $ getCompose fv)
   el "p" $ text "Input into new form:"
   el "p" blank
   fv' <- flexFill LayoutRight $ dynamicFormOfFormValue cfg fv
