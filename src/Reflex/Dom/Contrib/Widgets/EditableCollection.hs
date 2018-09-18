@@ -279,62 +279,6 @@ collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
   editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) updatedEditDeleteInputEv -- updates to current on add or carries completely new input
   WR.buildWidgetResult (faTofb <$> fDyn) internalChangeEv 
 
-{-
-collectionEditorWR' :: forall t m f a b. ( RD.Adjustable t m
-                                         , RD.PostBuild t m
-                                         , RD.MonadHold t m                 
-                                         , MonadFix m
-                                         , RD.DomBuilder t m
-                                         , RC.Mergeable f
-                                         , EditableCollection f
-                                         , RC.MapLike (Diff f))                 
-  => (R.Event t (Diff f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete widget.
-  -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  add item widget.  Fires only on valid add.
-  -> (f a -> f b) -- we need this to have a starting point for the output dynamics
-  -> (Diff f (Maybe b) -> Diff f (Maybe a)) -- we need this to feed the changes back in to the collection functions
-  -> R.Dynamic t (f a) -- input collection
-  -> m (WR.WidgetResult t (f b))
-collectionEditorWR' editDeleteWidget addWidget faTofb dfMbTodfMa faDyn = mdo
-  -- we start with all the events, splitting the edits into deletes, which are not tracked inside the editDelete widget,
-  -- and edits, which are. 
-  editDeleteDiffFMbEv <- editDeleteWidget editDeleteInputEv
-  addDiffFbEv <- addWidget fDyn
-  let inputFbEv = faTofb <$> R.updated faDyn
-      deleteOnlyDiffFMbEv = RC.mlFilter isNothing <$> editDeleteDiffFMbEv
-      editOnlyDiffFMbEv =  RC.mlFilter isJust <$> editDeleteDiffFMbEv
-      inputFaDiffEv = R.attachWith RC.diff (fbTofa <$> R.current curFbDyn) (R.updated faDyn)
-  -- we construct a dyn with the current dynamic value of Fb. We need to track deletes since the keys from
-  -- the edit/delete widget may not match the output keys because of deletes (e.g., [])
-      deletedKeysEv = fmap fst . RC.toKeyValueList $ deleteOnlyDiffFMbEv -- R.Event t [Key (Diff f)]
-  -- deleted keys since last widget input update    
-  deletedKeysDyn <- R.foldDyn (\mdk cdk -> maybe [] (cdk <>) mdk) [] $ R.leftmost [Just <$> deletedKeysEv, Nothing <$ editDeleteInputEv]
-  let shiftedEditDeleteDiffFMbEv = R.attachWith (diffAfterDeletes (Proxy :: Proxy f)) (R.current deletedKeysDyn) editDeleteDiffMaybeEv
-      editDeleteFbEv = R.attachWith (flip R.applyDiff) (R.current curFbDyn) shiftedEditDeleteDiffFMbEv
-      addFbEv = R.attachWith (flip RC.applyDiff) (R.current curFbDyn) (fmap Just <$> addDiffFb)
-  let inputFbBeh = faTofb <$> R.current faDyn      
-  curFbDyn <- R.buildDynamic (R.sample inputFbBeh) $ R.leftmost [editDeleteFbEv, addFbEv, inputFbEv]
-  -- we construct a dyn to reflect the current internal state of the collection *as the edit/delete widget knows it*
-  -- which is without deletes until an add or new input updates the widget.  And 
-  let editsOnlyFbEv <- R.attachWith (flip RC.applyDiff) (R.current editDeleteStateFbDyn) editsOnlyFbEv      
-  editDeleteStateFbDyn <- R.buildDynamic (R.sample inputFBeh) $ R.leftmost [editsOnlyFbEv, addFbEv, inputFbEv]
-  -- now we construct the event used to update the edit/delete widget
-  -- this is tricky since the widget takes a diffs *relative to what it knows (adds, edits but not deletes)*
-  -- first we track deletes since the internal state has been updated
-
-
-      
-      
-
-      editDeleteAddDiffEv = R.leftmost [shiftedEditDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
-      internalChangeEv = R.attachWith (flip applyDiff) (R.current curDyn) editDeleteAddDiffEv
-      editDiffFbEv = R.attachWith (flip applyDiff) (R.current curDyn) $ (RC.mlFilter isJust editDeleteDiffMaybeEv)
-      newFEv = R.leftmost [inputFbEv, internalChangeEv]
-      
-
-
-  
-  WR.buildWidgetResult curDyn internalChangeEv 
--}
 
 
 collectionEditor :: ( RD.Adjustable t m
@@ -497,3 +441,62 @@ leftWhenNotRight leftEv rightEv = R.fmapMaybe id $ R.leftmost [Nothing <$ rightE
 
 rightWhenNotLeft :: R.Reflex t => R.Event t a -> R.Event t b -> R.Event t b
 rightWhenNotLeft leftEv rightEv = R.fmapMaybe id $ R.leftmost [Nothing <$ leftEv, Just <$> rightEv]
+
+
+-- make a version using shallow diff so we can be more efficient in handling of adds?
+{-
+collectionEditorWR' :: forall t m f a b. ( RD.Adjustable t m
+                                         , RD.PostBuild t m
+                                         , RD.MonadHold t m                 
+                                         , MonadFix m
+                                         , RD.DomBuilder t m
+                                         , RC.Mergeable f
+                                         , EditableCollection f
+                                         , RC.MapLike (Diff f))                 
+  => (R.Event t (Diff f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete widget.
+  -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  add item widget.  Fires only on valid add.
+  -> (f a -> f b) -- we need this to have a starting point for the output dynamics
+  -> (Diff f (Maybe b) -> Diff f (Maybe a)) -- we need this to feed the changes back in to the collection functions
+  -> R.Dynamic t (f a) -- input collection
+  -> m (WR.WidgetResult t (f b))
+collectionEditorWR' editDeleteWidget addWidget faTofb dfMbTodfMa faDyn = mdo
+  -- we start with all the events, splitting the edits into deletes, which are not tracked inside the editDelete widget,
+  -- and edits, which are. 
+  editDeleteDiffFMbEv <- editDeleteWidget editDeleteInputEv
+  addDiffFbEv <- addWidget fDyn
+  let inputFbEv = faTofb <$> R.updated faDyn
+      deleteOnlyDiffFMbEv = RC.mlFilter isNothing <$> editDeleteDiffFMbEv
+      editOnlyDiffFMbEv =  RC.mlFilter isJust <$> editDeleteDiffFMbEv
+      inputFaDiffEv = R.attachWith RC.diff (fbTofa <$> R.current curFbDyn) (R.updated faDyn)
+  -- we construct a dyn with the current dynamic value of Fb. We need to track deletes since the keys from
+  -- the edit/delete widget may not match the output keys because of deletes (e.g., [])
+      deletedKeysEv = fmap fst . RC.toKeyValueList $ deleteOnlyDiffFMbEv -- R.Event t [Key (Diff f)]
+  -- deleted keys since last widget input update    
+  deletedKeysDyn <- R.foldDyn (\mdk cdk -> maybe [] (cdk <>) mdk) [] $ R.leftmost [Just <$> deletedKeysEv, Nothing <$ editDeleteInputEv]
+  let shiftedEditDeleteDiffFMbEv = R.attachWith (diffAfterDeletes (Proxy :: Proxy f)) (R.current deletedKeysDyn) editDeleteDiffMaybeEv
+      editDeleteFbEv = R.attachWith (flip R.applyDiff) (R.current curFbDyn) shiftedEditDeleteDiffFMbEv
+      addFbEv = R.attachWith (flip RC.applyDiff) (R.current curFbDyn) (fmap Just <$> addDiffFb)
+  let inputFbBeh = faTofb <$> R.current faDyn      
+  curFbDyn <- R.buildDynamic (R.sample inputFbBeh) $ R.leftmost [editDeleteFbEv, addFbEv, inputFbEv]
+  -- we construct a dyn to reflect the current internal state of the collection *as the edit/delete widget knows it*
+  -- which is without deletes until an add or new input updates the widget.  And 
+  let editsOnlyFbEv <- R.attachWith (flip RC.applyDiff) (R.current editDeleteStateFbDyn) editsOnlyFbEv      
+  editDeleteStateFbDyn <- R.buildDynamic (R.sample inputFBeh) $ R.leftmost [editsOnlyFbEv, addFbEv, inputFbEv]
+  -- now we construct the event used to update the edit/delete widget
+  -- this is tricky since the widget takes a diffs *relative to what it knows (adds, edits but not deletes)*
+  -- first we track deletes since the internal state has been updated
+
+
+      
+      
+
+      editDeleteAddDiffEv = R.leftmost [shiftedEditDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
+      internalChangeEv = R.attachWith (flip applyDiff) (R.current curDyn) editDeleteAddDiffEv
+      editDiffFbEv = R.attachWith (flip applyDiff) (R.current curDyn) $ (RC.mlFilter isJust editDeleteDiffMaybeEv)
+      newFEv = R.leftmost [inputFbEv, internalChangeEv]
+      
+
+
+  
+  WR.buildWidgetResult curDyn internalChangeEv 
+-}

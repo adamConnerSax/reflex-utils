@@ -189,7 +189,7 @@ instance (FormInstanceC t m, VFormBuilderC t m a, Read a, Show a) => FormBuilder
 --        editValW _ vDyn = makeForm $ (Compose . WR.dynamicToWidgetResult . fmap maybeToFV) <$> editValue vDyn
     in validateForm va $ formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV
 -}
-  
+
 instance B.Validatable FValidation a => B.Validatable FValidation (Seq.Seq a) where
   validator = traverse B.validator
 
@@ -240,7 +240,7 @@ formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
       editDeletableWidget = case display of
         EC.DisplayAll -> flip EC.ecListViewWithKey editAndDeleteWidget
         EC.DisplayEach ddAttrs toText -> EC.selectEditValues ddAttrs toText (EC.updateKeyLabelMap (Proxy :: Proxy f)) editAndDeleteWidget
-      addNewWidget = EC.addNewItemWidget $ EC.newKeyValueWidget avToEither (WR.widgetResultToDynamic . getCompose <$> unF newItemWidget)
+      addNewWidget = EC.addNewItemWidgetModal $ EC.newKeyValueWidget avToEither (WR.widgetResultToDynamic . getCompose <$> unF newItemWidget)
       collWidget fDyn = fmap AccSuccess <$> EC.collectionEditorWR editDeletableWidget addNewWidget id id fDyn
       invalidWidget = return . WR.dynamicToWidgetResult . fmap AccFailure
   davFa <-  R.eitherDyn . fmap avToEither . WR.widgetResultToDynamic . getCompose $ fvFa
