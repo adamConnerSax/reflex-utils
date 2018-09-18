@@ -329,7 +329,7 @@ testContainers cfg = do
 --        , ("Seq of String" , testForm cfg hseq)
 --        , ("List of A", testForm cfg lOfA1)
 --        , ("Seq of A", testForm cfg seqA)
-            ("Empty [[Int]]", testForm cfg ([] :: [[Int]])) 
+            ("Empty [[Int]]", testForm cfg ([] :: [[Int]]))
           ,   ("[(Text,Int)]", testForm cfg listOfTuples)
         ,  ("[[Int]]", testForm cfg listOfList)
 --        , ("Map Text Int", testForm cfg testMap)

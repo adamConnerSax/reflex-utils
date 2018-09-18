@@ -48,7 +48,8 @@ import           Reflex.Dom.Contrib.FormBuilder.Builder         (FieldName,
                                                                  toReadOnly,
                                                                  unF,
                                                                  validateForm)
-import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FValidation, FormError (FInvalid),
+import           Reflex.Dom.Contrib.FormBuilder.DynValidation   (FValidation, FormError (FInvalid, FNothing),
+                                                                 FormErrors,
                                                                  avToEither,
                                                                  maybeToFV,
                                                                  mergeAccValidation)
@@ -145,6 +146,7 @@ hideKeyEditVal :: (FormInstanceC t m, VFormBuilderC t m v) => k -> R.Dynamic t v
 hideKeyEditVal _ vDyn = makeForm $ do
   fItem . unF $ buildVForm Nothing (dynamicToFormValue vDyn)
 
+
 newItemWidget :: (EC.EditableCollection f, FormInstanceC t m, VFormBuilderC t m (EC.NewItem f a))
   => Proxy f -> Proxy a -> Form t m (EC.NewItem f a)
 newItemWidget _ _ = buildVForm Nothing formValueNothing
@@ -175,7 +177,6 @@ instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (IM.
 
 instance B.Validatable FValidation a => B.Validatable FValidation [a] where
   validator = traverse B.validator
-
 
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m [a] where
   buildForm va mFN lFV =
@@ -227,6 +228,7 @@ formCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
                                         , EC.EditableCollection f
                                         , Ord (RC.Key f)
                                         , RC.MapLike (RC.Diff f)
+                                        , Monoid (f a)
                                         , RC.Key f ~ RC.Key (RC.Diff f))
   => EC.DisplayCollection t (RC.Key f) -- use a dropdown or show entire collection
   -> (RC.Key f -> R.Dynamic t a -> Form t m a) -- display and edit existing
@@ -245,8 +247,11 @@ formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
       invalidWidget = return . WR.dynamicToWidgetResult . fmap AccFailure
   davFa <-  R.eitherDyn . fmap avToEither . WR.widgetResultToDynamic . getCompose $ fvFa
   let (errsDynEv, fDynEv) = R.fanEither $ R.leftmost [R.updated davFa, R.tag (R.current davFa) postBuild]
+      isFNothing formErrs = if formErrs == [FNothing] then Just () else Nothing
+  fNothingEv <- R.fmapMaybe isFNothing . R.updated . join <$> R.holdDyn (R.constDyn $ [FNothing]) errsDynEv -- add empty container case
+  let fNothingFaDynEv = R.constDyn mempty <$ fNothingEv
       initialWidget = invalidWidget $ R.constDyn [FInvalid "Initial Widget"]
-      updatedWidgetEv = R.leftmost [invalidWidget <$> errsDynEv, collWidget <$> fDynEv]
+      updatedWidgetEv = R.leftmost [collWidget <$> fNothingFaDynEv, invalidWidget <$> errsDynEv, collWidget <$> fDynEv]
   Compose . WR.dynamicWidgetResultToWidgetResult  <$> (RD.widgetHold initialWidget updatedWidgetEv)
 
 
