@@ -165,9 +165,8 @@ formCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
                                         , RC.Mergeable f
                                         , EC.EditableCollection f
                                         , Ord (RC.Key f)
-                                        , RC.MapLike (RC.Diff f)
                                         , Monoid (f a)
-                                        , RC.Key f ~ RC.Key (RC.Diff f))
+                                        , RC.Key f ~ RC.Key (RC.KeyValueSet f))
   => EC.DisplayCollection t (RC.Key f) -- use a dropdown or show entire collection
   -> (RC.Key f -> R.Dynamic t a -> Form t m a) -- display and edit existing
   -> Form t m (EC.NewItem f a) -- input a new one
