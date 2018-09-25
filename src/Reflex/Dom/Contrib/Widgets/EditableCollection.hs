@@ -106,8 +106,7 @@ simpleCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
                                           , RC.Mergeable f
                                           , EditableCollection f
                                           , Ord (Key f)
-                                          , MapLike (Diff f)
-                                          , Key f ~ Key (Diff f))
+                                          , Key f ~ Key (KeyValueSet f))
   => DisplayCollection t (Key f) -- use a dropdown or show entire collection
   -> (RC.Key f -> R.Dynamic t a -> m (R.Dynamic t (Maybe a))) -- display and edit existing
   -> m (R.Dynamic t (Maybe (NewItem f a))) -- input a new one
@@ -135,25 +134,25 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
 
   -- required for the full structure editor
   ecListViewWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
-    => R.Dynamic t (f v) -> (Key f -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t (Diff f a))
+    => R.Dynamic t (f v) -> (Key f -> R.Dynamic t v -> m (R.Event t a)) -> m (R.Event t (KeyValueSet f a))
 
   --
   ecListViewWithKeyShallowDiff :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
-    => Proxy f -> R.Event t (Diff f (Maybe v)) -> (Key f -> v -> R.Event t v -> m (R.Event t a)) -> m (R.Event t (Diff f a))
+    => Proxy f -> R.Event t (Diff f v) -> (Key f -> v -> R.Event t v -> m (R.Event t a)) -> m (R.Event t (KeyValueSet f a))
 
   -- required for the select version of the full structure editor
   ecSelectViewListWithKey :: (RD.Adjustable t m, RD.PostBuild t m, RD.MonadHold t m, MonadFix m)
     => R.Dynamic t (Key f)    -- Current selection key
     -> R.Dynamic t (f a)      -- Dynamic container of values
     -> (Key f -> R.Dynamic t a -> R.Dynamic t Bool -> m (R.Event t b)) -- create a widget from Dynamic value and Dynamic Bool (is widget selected?)
-    -> m (R.Event t (Diff f b))
+    -> m (R.Event t (KeyValueSet f b))
 
   -- required for either full structure editor in order to generalize over Key/Value collections like Map vs Value collections like []
   newKeyValueWidget :: (R.Reflex t, Applicative g, Monad m)
-    => (forall x. g x -> Either e x) -> m (R.Dynamic t (g (NewItem f b))) -> (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (Diff f), b))))
+    => (forall x. g x -> Either e x) -> m (R.Dynamic t (g (NewItem f b))) -> (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f), b))))
 
   -- some containers (e.g., lists and sequences) "contract" when items are deleted and we need to keep track of this so edits are applied to the correct elements
-  diffAfterDeletes :: Proxy f -> [Key (Diff f)] -> Diff f b -> Diff f b
+  diffAfterDeletes :: Proxy f -> [Key (KeyValueSet f)] -> KeyValueSet f b -> KeyValueSet f b
   
     
 instance Ord k => EditableCollection (M.Map k) where
@@ -254,20 +253,19 @@ collectionEditorWR :: forall t m f a b. ( RD.Adjustable t m
                                         , MonadFix m
                                         , RD.DomBuilder t m
                                         , RC.Mergeable f
-                                        , EditableCollection f
-                                        , RC.MapLike (Diff f))                 
-  => (R.Dynamic t (f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete widget.  Fires only on change. Something like Reflex.Collections.
-  -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  add item widget.  Fires only on valid add.
+                                        , EditableCollection f)
+  => (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) -- edit/Delete widget.  Fires only on change. Something like Reflex.Collections.
+  -> (R.Dynamic t (f b) -> m (R.Event t (KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
   -> (f a -> f b) -- we need this to have a starting point for the output dynamics
   -> (f b -> f a) -- we need this to feed the changes back in to the collection functions
   -> R.Dynamic t (f a) -- input collection
   -> m (WR.WidgetResult t (f b))
 collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
   editDeleteDiffMaybeEv <- editDeleteWidget (fbTofa <$> editDeleteInputDyn)
-  addDiffMaybeEv <- fmap (fmap Just) <$> addWidget (fbTofa <$> curDyn)
+  addDiffMaybeEv <- fmap (fmap Just) <$> addWidget curDyn
   let inputFbBeh = faTofb <$> R.current fDyn 
       inputFbEv = faTofb <$> R.updated fDyn
-      deletedKeysEv = fmap fst . RC.toKeyValueList . RC.mlFilter isNothing <$> editDeleteDiffMaybeEv -- R.Event t [Key (Diff f)]
+      deletedKeysEv = fmap fst . RC.toKeyValueList . RC.slFilter isNothing <$> editDeleteDiffMaybeEv -- R.Event t [Key (Diff f)]
       shiftedEditDeleteDiffMaybeEv = R.attachWith (diffAfterDeletes (Proxy :: Proxy f)) (R.current deletedKeysDyn) editDeleteDiffMaybeEv
       editDeleteAddDiffEv = R.leftmost [shiftedEditDeleteDiffMaybeEv, addDiffMaybeEv] -- should this combine if same frame?
       addFEv = R.attachWith (flip applyDiff) (R.current curDyn) addDiffMaybeEv
@@ -281,16 +279,35 @@ collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
 
 
 
+{-
+collectionEditor2WR :: forall t m f a b. ( RD.Adjustable t m
+                                         , RD.PostBuild t m
+                                         , RD.MonadHold t m                 
+                                         , MonadFix m
+                                         , Monoid (f a)
+                                         , RD.DomBuilder t m
+                                         , RC.Mergeable f
+                                         , EditableCollection f)
+  => (Key f -> a -> R.Event t a -> m (R.Event t (Maybe b))) -- edit/delete widget. Fires only on internal change.  
+  -> (R.Dynamic t (f b) -> m (R.Event t (KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
+  -> Rc.Diff f a -> RC.Diff f b
+  -> R.Dynamic t (f a)
+  -> m (R.Dynamic t (f b))
+collectionEditor2WR itemWidget addItemWidget dfaTodfb faDyn = mdo
+  kvbDyn <- selfEditingCollectionEv dfaTodfb updateDeletes updateAll itemWidget (mempty :: f a)  faDiffsEv 
+  addDiffMaybeEv <- fmap (fmap Just) <$> addWidget curDyn  
+-}
+
+
 collectionEditor :: ( RD.Adjustable t m
                     , RD.PostBuild t m
                     , RD.MonadHold t m                 
                     , MonadFix m
                     , RD.DomBuilder t m
                     , RC.Mergeable f
-                    , EditableCollection f
-                    , RC.MapLike (Diff f))                 
-  => (R.Dynamic t (f a) -> m (R.Event t (Diff f (Maybe b)))) -- edit/Delete widget.  Fires only on change. Something like Reflex.Collections.ListView.
-  -> (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) --  add item widget.  Fires only on valid add.
+                    , EditableCollection f)
+  => (R.Dynamic t (f a) -> m (R.Event t (Diff f b))) -- edit/Delete widget.  Fires only on change. Something like Reflex.Collections.ListView.
+  -> (R.Dynamic t (f b) -> m (R.Event t (KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
   -> (f a -> f b) -- we need this to have a starting point for the output dynamics
   -> (f b -> f a) -- we need this to feed the changes back in to the collection functions
   -> R.Dynamic t (f a) -- input collection
@@ -310,10 +327,10 @@ selectEditValues :: ( RD.Adjustable t m
                     , EditableCollection f) -- for dropdown label
   => R.Dynamic t (M.Map T.Text T.Text) -- dropdown attrs.
   -> (RC.Key f -> T.Text)
-  -> (RC.Diff f b -> M.Map (Key f) T.Text -> M.Map (Key f) T.Text) -- function to adjust dropdown labels 
+  -> (RC.KeyValueSet f b -> M.Map (Key f) T.Text -> M.Map (Key f) T.Text) -- function to adjust dropdown labels 
   -> (Key f -> R.Dynamic t a -> m (R.Event t b)) -- single element edit widget 
   -> R.Dynamic t (f a)
-  -> m (R.Event t (RC.Diff f b))
+  -> m (R.Event t (RC.KeyValueSet f b))
 selectEditValues ddAttrsDyn keyToLabel updateLabelMap elemWidget fDyn = mdo
   attrsDyn <- R.foldDyn (<>) ("size" RD.=: "1") (R.updated ddAttrsDyn)
   let safeDropdownConfig = SD.SafeDropdownConfig R.never attrsDyn
@@ -332,7 +349,10 @@ selectEditValues ddAttrsDyn keyToLabel updateLabelMap elemWidget fDyn = mdo
   diffBEv <- R.switchPromptlyDyn <$> (RD.widgetHold (return R.never) $ R.leftmost [nullWidgetEv, selWidget <$> safeKeyEv]) -- Event t (Diff f b)
   return diffBEv
 
-updateKeyLabelMap :: (RC.Diffable f, RC.Key f ~ RC.Key (RC.Diff f), Ord (Key (Diff f))) => Proxy f -> RC.Diff f (Maybe a) -> M.Map (Key f) b -> M.Map (Key f) b
+updateKeyLabelMap ::  (RC.Diffable f
+                     , RC.Key f ~ RC.Key (RC.KeyValueSet f)
+                     , Ord (Key (KeyValueSet f)))
+  => Proxy f -> RC.Diff f a -> M.Map (Key f) b -> M.Map (Key f) b
 updateKeyLabelMap _ d x =
   let mapOfDeletes = M.filter isNothing . M.fromList . RC.toKeyValueList $ d
   in M.difference x mapOfDeletes
@@ -395,9 +415,9 @@ addNewItemWidgetModal :: ( R.Reflex t
                          , Diffable f
                          , Show e
                          , Monoid e)
-  => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (Diff f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
+  => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
   -> R.Dynamic t (f a)
-  -> m (R.Event t (Diff f b))
+  -> m (R.Event t (KeyValueSet f b))
 addNewItemWidgetModal editPairW mapDyn = do
   let modalEditW = const $ editPairW mapDyn
       blankInput = R.constDyn $ Left mempty
@@ -414,9 +434,9 @@ addNewItemWidget :: ( R.Reflex t
                     , Diffable f
                     , Show e
                     , Monoid e)
-  => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (Diff f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
+  => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
   -> R.Dynamic t (f a)
-  -> m (R.Event t (Diff f b))
+  -> m (R.Event t (KeyValueSet f b))
 addNewItemWidget editPairW fDyn = do
   let pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
   newPairEv <- R.fmapMaybe (either (const Nothing) Just) . R.updated <$> editPairW fDyn
