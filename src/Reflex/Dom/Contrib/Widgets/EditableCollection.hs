@@ -14,6 +14,7 @@ module Reflex.Dom.Contrib.Widgets.EditableCollection
   (
     simpleCollectionValueEditor
   , simpleCollectionEditor
+  , simpleCollectionEditor2
   , DisplayCollection (..)
   , EditableCollection(..)
   , collectionEditor
@@ -38,6 +39,7 @@ import qualified Reflex.Dom.Contrib.Widgets.SafeDropdown as SD
 
 -- for the collection functions and constraints they need
 import           Reflex.Collections.Collections as RC
+import           Reflex.Collections.SelfEditingCollection as RC
 
 import           Reflex.Dom        ((=:))                 
 import qualified Reflex            as R
@@ -123,6 +125,30 @@ simpleCollectionEditor display editWidget newItemWidget fDyn =
       addNewWidget = addNewItemWidgetModal $ newKeyValueWidget (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget 
   in collectionEditor editDeletableWidget addNewWidget id id fDyn
 
+
+simpleCollectionEditor2 :: forall t m f a. ( RD.DomBuilder t m
+                                          , RD.PostBuild t m
+                                          , MonadWidgetExtraC t m
+                                          , R.Adjustable t m
+                                          , R.MonadHold t m
+                                          , MonadFix m
+                                          , RC.Mergeable f
+                                          , RC.FannableC f a
+                                          , RC.SequenceableWithEventC t f (Maybe a)
+                                          , Monoid (f a)
+                                          , EditableCollection f
+                                          , Ord (Key f)
+                                          , Key f ~ Key (KeyValueSet f))
+  => (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe a))) -- display and edit existing
+  -> m (R.Dynamic t (Maybe (NewItem f a))) -- input a new one
+  -> R.Dynamic t (f a)
+  -> m (R.Dynamic t (f a))
+simpleCollectionEditor2 editWidget newItemWidget fDyn =
+  let editValueWidget k a aEv = R.holdDyn a aEv >>= editWidget k -- $  R.fmapMaybe id . R.updated <$> editWidget k vDyn -- m (R.Event t (f a))
+      addNewWidget = addNewItemWidgetModal $ newKeyValueWidget (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget
+      diffFromKVAndNew dfa fa = RC.slUnion (Just <$> RC.toKeyValueSet fa) (Nothing <$ dfa)
+  in WR.widgetResultToDynamic <$> collectionEditor2WR editValueWidget addNewWidget diffFromKVAndNew id id fDyn
+
 -- | This class allows the collection editing functions to be polymorphic over the types supported by Reflex.Collections
 class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) where
   type NewItem f b :: Type
@@ -189,8 +215,10 @@ instance EditableCollection [] where
   ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff 
   ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget nat inputgbW fDyn = do
-    newEitherbDyn <- fmap nat <$> inputgbW 
-    return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right . length <$> fDyn) newEitherbDyn
+    newEitherbDyn <- fmap nat <$> inputgbW
+--    let newKeyDyn = (\im -> if IM.null im then 0 else 1 + (fst $ IM.findMax im)) <$> kvDyn
+    let newKeyDyn = length <$> fDyn 
+    return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right <$> newKeyDyn) newEitherbDyn
   diffAfterDeletes :: Proxy [] -> [Int] -> IM.IntMap b -> IM.IntMap b
   diffAfterDeletes _ deletedKeys oldDiff =
     let newKey n = n - (length . filter (< n) $ deletedKeys)
@@ -203,8 +231,10 @@ instance EditableCollection S.Seq where
   ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff 
   ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget nat inputgbW fDyn = do
-    newEitherbDyn <- fmap nat <$> inputgbW    
-    return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right . S.length <$> fDyn) newEitherbDyn
+    newEitherbDyn <- fmap nat <$> inputgbW
+--    let newKeyDyn = (\im -> if IM.null im then 0 else 1 + (fst $ IM.findMax im)) <$> kvDyn
+    let newKeyDyn = length <$> fDyn 
+    return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right <$> newKeyDyn) newEitherbDyn
   diffAfterDeletes :: Proxy S.Seq -> [Int] -> IM.IntMap b -> IM.IntMap b
   diffAfterDeletes _ deletedKeys oldDiff =
     let newKey n = n - (length . filter (< n) $ deletedKeys)
@@ -278,8 +308,6 @@ collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
   WR.buildWidgetResult (faTofb <$> fDyn) internalChangeEv 
 
 
-
-{-
 collectionEditor2WR :: forall t m f a b. ( RD.Adjustable t m
                                          , RD.PostBuild t m
                                          , RD.MonadHold t m                 
@@ -287,17 +315,34 @@ collectionEditor2WR :: forall t m f a b. ( RD.Adjustable t m
                                          , Monoid (f a)
                                          , RD.DomBuilder t m
                                          , RC.Mergeable f
+                                         , RC.FannableC f a
+                                         , RC.SequenceableWithEventC t f (Maybe b)
                                          , EditableCollection f)
   => (Key f -> a -> R.Event t a -> m (R.Event t (Maybe b))) -- edit/delete widget. Fires only on internal change.  
   -> (R.Dynamic t (f b) -> m (R.Event t (KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
-  -> Rc.Diff f a -> RC.Diff f b
+  -> (RC.KeyValueSet f b -> f a -> RC.Diff f a)
+  -> (RC.Diff f a -> RC.Diff f b)
+  -> (RC.Diff f b -> RC.Diff f a)
   -> R.Dynamic t (f a)
-  -> m (R.Dynamic t (f b))
-collectionEditor2WR itemWidget addItemWidget dfaTodfb faDyn = mdo
-  kvbDyn <- selfEditingCollectionEv dfaTodfb updateDeletes updateAll itemWidget (mempty :: f a)  faDiffsEv 
-  addDiffMaybeEv <- fmap (fmap Just) <$> addWidget curDyn  
--}
+  -> m (WR.WidgetResult t (f b))
+collectionEditor2WR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
+  let updateDeletes :: RC.KeyValueSet f b -> RC.Diff f b -> RC.Diff f a
+      updateDeletes _ dfb = dfbTodfa $ RC.slFilter isNothing dfb
+      updateAll :: RC.KeyValueSet f b -> RC.Diff f b -> RC.Diff f b
+      updateAll kvb dfb = RC.slUnion dfb (Just <$> kvb) -- left biased union
+  postBuild <- R.getPostBuild
+  rec (kvbDyn, dfbEv) <- RC.selfEditingCollectionWithChanges dfaTodfb updateDeletes updateAll itemWidget (mempty :: f a)  dfaEv -- Dynamic t (KeyValueSet f b)
+      dfbAddEv <- fmap (fmap Just) <$> addWidget curDyn  -- Event t (Diff f b)
+      let newInputFaEv = R.leftmost [R.updated faDyn, R.tag (R.current faDyn) postBuild]
+          dfaNewInputEv = R.attachWith updateFromInput (R.current kvbDyn) newInputFaEv
+          dfaEv = R.leftmost [dfaNewInputEv, dfbTodfa <$> dfbAddEv]
+          curDyn = RC.fromCompleteKeyValueSet <$> kvbDyn
+  return $ WR.unsafeBuildWidgetResult curDyn (() <$ dfbEv)
+  
 
+
+diffMapToKVMap :: RC.Diffable f => Proxy f -> (RC.Diff f a -> RC.Diff f b) -> RC.KeyValueSet f a -> RC.KeyValueSet f b
+diffMapToKVMap _ g = RC.slMapMaybe id . g . fmap Just 
 
 collectionEditor :: ( RD.Adjustable t m
                     , RD.PostBuild t m
@@ -418,8 +463,8 @@ addNewItemWidgetModal :: ( R.Reflex t
   => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
   -> R.Dynamic t (f a)
   -> m (R.Event t (KeyValueSet f b))
-addNewItemWidgetModal editPairW mapDyn = do
-  let modalEditW = const $ editPairW mapDyn
+addNewItemWidgetModal editPairW faDyn = do
+  let modalEditW = const $ editPairW faDyn
       blankInput = R.constDyn $ Left mempty
       pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
   newPairEv <- ME.modalEditor_change <$> ME.modalEditorEither modalEditW blankInput newItemEditorConfig
@@ -444,7 +489,7 @@ addNewItemWidget editPairW fDyn = do
 
 
 -- one possible button widget
-buttonNoSubmit :: RD.DomBuilder t m=>T.Text -> m (R.Event t ())
+buttonNoSubmit :: RD.DomBuilder t m => T.Text -> m (R.Event t ())
 buttonNoSubmit t = (RD.domEvent RD.Click . fst) <$> RD.elAttr' "button" ("type" RD.=: "button") (RD.text t)
     
 hiddenCSS :: M.Map T.Text T.Text

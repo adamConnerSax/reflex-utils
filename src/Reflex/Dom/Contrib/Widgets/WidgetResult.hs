@@ -136,7 +136,7 @@ conservativeRetrofitWidgetResult w da = do
   return $ unsafeBuildWidgetResult db filteredEvOut
 
 -- this should only be used to retrofit a dynamic/event pair which already satisfy the
-unsafeBuildWidgetResult :: Reflex t => Dynamic t a -> Event t a -> WidgetResult t a
+unsafeBuildWidgetResult :: Reflex t => Dynamic t a -> Event t b -> WidgetResult t a
 unsafeBuildWidgetResult d e = WidgetResult d (() <$ e)
 
 

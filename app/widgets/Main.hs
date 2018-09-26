@@ -79,6 +79,12 @@ editValue valDyn = do
       config = RD.TextInputConfig "text" "" inputEv (R.constDyn M.empty)
   fmap (readMaybe . T.unpack) . RD._textInput_value <$> RD.textInput config
 
+editDeleteValue :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Show a, Read a) => R.Dynamic t a -> m (R.Event t (Maybe a))
+editDeleteValue aDyn = RD.el "div" $ do
+  maDyn <- RD.el "span" $ editValue aDyn
+  delEv <- RD.el "span" $ EC.buttonNoSubmit "-"
+  return $ R.leftmost [fmap Just . R.fmapMaybe id $ R.updated maDyn, Nothing <$ delEv]
+
 inputPair :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Read k, Read v) => m (R.Dynamic t (Maybe (k,v)))
 inputPair = do
   let config = RD.TextInputConfig "text" "" R.never (R.constDyn M.empty)
@@ -105,7 +111,7 @@ newLine = RD.el "p" (RD.text "") >> RD.el "br" RD.blank
 editableCollectionsWidget :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.MonadHold t m, RD.PostBuild t m, MonadFix m) => m ()
 editableCollectionsWidget = do
   let testMap :: M.Map T.Text Int = M.fromList [("A",1),("B",2),("C",3),("D",4)]
-      testMapOfMaps :: M.Map T.Text (M.Map T.Text Int) = M.fromList [("A",testMap),("B",testMap)] 
+      testMapOfMaps :: M.Map T.Text (M.Map T.Text Int) = M.fromList [("A",testMap),("B",testMap)]
       testList :: [T.Text] = ["Hello","Goodbye","Cat"]
       testListOfLists :: [[Int]] = [[1,2],[3,4]]
       displayEach = (EC.DisplayEach (R.constDyn M.empty) (T.pack . show))
@@ -119,6 +125,7 @@ editableCollectionsWidget = do
 --  editListDyn <- newLine >> EC.simpleCollectionValueEditor displayEach (const editValue) (R.constDyn testList)
 --  newLine >> (RD.dynText $ fmap (T.pack . show) editListDyn)
   editListStructureDyn <- newLine >> EC.simpleCollectionEditor display (const editValue) inputValue (R.constDyn testList)
+--  editListStructureDyn <- newLine >> EC.simpleCollectionEditor2  (const editDeleteValue) inputValue (R.constDyn testList)
   newLine >> (RD.dynText $ fmap (T.pack . show) editListStructureDyn)
   let editListAsValue cDyn = fmap Just <$> EC.simpleCollectionEditor display (const editValue) inputValue cDyn
       inputList = editListAsValue (R.constDyn [])
