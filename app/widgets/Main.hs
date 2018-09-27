@@ -124,8 +124,8 @@ editableCollectionsWidget = do
   newLine >> (RD.dynText $ fmap (T.pack . show) editMapStructureDyn')
 --  editListDyn <- newLine >> EC.simpleCollectionValueEditor displayEach (const editValue) (R.constDyn testList)
 --  newLine >> (RD.dynText $ fmap (T.pack . show) editListDyn)
-  editListStructureDyn <- newLine >> EC.simpleCollectionEditor display (const editValue) inputValue (R.constDyn testList)
---  editListStructureDyn <- newLine >> EC.simpleCollectionEditor2  (const editDeleteValue) inputValue (R.constDyn testList)
+--  editListStructureDyn <- newLine >> EC.simpleCollectionEditor display (const editValue) inputValue (R.constDyn testList)
+  editListStructureDyn <- newLine >> EC.simpleCollectionEditor2  (const editDeleteValue) inputValue (R.constDyn testList)
   newLine >> (RD.dynText $ fmap (T.pack . show) editListStructureDyn)
   let editListAsValue cDyn = fmap Just <$> EC.simpleCollectionEditor display (const editValue) inputValue cDyn
       inputList = editListAsValue (R.constDyn [])

@@ -116,13 +116,14 @@ simpleCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
   -> m (R.Dynamic t (f a))
 simpleCollectionEditor display editWidget newItemWidget fDyn =
   let editValueWidget k vDyn = R.fmapMaybe id . R.updated <$> editWidget k vDyn -- m (R.Event t (f a))
+      pf = Proxy :: Proxy f
       editAndDeleteWidget k vDyn = do
         widgetVis <- R.holdDyn True $ True <$ R.updated vDyn
         editWithDeleteButton editValueWidget M.empty (buttonNoSubmit "-") widgetVis k vDyn
       editDeletableWidget = case display of
         DisplayAll -> flip ecListViewWithKey editAndDeleteWidget
         DisplayEach ddAttrs toText -> selectEditValues ddAttrs toText (updateKeyLabelMap (Proxy :: Proxy f)) editAndDeleteWidget
-      addNewWidget = addNewItemWidgetModal $ newKeyValueWidget (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget 
+      addNewWidget = (addNewItemWidgetModal pf $ newKeyValueWidget pf (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget) . fmap RC.toKeyValueSet 
   in collectionEditor editDeletableWidget addNewWidget id id fDyn
 
 
@@ -145,7 +146,8 @@ simpleCollectionEditor2 :: forall t m f a. ( RD.DomBuilder t m
   -> m (R.Dynamic t (f a))
 simpleCollectionEditor2 editWidget newItemWidget fDyn =
   let editValueWidget k a aEv = R.holdDyn a aEv >>= editWidget k -- $  R.fmapMaybe id . R.updated <$> editWidget k vDyn -- m (R.Event t (f a))
-      addNewWidget = addNewItemWidgetModal $ newKeyValueWidget (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget
+      pf = Proxy :: Proxy f
+      addNewWidget = addNewItemWidgetModal pf $ newKeyValueWidget pf (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget
       diffFromKVAndNew dfa fa = RC.slUnion (Just <$> RC.toKeyValueSet fa) (Nothing <$ dfa)
   in WR.widgetResultToDynamic <$> collectionEditor2WR editValueWidget addNewWidget diffFromKVAndNew id id fDyn
 
@@ -175,7 +177,10 @@ class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) 
 
   -- required for either full structure editor in order to generalize over Key/Value collections like Map vs Value collections like []
   newKeyValueWidget :: (R.Reflex t, Applicative g, Monad m)
-    => (forall x. g x -> Either e x) -> m (R.Dynamic t (g (NewItem f b))) -> (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f), b))))
+    => Proxy f
+    -> (forall x. g x -> Either e x)
+    -> m (R.Dynamic t (g (NewItem f b)))
+    -> (R.Dynamic t (KeyValueSet f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f), b))))
 
   -- some containers (e.g., lists and sequences) "contract" when items are deleted and we need to keep track of this so edits are applied to the correct elements
   diffAfterDeletes :: Proxy f -> [Key (KeyValueSet f)] -> KeyValueSet f b -> KeyValueSet f b
@@ -187,7 +192,7 @@ instance Ord k => EditableCollection (M.Map k) where
   ecListViewWithKey = RC.listViewWithKey
   ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff
   ecSelectViewListWithKey = RC.selectViewListWithKey
-  newKeyValueWidget nat = const . fmap (fmap nat)
+  newKeyValueWidget _ nat = const . fmap (fmap nat)
   diffAfterDeletes _ _ = id
 
 instance (Hashable k, Ord k) => EditableCollection (HM.HashMap k) where
@@ -196,7 +201,7 @@ instance (Hashable k, Ord k) => EditableCollection (HM.HashMap k) where
   ecListViewWithKey = RC.listViewWithKey
   ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff 
   ecSelectViewListWithKey = RC.selectViewListWithKey
-  newKeyValueWidget nat = const . fmap (fmap nat)
+  newKeyValueWidget _ nat = const . fmap (fmap nat)
   diffAfterDeletes _ _ = id
 
 instance EditableCollection IM.IntMap where
@@ -205,7 +210,7 @@ instance EditableCollection IM.IntMap where
   ecListViewWithKey = RC.listViewWithKey
   ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff 
   ecSelectViewListWithKey = RC.selectViewListWithKey 
-  newKeyValueWidget nat = const . fmap (fmap nat)
+  newKeyValueWidget _ nat = const . fmap (fmap nat)
   diffAfterDeletes _ _ = id
 
 instance EditableCollection [] where
@@ -214,10 +219,10 @@ instance EditableCollection [] where
   ecListViewWithKey = RC.listViewWithKey
   ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff 
   ecSelectViewListWithKey = RC.selectViewListWithKey
-  newKeyValueWidget nat inputgbW fDyn = do
+  newKeyValueWidget _ nat inputgbW kvDyn = do
     newEitherbDyn <- fmap nat <$> inputgbW
---    let newKeyDyn = (\im -> if IM.null im then 0 else 1 + (fst $ IM.findMax im)) <$> kvDyn
-    let newKeyDyn = length <$> fDyn 
+    let newKeyDyn = (\im -> if IM.null im then 0 else 1 + (fst $ IM.findMax im)) <$> kvDyn
+--    let newKeyDyn = length <$> fDyn 
     return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right <$> newKeyDyn) newEitherbDyn
   diffAfterDeletes :: Proxy [] -> [Int] -> IM.IntMap b -> IM.IntMap b
   diffAfterDeletes _ deletedKeys oldDiff =
@@ -230,10 +235,10 @@ instance EditableCollection S.Seq where
   ecListViewWithKey = RC.listViewWithKey
   ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiff 
   ecSelectViewListWithKey = RC.selectViewListWithKey
-  newKeyValueWidget nat inputgbW fDyn = do
+  newKeyValueWidget _ nat inputgbW kvDyn = do
     newEitherbDyn <- fmap nat <$> inputgbW
---    let newKeyDyn = (\im -> if IM.null im then 0 else 1 + (fst $ IM.findMax im)) <$> kvDyn
-    let newKeyDyn = length <$> fDyn 
+    let newKeyDyn = (\im -> if IM.null im then 0 else 1 + (fst $ IM.findMax im)) <$> kvDyn
+--    let newKeyDyn = length <$> fDyn 
     return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right <$> newKeyDyn) newEitherbDyn
   diffAfterDeletes :: Proxy S.Seq -> [Int] -> IM.IntMap b -> IM.IntMap b
   diffAfterDeletes _ deletedKeys oldDiff =
@@ -246,7 +251,7 @@ instance (A.Ix k, Enum k, Bounded k) => EditableCollection (A.Array k) where
   ecListViewWithKey = RC.listViewWithKeyMaybe
   ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiffMaybe 
   ecSelectViewListWithKey = RC.selectViewListWithKeyMaybe  
-  newKeyValueWidget _ _ = undefined -- can't add (or delete) in (Array k) collections
+  newKeyValueWidget _ _ _ = undefined -- can't add (or delete) in (Array k) collections
   diffAfterDeletes _ _ = id
 
 instance EditableCollection T.Tree where
@@ -255,7 +260,7 @@ instance EditableCollection T.Tree where
   ecListViewWithKey = RC.listViewWithKeyMaybe
   ecListViewWithKeyShallowDiff = RC.listViewWithKeyShallowDiffMaybe 
   ecSelectViewListWithKey = RC.selectViewListWithKeyMaybe  
-  newKeyValueWidget _ _ = undefined -- add to where?  Delete all below?  For now undefined.
+  newKeyValueWidget _ _ _ = undefined -- add to where?  Delete all below?  For now undefined.
   diffAfterDeletes _ _ = undefined -- this might make sense but unimplemented for now
 
 -- helper for the case when you want the output to update only on input change or a valid edit
@@ -319,7 +324,7 @@ collectionEditor2WR :: forall t m f a b. ( RD.Adjustable t m
                                          , RC.SequenceableWithEventC t f (Maybe b)
                                          , EditableCollection f)
   => (Key f -> a -> R.Event t a -> m (R.Event t (Maybe b))) -- edit/delete widget. Fires only on internal change.  
-  -> (R.Dynamic t (f b) -> m (R.Event t (KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
+  -> (R.Dynamic t (RC.KeyValueSet f b) -> m (R.Event t (RC.KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
   -> (RC.KeyValueSet f b -> f a -> RC.Diff f a)
   -> (RC.Diff f a -> RC.Diff f b)
   -> (RC.Diff f b -> RC.Diff f a)
@@ -332,7 +337,7 @@ collectionEditor2WR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn
       updateAll kvb dfb = RC.slUnion dfb (Just <$> kvb) -- left biased union
   postBuild <- R.getPostBuild
   rec (kvbDyn, dfbEv) <- RC.selfEditingCollectionWithChanges dfaTodfb updateDeletes updateAll itemWidget (mempty :: f a)  dfaEv -- Dynamic t (KeyValueSet f b)
-      dfbAddEv <- fmap (fmap Just) <$> addWidget curDyn  -- Event t (Diff f b)
+      dfbAddEv <- fmap (fmap Just) <$> addWidget kvbDyn  -- Event t (Diff f b)
       let newInputFaEv = R.leftmost [R.updated faDyn, R.tag (R.current faDyn) postBuild]
           dfaNewInputEv = R.attachWith updateFromInput (R.current kvbDyn) newInputFaEv
           dfaEv = R.leftmost [dfaNewInputEv, dfbTodfa <$> dfbAddEv]
@@ -460,11 +465,12 @@ addNewItemWidgetModal :: ( R.Reflex t
                          , Diffable f
                          , Show e
                          , Monoid e)
-  => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
-  -> R.Dynamic t (f a)
+  => Proxy f
+  -> (R.Dynamic t (KeyValueSet f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input Key/Value set, return the proper key. Left for invalid value.
+  -> R.Dynamic t (KeyValueSet f a)
   -> m (R.Event t (KeyValueSet f b))
-addNewItemWidgetModal editPairW faDyn = do
-  let modalEditW = const $ editPairW faDyn
+addNewItemWidgetModal _ editPairW kvDyn = do
+  let modalEditW = const $ editPairW kvDyn
       blankInput = R.constDyn $ Left mempty
       pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
   newPairEv <- ME.modalEditor_change <$> ME.modalEditorEither modalEditW blankInput newItemEditorConfig
@@ -479,12 +485,13 @@ addNewItemWidget :: ( R.Reflex t
                     , Diffable f
                     , Show e
                     , Monoid e)
-  => (R.Dynamic t (f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
-  -> R.Dynamic t (f a)
+  => Proxy f
+  -> (R.Dynamic t (KeyValueSet f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
+  -> R.Dynamic t (KeyValueSet f a)
   -> m (R.Event t (KeyValueSet f b))
-addNewItemWidget editPairW fDyn = do
+addNewItemWidget _ editPairW kvDyn = do
   let pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
-  newPairEv <- R.fmapMaybe (either (const Nothing) Just) . R.updated <$> editPairW fDyn
+  newPairEv <- R.fmapMaybe (either (const Nothing) Just) . R.updated <$> editPairW kvDyn
   return $ pairEvToDiffMaybeEv $ newPairEv --leftWhenNotRight newPairEv (R.updated fDyn)
 
 
