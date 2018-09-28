@@ -108,6 +108,7 @@ simpleCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
                                           , RC.Mergeable f
                                           , EditableCollection f
                                           , Ord (Key f)
+                                          , Show (Key (KeyValueSet f))
                                           , Key f ~ Key (KeyValueSet f))
   => DisplayCollection t (Key f) -- use a dropdown or show entire collection
   -> (RC.Key f -> R.Dynamic t a -> m (R.Dynamic t (Maybe a))) -- display and edit existing
@@ -139,6 +140,7 @@ simpleCollectionEditor2 :: forall t m f a. ( RD.DomBuilder t m
                                           , Monoid (f a)
                                           , EditableCollection f
                                           , Ord (Key f)
+                                          , Show (Key (KeyValueSet f))
                                           , Key f ~ Key (KeyValueSet f))
   => (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe a))) -- display and edit existing
   -> m (R.Dynamic t (Maybe (NewItem f a))) -- input a new one
@@ -148,7 +150,7 @@ simpleCollectionEditor2 editWidget newItemWidget fDyn =
   let editValueWidget k a aEv = R.holdDyn a aEv >>= editWidget k -- $  R.fmapMaybe id . R.updated <$> editWidget k vDyn -- m (R.Event t (f a))
       pf = Proxy :: Proxy f
       addNewWidget = addNewItemWidgetModal pf $ newKeyValueWidget pf (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget
-      diffFromKVAndNew dfa fa = RC.slUnion (Just <$> RC.toKeyValueSet fa) (Nothing <$ dfa)
+      diffFromKVAndNew kva fa = RC.slUnion (Just <$> RC.toKeyValueSet fa) (Nothing <$ kva)
   in WR.widgetResultToDynamic <$> collectionEditor2WR editValueWidget addNewWidget diffFromKVAndNew id id fDyn
 
 -- | This class allows the collection editing functions to be polymorphic over the types supported by Reflex.Collections
@@ -221,7 +223,7 @@ instance EditableCollection [] where
   ecSelectViewListWithKey = RC.selectViewListWithKey
   newKeyValueWidget _ nat inputgbW kvDyn = do
     newEitherbDyn <- fmap nat <$> inputgbW
-    let newKeyDyn = (\im -> if IM.null im then 0 else 1 + (fst $ IM.findMax im)) <$> kvDyn
+    let newKeyDyn = (\im -> if IM.null im then 0 else (1 + (fst $ IM.findMax im))) <$> kvDyn
 --    let newKeyDyn = length <$> fDyn 
     return $ R.zipDynWith (\ea eb -> (,) <$> ea <*> eb) (Right <$> newKeyDyn) newEitherbDyn
   diffAfterDeletes :: Proxy [] -> [Int] -> IM.IntMap b -> IM.IntMap b
@@ -322,6 +324,7 @@ collectionEditor2WR :: forall t m f a b. ( RD.Adjustable t m
                                          , RC.Mergeable f
                                          , RC.FannableC f a
                                          , RC.SequenceableWithEventC t f (Maybe b)
+                                         , Show (Key (KeyValueSet f))
                                          , EditableCollection f)
   => (Key f -> a -> R.Event t a -> m (R.Event t (Maybe b))) -- edit/delete widget. Fires only on internal change.  
   -> (R.Dynamic t (RC.KeyValueSet f b) -> m (R.Event t (RC.KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
@@ -331,21 +334,20 @@ collectionEditor2WR :: forall t m f a b. ( RD.Adjustable t m
   -> R.Dynamic t (f a)
   -> m (WR.WidgetResult t (f b))
 collectionEditor2WR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
-  let updateDeletes :: RC.KeyValueSet f b -> RC.Diff f b -> RC.Diff f a
-      updateDeletes _ dfb = dfbTodfa $ RC.slFilter isNothing dfb
-      updateAll :: RC.KeyValueSet f b -> RC.Diff f b -> RC.Diff f b
-      updateAll kvb dfb = RC.slUnion dfb (Just <$> kvb) -- left biased union
+--  let updateDeletes :: RC.KeyValueSet f b -> RC.Diff f b -> RC.Diff f a
+--      updateDeletes _ dfb = dfbTodfa $ RC.slFilter isNothing dfb  
+  let updateAll :: RC.KeyValueSet f b -> RC.KeyValueSet f (Maybe b) -> RC.Diff f b
+      updateAll kvb dfMb = RC.slUnion dfMb (Just <$> kvb) -- left biased union
+      updateDeletes kvb dfb = dfbTodfa $ editDiffLeavingDeletes (Proxy :: Proxy f) dfb kvb
   postBuild <- R.getPostBuild
   rec (kvbDyn, dfbEv) <- RC.selfEditingCollectionWithChanges dfaTodfb updateDeletes updateAll itemWidget (mempty :: f a)  dfaEv -- Dynamic t (KeyValueSet f b)
-      dfbAddEv <- fmap (fmap Just) <$> addWidget kvbDyn  -- Event t (Diff f b)
+      dfbAddEv <- fmap (fmap Just) <$> addWidget kvbDyn -- Event t (Diff f b)
       let newInputFaEv = R.leftmost [R.updated faDyn, R.tag (R.current faDyn) postBuild]
           dfaNewInputEv = R.attachWith updateFromInput (R.current kvbDyn) newInputFaEv
           dfaEv = R.leftmost [dfaNewInputEv, dfbTodfa <$> dfbAddEv]
           curDyn = RC.fromCompleteKeyValueSet <$> kvbDyn
-  return $ WR.unsafeBuildWidgetResult curDyn (() <$ dfbEv)
+  return $ WR.unsafeBuildWidgetResult curDyn (() <$ R.traceEventWith (\dfb -> "Add/Edit @ " ++ show (fst $ head $ RC.toKeyValueList dfb)) dfbEv)
   
-
-
 diffMapToKVMap :: RC.Diffable f => Proxy f -> (RC.Diff f a -> RC.Diff f b) -> RC.KeyValueSet f a -> RC.KeyValueSet f b
 diffMapToKVMap _ g = RC.slMapMaybe id . g . fmap Just 
 
@@ -464,6 +466,7 @@ addNewItemWidgetModal :: ( R.Reflex t
                          , MonadWidgetExtraC t m
                          , Diffable f
                          , Show e
+                         , Show (Key (KeyValueSet f))
                          , Monoid e)
   => Proxy f
   -> (R.Dynamic t (KeyValueSet f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input Key/Value set, return the proper key. Left for invalid value.
@@ -472,9 +475,9 @@ addNewItemWidgetModal :: ( R.Reflex t
 addNewItemWidgetModal _ editPairW kvDyn = do
   let modalEditW = const $ editPairW kvDyn
       blankInput = R.constDyn $ Left mempty
-      pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
+      pairEvToKeyValueSetEv pairEv = fromKeyValueList . pure <$> pairEv -- here, fromKeyValueList :: [(Key f, v)] -> KeyValueSet f v 
   newPairEv <- ME.modalEditor_change <$> ME.modalEditorEither modalEditW blankInput newItemEditorConfig
-  return $ pairEvToDiffMaybeEv newPairEv
+  return $ pairEvToKeyValueSetEv $ R.traceEventWith (\x -> "Adding @ " ++ show (fst x)) newPairEv
 
 addNewItemWidget :: ( R.Reflex t
                     , RD.DomBuilder t m
@@ -484,16 +487,16 @@ addNewItemWidget :: ( R.Reflex t
                     , MonadWidgetExtraC t m
                     , Diffable f
                     , Show e
+                    , Show (Key (KeyValueSet f))
                     , Monoid e)
   => Proxy f
   -> (R.Dynamic t (KeyValueSet f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
   -> R.Dynamic t (KeyValueSet f a)
   -> m (R.Event t (KeyValueSet f b))
 addNewItemWidget _ editPairW kvDyn = do
-  let pairEvToDiffMaybeEv pairEv = fromKeyValueList . pure <$> pairEv
+  let pairEvToKeyValueSetEv pairEv = fromKeyValueList . pure <$> pairEv -- here, fromKeyValueList :: [(Key f, v)] -> KeyValueSet f v 
   newPairEv <- R.fmapMaybe (either (const Nothing) Just) . R.updated <$> editPairW kvDyn
-  return $ pairEvToDiffMaybeEv $ newPairEv --leftWhenNotRight newPairEv (R.updated fDyn)
-
+  return $ pairEvToKeyValueSetEv $ R.traceEventWith (\x -> "Adding @ " ++ show (fst x)) newPairEv --leftWhenNotRight newPairEv (R.updated fDyn)
 
 -- one possible button widget
 buttonNoSubmit :: RD.DomBuilder t m => T.Text -> m (R.Event t ())
@@ -510,10 +513,8 @@ dynamicPlusEvent aDyn aEv = R.buildDynamic (R.sample . R.current $ aDyn) $ R.lef
 leftWhenNotRight :: R.Reflex t => R.Event t a -> R.Event t b -> R.Event t a
 leftWhenNotRight leftEv rightEv = R.fmapMaybe id $ R.leftmost [Nothing <$ rightEv, Just <$> leftEv]
 
-
 rightWhenNotLeft :: R.Reflex t => R.Event t a -> R.Event t b -> R.Event t b
 rightWhenNotLeft leftEv rightEv = R.fmapMaybe id $ R.leftmost [Nothing <$ leftEv, Just <$> rightEv]
-
 
 -- make a version using shallow diff so we can be more efficient in handling of adds?
 {-
