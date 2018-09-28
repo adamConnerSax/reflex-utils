@@ -84,6 +84,7 @@ library
                      , mtl
                      , file-embed
                      , monad-control
+                     , keys
                      , lens
                      , data-default
                      , ref-tf

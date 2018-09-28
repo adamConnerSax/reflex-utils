@@ -100,7 +100,7 @@ newItemWidget _ _ = buildVForm Nothing formValueNothing
 instance (Ord k, B.Validatable FValidation k, B.Validatable FValidation a) => B.Validatable FValidation (M.Map k a) where
   validator = M.traverseWithKey (\k a -> mergeAccValidation (B.validator a <$ B.validator k))
 
-instance (Ord k, FormInstanceC t m, VFormBuilderBoth t m k a, Show k) => FormBuilder t m (M.Map k a) where
+instance (Ord k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (M.Map k a) where
   buildForm va mFN mFV =
     let newItemW =  newItemWidget (Proxy :: Proxy (M.Map k)) (Proxy :: Proxy a)
     in validateForm va $ formCollectionEditor EC.DisplayAll showKeyEditVal newItemW mFV
@@ -108,7 +108,7 @@ instance (Ord k, FormInstanceC t m, VFormBuilderBoth t m k a, Show k) => FormBui
 instance (Ord k, Hashable k, B.Validatable FValidation k, B.Validatable FValidation a) => B.Validatable FValidation (HML.HashMap k a) where
   validator = HML.traverseWithKey (\k a -> mergeAccValidation (B.validator a <$ B.validator k))
 
-instance (Ord k, Hashable k, FormInstanceC t m, VFormBuilderBoth t m k a, Show k) => FormBuilder t m (HML.HashMap k a) where
+instance (Ord k, Hashable k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (HML.HashMap k a) where
   buildForm va mFN hmFV =
     let newItemW =  newItemWidget (Proxy :: Proxy (HML.HashMap k)) (Proxy :: Proxy a)
     in validateForm va $ formCollectionEditor EC.DisplayAll showKeyEditVal newItemW hmFV
@@ -166,7 +166,6 @@ formCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
                                         , EC.EditableCollection f
                                         , Ord (RC.Key f)
                                         , Monoid (f a)
-                                        , Show (RC.Key (RC.KeyValueSet f))
                                         , RC.Key f ~ RC.Key (RC.KeyValueSet f))
   => EC.DisplayCollection t (RC.Key f) -- use a dropdown or show entire collection
   -> (RC.Key f -> R.Dynamic t a -> Form t m a) -- display and edit existing

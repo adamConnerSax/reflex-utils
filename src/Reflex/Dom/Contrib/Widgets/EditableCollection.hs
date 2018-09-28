@@ -55,6 +55,7 @@ import           Data.Kind (Type)
 import           Data.Bool (bool)
 import           Data.Proxy (Proxy (..))
 import           Data.Either (either)
+import qualified Data.Key as K
 
 import qualified Data.Map          as M
 import qualified Data.Text         as T
@@ -108,7 +109,6 @@ simpleCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
                                           , RC.Mergeable f
                                           , EditableCollection f
                                           , Ord (Key f)
-                                          , Show (Key (KeyValueSet f))
                                           , Key f ~ Key (KeyValueSet f))
   => DisplayCollection t (Key f) -- use a dropdown or show entire collection
   -> (RC.Key f -> R.Dynamic t a -> m (R.Dynamic t (Maybe a))) -- display and edit existing
@@ -136,14 +136,12 @@ simpleCollectionEditor2 :: forall t m f a. ( RD.DomBuilder t m
                                           , MonadFix m
                                           , RC.Mergeable f
                                           , RC.FannableC f a
-                                          , RC.SequenceableWithEventC t f (Maybe a)
+                                          , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe a)
                                           , Monoid (f a)
                                           , EditableCollection f
                                           , Ord (Key f)
-                                          , Show (Key (KeyValueSet f))
-                                          , Show a
                                           , Key f ~ Key (KeyValueSet f))
-  => (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe a))) -- display and edit existing
+  => (RC.Key f -> R.Dynamic t a -> m (R.Event t (Key (KeyValueSet f), Maybe a))) -- display and edit existing
   -> m (R.Dynamic t (Maybe (NewItem f a))) -- input a new one
   -> R.Dynamic t (f a)
   -> m (R.Dynamic t (f a))
@@ -315,6 +313,7 @@ collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
   editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) updatedEditDeleteInputEv -- updates to current on add or carries completely new input
   WR.buildWidgetResult (faTofb <$> fDyn) internalChangeEv 
 
+
 collectionEditor2WR :: forall t m f k a b. ( RD.Adjustable t m
                                            , RD.PostBuild t m
                                            , RD.MonadHold t m                 
@@ -323,12 +322,10 @@ collectionEditor2WR :: forall t m f k a b. ( RD.Adjustable t m
                                            , RD.DomBuilder t m
                                            , RC.Mergeable f
                                            , RC.FannableC f a
-                                           , RC.SequenceableWithEventC t f (Maybe b)
-                                           , Show (Key (KeyValueSet f))
-                                           , Show b
+                                           , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe b)
                                            , k ~ Key (KeyValueSet f)
                                            , EditableCollection f)
-  => (Key f -> a -> R.Event t a -> m (R.Event t (Maybe b))) -- edit/delete widget. Fires only on internal change.  
+  => (Key f -> a -> R.Event t a -> m (R.Event t (Key (KeyValueSet f), Maybe b))) -- edit/delete widget. Carries the KeyValueSet key. Fires only on internal change.  
   -> (R.Dynamic t (RC.KeyValueSet f b) -> m (R.Event t (RC.KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
   -> (RC.KeyValueSet f b -> f a -> RC.Diff f a)
   -> (RC.Diff f a -> RC.Diff f b)
@@ -336,19 +333,25 @@ collectionEditor2WR :: forall t m f k a b. ( RD.Adjustable t m
   -> R.Dynamic t (f a)
   -> m (WR.WidgetResult t (f b))
 collectionEditor2WR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
-  let updateDeletes :: RC.KeyValueSet f b -> RC.Diff f b -> RC.Diff f a
-      updateDeletes _ dfb = dfbTodfa $ RC.slFilter isNothing dfb 
-  let updateAll :: RC.KeyValueSet f b -> RC.KeyValueSet f (Maybe b) -> RC.Diff f b
-      updateAll kvb dfMb = RC.slUnion dfMb (Just <$> kvb) -- left biased union
+  let g :: Diffable f => RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
+      g kvsPair =
+        let singleton k a = RC.fromKeyValueList $ [(k,a)] 
+        in K.foldrWithKey (\_ (k,mb) df -> RC.slUnion df (singleton k mb)) RC.slEmpty kvsPair
+      updateDeletes :: RC.KeyValueSet f b -> RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f a
+      updateDeletes _ x = dfbTodfa $ RC.slFilter isNothing (g x) 
+      updateAll :: RC.KeyValueSet f b -> RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
+      updateAll kvb x = RC.slUnion (g x) (Just <$> kvb) -- left biased union
 --      updateDeletes kvb dfb = dfbTodfa $ editDiffLeavingDeletes (Proxy :: Proxy f) dfb kvb
   postBuild <- R.getPostBuild
   rec (kvbDyn, dfbEv) <- RC.selfEditingCollectionWithChanges dfaTodfb updateDeletes updateAll itemWidget (mempty :: f a)  dfaEv -- Dynamic t (KeyValueSet f b)
       dfbAddEv <- fmap (fmap Just) <$> addWidget kvbDyn -- Event t (Diff f b)
       let newInputFaEv = R.leftmost [R.updated faDyn, R.tag (R.current faDyn) postBuild]
           dfaNewInputEv = R.attachWith updateFromInput (R.current kvbDyn) newInputFaEv
-          dfaEv = R.leftmost [dfaNewInputEv, dfbTodfa <$> R.traceEventWith (("Add: " ++) . show . RC.toKeyValueList) dfbAddEv]
-          curDyn = RC.fromCompleteKeyValueSet <$> R.traceDynWith (show . RC.toKeyValueList) kvbDyn
+          dfaEv = R.leftmost [dfaNewInputEv, dfbTodfa <$> dfbAddEv]
+          curDyn = RC.fromCompleteKeyValueSet <$> kvbDyn
   return $ WR.unsafeBuildWidgetResult curDyn (() <$ dfbEv)
+
+
   
 diffMapToKVMap :: RC.Diffable f => Proxy f -> (RC.Diff f a -> RC.Diff f b) -> RC.KeyValueSet f a -> RC.KeyValueSet f b
 diffMapToKVMap _ g = RC.slMapMaybe id . g . fmap Just 
@@ -468,7 +471,6 @@ addNewItemWidgetModal :: ( R.Reflex t
                          , MonadWidgetExtraC t m
                          , Diffable f
                          , Show e
-                         , Show (Key (KeyValueSet f))
                          , Monoid e)
   => Proxy f
   -> (R.Dynamic t (KeyValueSet f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input Key/Value set, return the proper key. Left for invalid value.
@@ -479,7 +481,7 @@ addNewItemWidgetModal _ editPairW kvDyn = do
       blankInput = R.constDyn $ Left mempty
       pairEvToKeyValueSetEv pairEv = fromKeyValueList . pure <$> pairEv -- here, fromKeyValueList :: [(Key f, v)] -> KeyValueSet f v 
   newPairEv <- ME.modalEditor_change <$> ME.modalEditorEither modalEditW blankInput newItemEditorConfig
-  return $ pairEvToKeyValueSetEv $ R.traceEventWith (\x -> "Adding @ " ++ show (fst x)) newPairEv
+  return $ pairEvToKeyValueSetEv newPairEv
 
 addNewItemWidget :: ( R.Reflex t
                     , RD.DomBuilder t m
@@ -489,7 +491,6 @@ addNewItemWidget :: ( R.Reflex t
                     , MonadWidgetExtraC t m
                     , Diffable f
                     , Show e
-                    , Show (Key (KeyValueSet f))
                     , Monoid e)
   => Proxy f
   -> (R.Dynamic t (KeyValueSet f a) -> m (R.Dynamic t (Either e (Key (KeyValueSet f),b)))) -- widget to edit an entry and, given the input collection, return the proper key. Left for invalid value.
@@ -498,7 +499,7 @@ addNewItemWidget :: ( R.Reflex t
 addNewItemWidget _ editPairW kvDyn = do
   let pairEvToKeyValueSetEv pairEv = fromKeyValueList . pure <$> pairEv -- here, fromKeyValueList :: [(Key f, v)] -> KeyValueSet f v 
   newPairEv <- R.fmapMaybe (either (const Nothing) Just) . R.updated <$> editPairW kvDyn
-  return $ pairEvToKeyValueSetEv $ R.traceEventWith (\x -> "Adding @ " ++ show (fst x)) newPairEv --leftWhenNotRight newPairEv (R.updated fDyn)
+  return $ pairEvToKeyValueSetEv newPairEv --leftWhenNotRight newPairEv (R.updated fDyn)
 
 -- one possible button widget
 buttonNoSubmit :: RD.DomBuilder t m => T.Text -> m (R.Event t ())

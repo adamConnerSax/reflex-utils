@@ -85,12 +85,11 @@ editValueEv valDyn = do
       config = RD.TextInputConfig "text" "" inputEv (R.constDyn M.empty)
   R.fmapMaybe (readMaybe . T.unpack) . RD._textInput_input <$> RD.textInput config
 
-
-editDeleteValue :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Show a, Read a) => R.Dynamic t a -> m (R.Event t (Maybe a))
-editDeleteValue aDyn = RD.el "div" $ do
+editDeleteValue :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Show a, Read a) => k -> R.Dynamic t a -> m (R.Event t (k, Maybe a))
+editDeleteValue k aDyn = RD.el "div" $ do
   maEv <- RD.el "span" $ editValueEv aDyn
   delEv <- RD.el "span" $ EC.buttonNoSubmit "-"
-  return $ R.leftmost [Just <$> maEv, Nothing <$ delEv]
+  return . fmap (\x -> (k,x)) $ R.leftmost [Just <$> maEv, Nothing <$ delEv]
 
 inputPair :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Read k, Read v) => m (R.Dynamic t (Maybe (k,v)))
 inputPair = do
@@ -111,7 +110,6 @@ inputKeyValue valWidget = do
     let pairDynMaybe = R.zipDyn kMDyn vMDyn
     return $ fmap (\(ma,mb) -> (,) <$> ma <*> mb) pairDynMaybe
 
-
 newLine = RD.el "p" (RD.text "") >> RD.el "br" RD.blank
 
 editableCollectionsWidget :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.MonadHold t m, RD.PostBuild t m, MonadFix m) => m ()
@@ -131,7 +129,7 @@ editableCollectionsWidget = do
   RD.el "p" $ RD.text "v2 @ Map"
   editMapDyn2 <- EC.simpleCollectionValueEditor display (const editValue) (R.constDyn testMap)
   newLine >> (RD.dynText $ fmap (T.pack . show) editMapDyn2)
-  editMapStructureDyn2 <- newLine >> EC.simpleCollectionEditor2 (const editDeleteValue) inputPair editMapDyn2
+  editMapStructureDyn2 <- newLine >> EC.simpleCollectionEditor2 editDeleteValue inputPair editMapDyn2
   newLine >> (RD.dynText $ fmap (T.pack . show) editMapStructureDyn2)
 
   RD.el "p" $ RD.text "v1 @ List"
@@ -143,7 +141,7 @@ editableCollectionsWidget = do
   RD.el "p" $ RD.text "v2 @ List"
   editListDyn2 <- EC.simpleCollectionValueEditor display (const editValue) (R.constDyn testList)
   newLine >> (RD.dynText $ fmap (T.pack . show) editListDyn2)
-  editListStructureDyn2 <- newLine >> EC.simpleCollectionEditor2 (const editDeleteValue) inputValue editListDyn2
+  editListStructureDyn2 <- newLine >> EC.simpleCollectionEditor2 editDeleteValue inputValue editListDyn2
   newLine >> (RD.dynText $ fmap (T.pack . show) editListStructureDyn2)
 
 {-

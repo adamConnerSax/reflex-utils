@@ -24,8 +24,8 @@ self: super: {
    reflex-collections = super.callCabal2nix "reflex-collections" (nixpkgs.pkgs.fetchFromGitHub {
      owner = "adamConnerSax";
      repo = "reflex-collections";
-     rev = "1a334d9a790269b8bb3aa49c1c1a5bfb3e639fab";
-     sha256 = "0a0i43bcjgg8xdpqq00hijzlj1dgvwz3w8j67k2hkiz8vl0721dl";
+     rev = "a9c533c5f5bf53a47527706b89f5981af628773c";
+     sha256 = "06bvasf0kzqkzp1qhsacp59a6zzcirwdmhsjmj3fwq88j80kw7q7";
    }) {};
 #   reflex-dom-contrib = super.callCabal2nix "reflex-dom-contrib" (nixpkgs.pkgs.fetchFromGitHub {
 #     owner = "reflex-frp";
