@@ -71,18 +71,26 @@ inputValue = do
   let config = RD.TextInputConfig "text" "" R.never (R.constDyn M.empty)
   fmap (readMaybe . T.unpack) . RD._textInput_value <$> RD.textInput config
 
-editValue :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Show v, Read v) => R.Dynamic t v -> m (R.Dynamic t (Maybe v))
+editValue :: (RD.DomBuilder t m, MonadWidgetExtraC tq m, RD.PostBuild t m, Show v, Read v) => R.Dynamic t v -> m (R.Dynamic t (Maybe v))
 editValue valDyn = do
   postBuild <- RD.getPostBuild
   let inputEv = T.pack . show <$> R.leftmost [R.tag (R.current valDyn) postBuild, R.updated valDyn]
       config = RD.TextInputConfig "text" "" inputEv (R.constDyn M.empty)
   fmap (readMaybe . T.unpack) . RD._textInput_value <$> RD.textInput config
 
+editValueEv :: (RD.DomBuilder t m, MonadWidgetExtraC tq m, RD.PostBuild t m, Show v, Read v) => R.Dynamic t v -> m (R.Event t v)
+editValueEv valDyn = do
+  postBuild <- R.getPostBuild
+  let inputEv = T.pack . show <$> R.leftmost [R.tag (R.current valDyn) postBuild, R.updated valDyn]
+      config = RD.TextInputConfig "text" "" inputEv (R.constDyn M.empty)
+  R.fmapMaybe (readMaybe . T.unpack) . RD._textInput_input <$> RD.textInput config
+
+
 editDeleteValue :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Show a, Read a) => R.Dynamic t a -> m (R.Event t (Maybe a))
 editDeleteValue aDyn = RD.el "div" $ do
-  maDyn <- RD.el "span" $ editValue aDyn
+  maEv <- RD.el "span" $ editValueEv aDyn
   delEv <- RD.el "span" $ EC.buttonNoSubmit "-"
-  return $ R.leftmost [fmap Just . R.fmapMaybe id $ R.updated maDyn, Nothing <$ delEv]
+  return $ R.leftmost [Just <$> maEv, Nothing <$ delEv]
 
 inputPair :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Read k, Read v) => m (R.Dynamic t (Maybe (k,v)))
 inputPair = do

@@ -141,6 +141,7 @@ simpleCollectionEditor2 :: forall t m f a. ( RD.DomBuilder t m
                                           , EditableCollection f
                                           , Ord (Key f)
                                           , Show (Key (KeyValueSet f))
+                                          , Show a
                                           , Key f ~ Key (KeyValueSet f))
   => (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe a))) -- display and edit existing
   -> m (R.Dynamic t (Maybe (NewItem f a))) -- input a new one
@@ -314,18 +315,19 @@ collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
   editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) updatedEditDeleteInputEv -- updates to current on add or carries completely new input
   WR.buildWidgetResult (faTofb <$> fDyn) internalChangeEv 
 
-
-collectionEditor2WR :: forall t m f a b. ( RD.Adjustable t m
-                                         , RD.PostBuild t m
-                                         , RD.MonadHold t m                 
-                                         , MonadFix m
-                                         , Monoid (f a)
-                                         , RD.DomBuilder t m
-                                         , RC.Mergeable f
-                                         , RC.FannableC f a
-                                         , RC.SequenceableWithEventC t f (Maybe b)
-                                         , Show (Key (KeyValueSet f))
-                                         , EditableCollection f)
+collectionEditor2WR :: forall t m f k a b. ( RD.Adjustable t m
+                                           , RD.PostBuild t m
+                                           , RD.MonadHold t m                 
+                                           , MonadFix m
+                                           , Monoid (f a)
+                                           , RD.DomBuilder t m
+                                           , RC.Mergeable f
+                                           , RC.FannableC f a
+                                           , RC.SequenceableWithEventC t f (Maybe b)
+                                           , Show (Key (KeyValueSet f))
+                                           , Show b
+                                           , k ~ Key (KeyValueSet f)
+                                           , EditableCollection f)
   => (Key f -> a -> R.Event t a -> m (R.Event t (Maybe b))) -- edit/delete widget. Fires only on internal change.  
   -> (R.Dynamic t (RC.KeyValueSet f b) -> m (R.Event t (RC.KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
   -> (RC.KeyValueSet f b -> f a -> RC.Diff f a)
@@ -334,19 +336,19 @@ collectionEditor2WR :: forall t m f a b. ( RD.Adjustable t m
   -> R.Dynamic t (f a)
   -> m (WR.WidgetResult t (f b))
 collectionEditor2WR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
---  let updateDeletes :: RC.KeyValueSet f b -> RC.Diff f b -> RC.Diff f a
---      updateDeletes _ dfb = dfbTodfa $ RC.slFilter isNothing dfb  
+  let updateDeletes :: RC.KeyValueSet f b -> RC.Diff f b -> RC.Diff f a
+      updateDeletes _ dfb = dfbTodfa $ RC.slFilter isNothing dfb 
   let updateAll :: RC.KeyValueSet f b -> RC.KeyValueSet f (Maybe b) -> RC.Diff f b
       updateAll kvb dfMb = RC.slUnion dfMb (Just <$> kvb) -- left biased union
-      updateDeletes kvb dfb = dfbTodfa $ editDiffLeavingDeletes (Proxy :: Proxy f) dfb kvb
+--      updateDeletes kvb dfb = dfbTodfa $ editDiffLeavingDeletes (Proxy :: Proxy f) dfb kvb
   postBuild <- R.getPostBuild
   rec (kvbDyn, dfbEv) <- RC.selfEditingCollectionWithChanges dfaTodfb updateDeletes updateAll itemWidget (mempty :: f a)  dfaEv -- Dynamic t (KeyValueSet f b)
       dfbAddEv <- fmap (fmap Just) <$> addWidget kvbDyn -- Event t (Diff f b)
       let newInputFaEv = R.leftmost [R.updated faDyn, R.tag (R.current faDyn) postBuild]
           dfaNewInputEv = R.attachWith updateFromInput (R.current kvbDyn) newInputFaEv
-          dfaEv = R.leftmost [dfaNewInputEv, dfbTodfa <$> dfbAddEv]
-          curDyn = RC.fromCompleteKeyValueSet <$> kvbDyn
-  return $ WR.unsafeBuildWidgetResult curDyn (() <$ R.traceEventWith (\dfb -> "Add/Edit @ " ++ show (fst $ head $ RC.toKeyValueList dfb)) dfbEv)
+          dfaEv = R.leftmost [dfaNewInputEv, dfbTodfa <$> R.traceEventWith (("Add: " ++) . show . RC.toKeyValueList) dfbAddEv]
+          curDyn = RC.fromCompleteKeyValueSet <$> R.traceDynWith (show . RC.toKeyValueList) kvbDyn
+  return $ WR.unsafeBuildWidgetResult curDyn (() <$ dfbEv)
   
 diffMapToKVMap :: RC.Diffable f => Proxy f -> (RC.Diff f a -> RC.Diff f b) -> RC.KeyValueSet f a -> RC.KeyValueSet f b
 diffMapToKVMap _ g = RC.slMapMaybe id . g . fmap Just 
