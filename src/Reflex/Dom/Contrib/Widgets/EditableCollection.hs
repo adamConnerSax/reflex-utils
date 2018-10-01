@@ -125,7 +125,7 @@ simpleCollectionEditor display editWidget newItemWidget fDyn =
         editWithDeleteButton editValueWidget M.empty (buttonNoSubmit "-") widgetVis k vDyn
       editDeletableWidget = case display of
         DisplayAll -> flip ecListViewWithKey editAndDeleteWidget
-        DisplayEach ddAttrs toText -> selectEditValues ddAttrs toText (updateKeyLabelMap (Proxy :: Proxy f)) editAndDeleteWidget
+        DisplayEach ddAttrs toText -> selectEditValues ddAttrs toText (updateKeyLabelMap (Proxy :: Proxy f) toText) editAndDeleteWidget
       addNewWidget = (addNewItemWidgetModal pf $ newKeyValueWidget pf (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget) . fmap RC.toKeyValueSet 
   in collectionEditor editDeletableWidget addNewWidget id id fDyn
 
@@ -143,17 +143,20 @@ simpleCollectionEditor2 :: forall t m f a. ( RD.DomBuilder t m
                                           , EditableCollection f
                                           , Ord (Key f)
                                           , Key f ~ Key (KeyValueSet f))
-  => (RC.Key f -> R.Dynamic t a -> m (R.Event t (Key (KeyValueSet f), Maybe a))) -- display and edit existing
+  => DisplayCollection t (Key f) -- use a dropdown or show entire collection
+  -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Key (KeyValueSet f), Maybe a))) -- display and edit existing
   -> m (R.Dynamic t (Maybe (NewItem f a))) -- input a new one
   -> R.Dynamic t (f a)
   -> m (R.Dynamic t (f a))
-simpleCollectionEditor2 editWidget newItemWidget fDyn =
+simpleCollectionEditor2 display editWidget newItemWidget fDyn =
   let editValueWidget k a aEv = R.holdDyn a aEv >>= editWidget k -- $  R.fmapMaybe id . R.updated <$> editWidget k vDyn -- m (R.Event t (f a))
       pf = Proxy :: Proxy f
       addNewWidget = addNewItemWidgetModal pf $ newKeyValueWidget pf (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget
       diffFromKVAndNew kva fa = RC.slUnion (Just <$> RC.toKeyValueSet fa) (Nothing <$ kva)
-  in WR.widgetResultToDynamic <$> collectionEditor2WR editValueWidget addNewWidget diffFromKVAndNew id id fDyn
-
+  in case display of
+    DisplayAll -> WR.widgetResultToDynamic <$> collectionEditor2WR editValueWidget addNewWidget diffFromKVAndNew id id fDyn
+    DisplayEach ddAttrs labelToText -> WR.widgetResultToDynamic <$> selectCollectionEditor2WR ddAttrs labelToText editWidget addNewWidget diffFromKVAndNew id id fDyn
+    
 -- | This class allows the collection editing functions to be polymorphic over the types supported by Reflex.Collections
 class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) where
   type NewItem f b :: Type
@@ -342,7 +345,7 @@ collectionEditor2WR :: forall t m f k a b. ( RD.Adjustable t m
                                            , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe b)
                                            , k ~ Key (KeyValueSet f)
                                            , EditableCollection f)
-  => (Key f -> a -> R.Event t a -> m (R.Event t (Key (KeyValueSet f), Maybe b))) -- edit/delete widget. Carries the KeyValueSet key. Fires only on internal change.  
+  => (Key f -> a -> R.Event t a -> m (R.Event t (k, Maybe b))) -- edit/delete widget. Carries the KeyValueSet key. Fires only on internal change.  
   -> (R.Dynamic t (RC.KeyValueSet f b) -> m (R.Event t (RC.KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
   -> (RC.KeyValueSet f b -> f a -> RC.Diff f a)
   -> (RC.Diff f a -> RC.Diff f b)
@@ -365,7 +368,7 @@ collectionEditor2WR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn
           dfaNewInputEv = R.attachWith updateFromInput (R.current kvbDyn) newInputFaEv
           dfaEv = R.leftmost [dfaNewInputEv, dfbTodfa <$> dfbAddEv]
           curDyn = RC.fromCompleteKeyValueSet <$> kvbDyn
-  return $ WR.unsafeBuildWidgetResult curDyn (() <$ dfbEv)
+  return $ WR.unsafeBuildWidgetResult curDyn (() <$ R.leftmost [dfbEv, dfbAddEv])
 
 
 selectCollectionEditor2WR ::  forall t m f k a b. ( RD.Adjustable t m
@@ -378,16 +381,19 @@ selectCollectionEditor2WR ::  forall t m f k a b. ( RD.Adjustable t m
                                                   , RC.FannableC f a
                                                   , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe b)
                                                   , k ~ Key (KeyValueSet f)
+                                                  , Key f ~ Key (KeyValueSet f)
+                                                  , Ord (Key f)
                                                   , EditableCollection f)
   => R.Dynamic t (M.Map T.Text T.Text)
-  -> (Key f -> R.Dynamic t a -> m (R.Event t (Key (KeyValueSet f), Maybe b))) -- edit/delete widget. Carries the KeyValueSet key. Fires only on internal change.  
+  -> (k -> T.Text)
+  -> (Key f -> R.Dynamic t a -> m (R.Event t (k, Maybe b))) -- edit/delete widget. Carries the KeyValueSet key. Fires only on internal change.  
   -> (R.Dynamic t (RC.KeyValueSet f b) -> m (R.Event t (RC.KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
   -> (RC.KeyValueSet f b -> f a -> RC.Diff f a)
   -> (RC.Diff f a -> RC.Diff f b)
   -> (RC.Diff f b -> RC.Diff f a)
   -> R.Dynamic t (f a)
   -> m (WR.WidgetResult t (f b))
-selectCollectionEditor2WR ddAttrsDyn itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
+selectCollectionEditor2WR ddAttrsDyn keyToLabel itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
   let g :: Diffable f => RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
       g kvsPair =
         let singleton k a = RC.fromKeyValueList $ [(k,a)] 
@@ -397,28 +403,30 @@ selectCollectionEditor2WR ddAttrsDyn itemWidget addWidget updateFromInput dfaTod
       updateAll :: RC.KeyValueSet f b -> RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
       updateAll kvb x = RC.slUnion (g x) (Just <$> kvb) -- left biased union
       dynamicallyVisible visDyn w = let visAttrsDyn = bool hiddenCSS visibleCSS <$> visDyn in RD.elDynAttr "div" visAttrsDyn w
-      keyLabelMapInDyn = M.fromList . fmap (\(k, _) -> (k, keyToLabel k)) . toKeyValueList <$> fDyn
+      keyLabelMapInDyn = M.fromList . fmap (\(k, _) -> (k, keyToLabel k)) . toKeyValueList <$> faDyn
   postBuild <- R.getPostBuild
   attrsDyn <- R.foldDyn (<>) ("size" RD.=: "1") (R.updated ddAttrsDyn)
   rec let keyLabelMapUpdateEv :: Proxy f -> R.Event t (M.Map (Key f) T.Text) 
-          keyLabelMapUpdateEv pf = R.attachWith (flip $ updateKeyLabelMap pf) (R.current keyLabelMapDyn) dfbEv
+          keyLabelMapUpdateEv pf = R.attachWith (flip $ updateKeyLabelMap pf keyToLabel) (R.current keyLabelMapDyn) $ R.leftmost [dfbEv, dfbAddEv]
           safeDropdownConfig = SD.SafeDropdownConfig R.never attrsDyn
       keyLabelMapDyn <- dynamicPlusEvent keyLabelMapInDyn $ keyLabelMapUpdateEv (Proxy :: Proxy f)    
       sdd <- SD.safeDropdown Nothing keyLabelMapDyn safeDropdownConfig
       sddNullEv <- R.updated <$> R.holdUniqDyn (isNothing <$> view SD.safeDropdown_value sdd) -- why not (M.null <$> keyLabelMap)?
       let (notNullEv, nullEv) = fanBool sddNullEv
-          nullWidgetEv = return R.never <$ nullEv
+          nullWidgetEv = return (R.constDyn RC.slEmpty, R.never) <$ nullEv
           safeKeyEv = R.tagPromptlyDyn (head . M.keys <$> keyLabelMapDyn) notNullEv
           selWidget safeKey = do
             selDyn <- R.holdDyn safeKey (R.fmapMaybe id $ view SD.safeDropdown_change sdd)
-            RC.selectSelfEditingCollectionWithChanges dfaTodfb updateDeletes updateAll dynamicallyVisible selDyn selectWidget (mempty :: f a) dfaEv
-      (kvbDyn, dfbEv) <- R.switchPromptlyDyn <$> (RD.widgetHold (return R.never) $ R.leftmost [nullWidgetEv, selWidget <$> safeKeyEv]) -- Event t (Diff f b)      
+            RC.selectSelfEditingCollectionWithChanges dfaTodfb updateDeletes updateAll dynamicallyVisible selDyn itemWidget (mempty :: f a) dfaEv
+      (kvbDynDyn, dfbDynEv) <- R.splitDynPure <$> (RD.widgetHold (return (R.constDyn RC.slEmpty, R.never)) $ R.leftmost [nullWidgetEv, selWidget <$> safeKeyEv]) -- Event t (Diff f b)
+      let kvbDyn = join kvbDynDyn
+          dfbEv = R.switchPromptlyDyn dfbDynEv
       dfbAddEv <- fmap (fmap Just) <$> addWidget kvbDyn
       let newInputFaEv = R.leftmost [R.updated faDyn, R.tag (R.current faDyn) postBuild]
           dfaNewInputEv = R.attachWith updateFromInput (R.current kvbDyn) newInputFaEv
           dfaEv = R.leftmost [dfaNewInputEv, dfbTodfa <$> dfbAddEv]
           curDyn = RC.fromCompleteKeyValueSet <$> kvbDyn
-  return $ WR.unsafeBuildWidgetResult curDyn (() <$ dfbEv)
+  return $ WR.unsafeBuildWidgetResult curDyn (() <$ R.leftmost [dfbEv, dfbAddEv])
       
 
 -- This can be plugged into edit Structure in place of ecListViewWithKey to get a selection with drodown in place of the entire list
@@ -457,10 +465,10 @@ selectEditValues ddAttrsDyn keyToLabel updateLabelMap elemWidget fDyn = mdo
 updateKeyLabelMap ::  (RC.Diffable f
                      , RC.Key f ~ RC.Key (RC.KeyValueSet f)
                      , Ord (Key (KeyValueSet f)))
-  => Proxy f -> RC.Diff f a -> M.Map (Key f) b -> M.Map (Key f) b
-updateKeyLabelMap _ d x =
-  let mapOfDeletes = M.filter isNothing . M.fromList . RC.toKeyValueList $ d
-  in M.difference x mapOfDeletes
+  => Proxy f -> (Key f -> T.Text) -> RC.Diff f a -> M.Map (Key f) T.Text -> M.Map (Key f) T.Text
+updateKeyLabelMap _ keyToLabel d x =
+  let (deletes, updatesOrAdds) = M.partition isNothing . M.fromList . RC.toKeyValueList $ d
+  in M.union (M.difference x deletes) (M.mapWithKey (\k _ -> keyToLabel k) updatesOrAdds)
 
 
 reappearingEditWithDeleteButton :: ( R.Reflex t

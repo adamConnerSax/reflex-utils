@@ -129,7 +129,7 @@ editableCollectionsWidget = do
   RD.el "p" $ RD.text "v2 @ Map"
   editMapDyn2 <- EC.simpleCollectionValueEditor display (const editValue) (R.constDyn testMap)
   newLine >> (RD.dynText $ fmap (T.pack . show) editMapDyn2)
-  editMapStructureDyn2 <- newLine >> EC.simpleCollectionEditor2 editDeleteValue inputPair editMapDyn2
+  editMapStructureDyn2 <- newLine >> EC.simpleCollectionEditor2 display editDeleteValue inputPair editMapDyn2
   newLine >> (RD.dynText $ fmap (T.pack . show) editMapStructureDyn2)
 
   RD.el "p" $ RD.text "v1 @ List"
@@ -141,7 +141,7 @@ editableCollectionsWidget = do
   RD.el "p" $ RD.text "v2 @ List"
   editListDyn2 <- EC.simpleCollectionValueEditor display (const editValue) (R.constDyn testList)
   newLine >> (RD.dynText $ fmap (T.pack . show) editListDyn2)
-  editListStructureDyn2 <- newLine >> EC.simpleCollectionEditor2 editDeleteValue inputValue editListDyn2
+  editListStructureDyn2 <- newLine >> EC.simpleCollectionEditor2 displayEach editDeleteValue inputValue editListDyn2
   newLine >> (RD.dynText $ fmap (T.pack . show) editListStructureDyn2)
 
 {-

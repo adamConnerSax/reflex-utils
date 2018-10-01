@@ -178,7 +178,7 @@ formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
       editAndDeleteWidget = EC.reappearingEditWithDeleteButton editWidget' M.empty (EC.buttonNoSubmit "-")
       editDeletableWidget = case display of
         EC.DisplayAll -> flip EC.ecListViewWithKey editAndDeleteWidget
-        EC.DisplayEach ddAttrs toText -> EC.selectEditValues ddAttrs toText (EC.updateKeyLabelMap (Proxy :: Proxy f)) editAndDeleteWidget
+        EC.DisplayEach ddAttrs toText -> EC.selectEditValues ddAttrs toText (EC.updateKeyLabelMap (Proxy :: Proxy f) toText) editAndDeleteWidget
       pf = Proxy :: Proxy f
       addNewWidget = (EC.addNewItemWidgetModal pf $ EC.newKeyValueWidget pf avToEither (WR.widgetResultToDynamic . getCompose <$> unF newItemWidget)) . fmap RC.toKeyValueSet
       collWidget fDyn = fmap AccSuccess <$> EC.collectionEditorWR editDeletableWidget addNewWidget id id fDyn
