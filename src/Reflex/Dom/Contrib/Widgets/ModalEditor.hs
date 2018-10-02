@@ -36,6 +36,8 @@ module Reflex.Dom.Contrib.Widgets.ModalEditor
   , modalEditor_CancelButton
   , modalEditor
   , modalEditorEither
+  , modalEditorEither'
+  , modalEditor'
   ) where
 
 import           Reflex                                  (Dynamic, Event,
@@ -155,9 +157,6 @@ instance Reflex t => Default (ModalEditorConfig t e a) where
         Nothing -- default to no "x" button in the header
         (const $ ButtonConfig "OK" M.empty Nothing) -- simple OK button in footer
         (const $ ButtonConfig "Close" M.empty Nothing) -- simple Cancel button in footer
-
-
-
 
 data ViewState = Button | Editor deriving (Eq)
 data WidgetState t e a = WidgetState { viewState       :: Dynamic t ViewState
@@ -334,12 +333,17 @@ data ModalEvent e a where
   Dismiss :: ModalEvent e a
   UpdatingEdit :: Either e a -> ModalEvent e a
 
-updateModalState :: Bool -> ModalState e a -> ModalEvent e a -> ModalState e a
-updateModalState _ (ModalOpen _ _)         (NewInputToControl eaNew) = ModalOpen eaNew eaNew
-updateModalState closeOnOK (ModalOpen _ _) (PressOK eaEdit)          = if closeOnOK then ModalClosed eaEdit else ModalOpen eaEdit eaEdit
+updateModalState :: ModalEditorConfig t e a -> ModalState e a -> ModalEvent e a -> ModalState e a
+updateModalState cfg (ModalOpen eaRevert eaOutput)         (NewInputToControl eaNew) =
+  case (cfg ^. modalEditor_onChange) of
+    Close -> ModalClosed eaNew
+    UpdateIfRight -> case eaNew of
+      Left _  -> ModalOpen eaRevert eaOutput
+      Right a -> ModalOpen (Right a) (Right a)
+    UpdateOrDefault a -> let eaNew' = either (const $ Right a) Right eaNew in ModalOpen eaNew' eaNew'
+updateModalState cfg (ModalOpen _ _) (PressOK eaEdit)                = if cfg ^. modalEditor_closeOnOk then ModalClosed eaEdit else ModalOpen eaEdit eaEdit
 updateModalState _ (ModalOpen eaRevert _)  Dismiss                   = ModalClosed eaRevert
 updateModalState _ (ModalOpen eaRevert _)  (UpdatingEdit eaNew)      = ModalOpen eaRevert eaNew
---updateModalState _ (ModalOpen _ _)         _                         = undefined -- we should encode this in the type system somehow
 updateModalState _ (ModalClosed _)         (NewInputToControl eaNew) = ModalClosed eaNew
 updateModalState _ (ModalClosed eaOut)     Open                      = ModalOpen eaOut eaOut
 updateModalState _ (ModalClosed _)         _                         = undefined -- we should encode this in the type system somehow
@@ -411,11 +415,25 @@ modalEditorEither' editW ea0 eaEv config = do
         Button -> modalEditorOpenButton' config eaDyn
         Editor -> configuredModalWidget' config editW eaDyn
   editorWidgetInputDyn <- R.holdDyn ea0 eaEv
-  rec stateDyn <- R.foldDyn (flip (updateModalState (config ^. modalEditor_closeOnOk))) (ModalClosed ea0) modalEditorUpdateEv
+  rec stateDyn <- R.foldDyn (flip $ updateModalState config) (ModalClosed ea0) modalEditorUpdateEv
       modalEditorUpdateEv <- R.switch . R.current <$> RD.widgetHold (modalEditorOpenButton' config (modalOutput <$> stateDyn)) (selF editorWidgetInputDyn <$> viewEv)
       let viewEv = modalViewState <$> R.updated stateDyn
           modalChangeEv = R.fmapMaybe id  $ (modalEditorChange <$> modalEditorUpdateEv)
   return $ ModalEditor (modalOutput <$> stateDyn) modalChangeEv
+
+
+modalEditor' :: forall t m a. ( RD.DomBuilder t m
+                              , MonadWidgetExtraC t m
+                              , RD.PostBuild t m
+                              , MonadFix m
+                              , RD.MonadHold t m
+                             )
+  => (Dynamic t (Maybe a) -> m (Dynamic t (Maybe a))) -- a widget for editing an a. returns Left on invalid value
+  -> Maybe a
+  -> R.Event t (Maybe a)
+  -> ModalEditorConfig t () a
+  -> m (ModalEditor t () a)
+modalEditor' editW ma0 maEv config = modalEditorEither' (fmap (fmap m2e) . editW) (m2e ma0) (m2e <$> maEv) config
 
 
 hiddenCSS :: M.Map T.Text T.Text
