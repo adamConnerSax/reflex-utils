@@ -535,7 +535,7 @@ addNewItemWidgetModal _ editPairW kvDyn = do
   let modalEditW = const $ editPairW kvDyn
 --      blankInput = R.constDyn $ Left mempty
       pairEvToKeyValueSetEv pairEv = fromKeyValueList . pure <$> pairEv -- here, fromKeyValueList :: [(Key f, v)] -> KeyValueSet f v 
-  newPairEv <- ME.modalEditor_change <$> ME.modalEditorEither' modalEditW (Left mempty) R.never newItemEditorConfig
+  newPairEv <- ME.modalEditor_change <$> ME.modalEditorEither modalEditW (R.constDyn $ Left mempty) newItemEditorConfig
   return $ pairEvToKeyValueSetEv newPairEv
 
 addNewItemWidget :: ( R.Reflex t
