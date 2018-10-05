@@ -386,7 +386,7 @@ selectCollectionEditor2WR ::  forall t m f k a b. ( RD.Adjustable t m
                                                   , EditableCollection f)
   => R.Dynamic t (M.Map T.Text T.Text)
   -> (k -> T.Text)
-  -> (Key f -> R.Dynamic t a -> m (R.Event t (k, Maybe b))) -- edit/delete widget. Carries the KeyValueSet key. Fires only on internal change.  
+  -> (k -> R.Dynamic t a -> m (R.Event t (k, Maybe b))) -- edit/delete widget. Carries the KeyValueSet key. Fires only on internal change.  
   -> (R.Dynamic t (RC.KeyValueSet f b) -> m (R.Event t (RC.KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
   -> (RC.KeyValueSet f b -> f a -> RC.Diff f a)
   -> (RC.Diff f a -> RC.Diff f b)
