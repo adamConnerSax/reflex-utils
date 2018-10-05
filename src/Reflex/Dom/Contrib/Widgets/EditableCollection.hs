@@ -13,12 +13,14 @@
 module Reflex.Dom.Contrib.Widgets.EditableCollection
   (
     simpleCollectionValueEditor
-  , simpleCollectionEditor
-  , simpleCollectionEditor2
+  , simpleHideDeletesCollectionEditor
+  , simpleRemoveDeletesCollectionEditor
   , DisplayCollection (..)
   , EditableCollection(..)
-  , collectionEditor
-  , collectionEditorWR
+  , hideDeletesCollectionEditor
+  , hideDeletesCollectionEditorWR
+  , removeDeletesCollectionEditor
+  , removeDeletesCollectionEditorWR
   , selectEditValues
   , editWithDeleteButton
   , reappearingEditWithDeleteButton
@@ -102,22 +104,22 @@ simpleCollectionValueEditor display editWidget fDyn =
 -- For supported collections (Map, HashMap, IntMap, [] and Seq), we need two widgets as input.
 -- One to display and edit an existing item and another to input a new item.
 -- collection may be displayed one at a time, via dropdown, or all at once.
-simpleCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
-                                          , RD.PostBuild t m
-                                          , MonadWidgetExtraC t m
-                                          , R.Adjustable t m
-                                          , R.MonadHold t m
-                                          , MonadFix m
-                                          , RC.Mergeable f
-                                          , EditableCollection f
-                                          , Ord (Key f)
-                                          , Key f ~ Key (KeyValueSet f))
+simpleHideDeletesCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
+                                                     , RD.PostBuild t m
+                                                     , MonadWidgetExtraC t m
+                                                     , R.Adjustable t m
+                                                     , R.MonadHold t m
+                                                     , MonadFix m
+                                                     , RC.Mergeable f
+                                                     , EditableCollection f
+                                                     , Ord (Key f)
+                                                     , Key f ~ Key (KeyValueSet f))
   => DisplayCollection t (Key f) -- use a dropdown or show entire collection
   -> (RC.Key f -> R.Dynamic t a -> m (R.Dynamic t (Maybe a))) -- display and edit existing
   -> m (R.Dynamic t (Maybe (NewItem f a))) -- input a new one
   -> R.Dynamic t (f a)
   -> m (R.Dynamic t (f a))
-simpleCollectionEditor display editWidget newItemWidget fDyn =
+simpleHideDeletesCollectionEditor display editWidget newItemWidget fDyn =
   let editValueWidget k vDyn = R.fmapMaybe id . R.updated <$> editWidget k vDyn -- m (R.Event t (f a))
       pf = Proxy :: Proxy f
       editAndDeleteWidget k vDyn = do
@@ -127,35 +129,35 @@ simpleCollectionEditor display editWidget newItemWidget fDyn =
         DisplayAll -> flip ecListViewWithKey editAndDeleteWidget
         DisplayEach ddAttrs toText -> selectEditValues ddAttrs toText (updateKeyLabelMap (Proxy :: Proxy f) toText) editAndDeleteWidget
       addNewWidget = (addNewItemWidgetModal pf $ newKeyValueWidget pf (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget) . fmap RC.toKeyValueSet 
-  in collectionEditor editDeletableWidget addNewWidget id id fDyn
+  in hideDeletesCollectionEditor editDeletableWidget addNewWidget id id fDyn
 
 
-simpleCollectionEditor2 :: forall t m f a. ( RD.DomBuilder t m
-                                          , RD.PostBuild t m
-                                          , MonadWidgetExtraC t m
-                                          , R.Adjustable t m
-                                          , R.MonadHold t m
-                                          , MonadFix m
-                                          , RC.Mergeable f
-                                          , RC.FannableC f a
-                                          , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe a)
-                                          , Monoid (f a)
-                                          , EditableCollection f
-                                          , Ord (Key f)
-                                          , Key f ~ Key (KeyValueSet f))
+simpleRemoveDeletesCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
+                                                       , RD.PostBuild t m
+                                                       , MonadWidgetExtraC t m
+                                                       , R.Adjustable t m
+                                                       , R.MonadHold t m
+                                                       , MonadFix m
+                                                       , RC.Mergeable f
+                                                       , RC.FannableC f a
+                                                       , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe a)
+                                                       , Monoid (f a)
+                                                       , EditableCollection f
+                                                       , Ord (Key f)
+                                                       , Key f ~ Key (KeyValueSet f))
   => DisplayCollection t (Key f) -- use a dropdown or show entire collection
   -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Key (KeyValueSet f), Maybe a))) -- display and edit existing
   -> m (R.Dynamic t (Maybe (NewItem f a))) -- input a new one
   -> R.Dynamic t (f a)
   -> m (R.Dynamic t (f a))
-simpleCollectionEditor2 display editWidget newItemWidget fDyn =
+simpleRemoveDeletesCollectionEditor display editWidget newItemWidget fDyn =
   let editValueWidget k a aEv = R.holdDyn a aEv >>= editWidget k -- $  R.fmapMaybe id . R.updated <$> editWidget k vDyn -- m (R.Event t (f a))
       pf = Proxy :: Proxy f
       addNewWidget = addNewItemWidgetModal pf $ newKeyValueWidget pf (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget
       diffFromKVAndNew kva fa = RC.slUnion (Just <$> RC.toKeyValueSet fa) (Nothing <$ kva)
   in case display of
-    DisplayAll -> WR.widgetResultToDynamic <$> collectionEditor2WR editValueWidget addNewWidget diffFromKVAndNew id id fDyn
-    DisplayEach ddAttrs labelToText -> WR.widgetResultToDynamic <$> selectCollectionEditor2WR ddAttrs labelToText editWidget addNewWidget diffFromKVAndNew id id fDyn
+    DisplayAll -> WR.widgetResultToDynamic <$> removeDeletesCollectionEditorWR editValueWidget addNewWidget diffFromKVAndNew id id fDyn
+    DisplayEach ddAttrs labelToText -> WR.widgetResultToDynamic <$> removeDeletesSelectCollectionEditorWR ddAttrs labelToText editWidget addNewWidget diffFromKVAndNew id id fDyn
     
 -- | This class allows the collection editing functions to be polymorphic over the types supported by Reflex.Collections
 class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) where
@@ -288,7 +290,7 @@ which must be reflected in 2 places:
 2. The output of this widget (curDyn)
 And we must not feed edits or deletes back into the edit/Delete widget or we get a causality loop.
 -}
-collectionEditorWR :: forall t m f a b. ( RD.Adjustable t m
+hideDeletesCollectionEditorWR :: forall t m f a b. ( RD.Adjustable t m
                                         , RD.PostBuild t m
                                         , RD.MonadHold t m                 
                                         , MonadFix m
@@ -301,7 +303,7 @@ collectionEditorWR :: forall t m f a b. ( RD.Adjustable t m
   -> (f b -> f a) -- we need this to feed the changes back in to the collection functions
   -> R.Dynamic t (f a) -- input collection
   -> m (WR.WidgetResult t (f b))
-collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
+hideDeletesCollectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
   editDeleteDiffMaybeEv <- editDeleteWidget (fbTofa <$> editDeleteInputDyn)
   addDiffMaybeEv <- fmap (fmap Just) <$> addWidget curDyn
   let inputFbBeh = faTofb <$> R.current fDyn 
@@ -318,7 +320,7 @@ collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn = mdo
   editDeleteInputDyn <- R.buildDynamic (R.sample inputFbBeh) updatedEditDeleteInputEv -- updates to current on add or carries completely new input
   WR.buildWidgetResult (faTofb <$> fDyn) internalChangeEv 
 
-collectionEditor :: ( RD.Adjustable t m
+hideDeletesCollectionEditor :: ( RD.Adjustable t m
                     , RD.PostBuild t m
                     , RD.MonadHold t m                 
                     , MonadFix m
@@ -331,20 +333,20 @@ collectionEditor :: ( RD.Adjustable t m
   -> (f b -> f a) -- we need this to feed the changes back in to the collection functions
   -> R.Dynamic t (f a) -- input collection
   -> m (R.Dynamic t (f b))
-collectionEditor editDeleteWidget addWidget faTofb fbTofa fDyn =
-  WR.widgetResultToDynamic <$>  collectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn 
+hideDeletesCollectionEditor editDeleteWidget addWidget faTofb fbTofa fDyn =
+  WR.widgetResultToDynamic <$>  hideDeletesCollectionEditorWR editDeleteWidget addWidget faTofb fbTofa fDyn 
 
-collectionEditor2WR :: forall t m f k a b. ( RD.Adjustable t m
-                                           , RD.PostBuild t m
-                                           , RD.MonadHold t m                 
-                                           , MonadFix m
-                                           , Monoid (f a)
-                                           , RD.DomBuilder t m
-                                           , RC.Mergeable f
-                                           , RC.FannableC f a
-                                           , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe b)
-                                           , k ~ Key (KeyValueSet f)
-                                           , EditableCollection f)
+removeDeletesCollectionEditorWR :: forall t m f k a b. ( RD.Adjustable t m
+                                                       , RD.PostBuild t m
+                                                       , RD.MonadHold t m                 
+                                                       , MonadFix m
+                                                       , Monoid (f a)
+                                                       , RD.DomBuilder t m
+                                                       , RC.Mergeable f
+                                                       , RC.FannableC f a
+                                                       , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe b)
+                                                       , k ~ Key (KeyValueSet f)
+                                                       , EditableCollection f)
   => (Key f -> a -> R.Event t a -> m (R.Event t (k, Maybe b))) -- edit/delete widget. Carries the KeyValueSet key. Fires only on internal change.  
   -> (R.Dynamic t (RC.KeyValueSet f b) -> m (R.Event t (RC.KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
   -> (RC.KeyValueSet f b -> f a -> RC.Diff f a)
@@ -352,7 +354,7 @@ collectionEditor2WR :: forall t m f k a b. ( RD.Adjustable t m
   -> (RC.Diff f b -> RC.Diff f a)
   -> R.Dynamic t (f a)
   -> m (WR.WidgetResult t (f b))
-collectionEditor2WR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
+removeDeletesCollectionEditorWR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
   let proxyf = Proxy :: Proxy f
       updateDeletes x = dfbTodfa . remappedUpdateDeletes proxyf x 
       updateAll = remappedUpdateAll proxyf
@@ -365,20 +367,41 @@ collectionEditor2WR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn
           curDyn = RC.fromCompleteKeyValueSet <$> kvbDyn
   return $ WR.unsafeBuildWidgetResult curDyn (() <$ R.leftmost [dfbEv, dfbAddEv])
 
+removeDeletesCollectionEditor :: forall t m f k a b. ( RD.Adjustable t m
+                                                     , RD.PostBuild t m
+                                                     , RD.MonadHold t m                 
+                                                     , MonadFix m
+                                                     , Monoid (f a)
+                                                     , RD.DomBuilder t m
+                                                     , RC.Mergeable f
+                                                     , RC.FannableC f a
+                                                     , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe b)
+                                                     , k ~ Key (KeyValueSet f)
+                                                     , EditableCollection f)
+  => (Key f -> a -> R.Event t a -> m (R.Event t (k, Maybe b))) -- edit/delete widget. Carries the KeyValueSet key. Fires only on internal change.  
+  -> (R.Dynamic t (RC.KeyValueSet f b) -> m (R.Event t (RC.KeyValueSet f b))) --  add item(s) widget.  Fires only on valid add.
+  -> (RC.KeyValueSet f b -> f a -> RC.Diff f a)
+  -> (RC.Diff f a -> RC.Diff f b)
+  -> (RC.Diff f b -> RC.Diff f a)
+  -> R.Dynamic t (f a)
+  -> m (R.Dynamic t (f b))
+removeDeletesCollectionEditor itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn =
+  WR.widgetResultToDynamic <$>  removeDeletesCollectionEditorWR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn 
 
-selectCollectionEditor2WR ::  forall t m f k a b. ( RD.Adjustable t m
-                                                  , RD.PostBuild t m
-                                                  , RD.MonadHold t m                 
-                                                  , MonadFix m
-                                                  , Monoid (f a)
-                                                  , RD.DomBuilder t m
-                                                  , RC.Mergeable f
-                                                  , RC.FannableC f a
-                                                  , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe b)
-                                                  , k ~ Key (KeyValueSet f)
-                                                  , Key f ~ Key (KeyValueSet f)
-                                                  , Ord (Key f)
-                                                  , EditableCollection f)
+
+removeDeletesSelectCollectionEditorWR ::  forall t m f k a b. ( RD.Adjustable t m
+                                                              , RD.PostBuild t m
+                                                              , RD.MonadHold t m                 
+                                                              , MonadFix m
+                                                              , Monoid (f a)
+                                                              , RD.DomBuilder t m
+                                                              , RC.Mergeable f
+                                                              , RC.FannableC f a
+                                                              , RC.SequenceableWithEventC t f (Key (KeyValueSet f), Maybe b)
+                                                              , k ~ Key (KeyValueSet f)
+                                                              , Key f ~ Key (KeyValueSet f)
+                                                              , Ord (Key f)
+                                                              , EditableCollection f)
   => R.Dynamic t (M.Map T.Text T.Text)
   -> (k -> T.Text)
   -> (k -> R.Dynamic t a -> m (R.Event t (k, Maybe b))) -- edit/delete widget. Carries the KeyValueSet key. Fires only on internal change.  
@@ -388,7 +411,7 @@ selectCollectionEditor2WR ::  forall t m f k a b. ( RD.Adjustable t m
   -> (RC.Diff f b -> RC.Diff f a)
   -> R.Dynamic t (f a)
   -> m (WR.WidgetResult t (f b))
-selectCollectionEditor2WR ddAttrsDyn keyToLabel itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
+removeDeletesSelectCollectionEditorWR ddAttrsDyn keyToLabel itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
   let proxyf = Proxy :: Proxy f
       updateDeletes x = dfbTodfa . remappedUpdateDeletes proxyf x 
       updateAll = remappedUpdateAll proxyf
