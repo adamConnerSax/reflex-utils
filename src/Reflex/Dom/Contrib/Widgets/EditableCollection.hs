@@ -353,14 +353,9 @@ collectionEditor2WR :: forall t m f k a b. ( RD.Adjustable t m
   -> R.Dynamic t (f a)
   -> m (WR.WidgetResult t (f b))
 collectionEditor2WR itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
-  let g :: Diffable f => RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
-      g kvsPair =
-        let singleton k a = RC.fromKeyValueList $ [(k,a)] 
-        in K.foldrWithKey (\_ (k,mb) df -> RC.slUnion df (singleton k mb)) RC.slEmpty kvsPair
-      updateDeletes :: RC.KeyValueSet f b -> RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f a
-      updateDeletes _ x = dfbTodfa $ RC.slFilter isNothing (g x) 
-      updateAll :: RC.KeyValueSet f b -> RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
-      updateAll kvb x = RC.slUnion (g x) (Just <$> kvb) -- left biased union
+  let proxyf = Proxy :: Proxy f
+      updateDeletes x = dfbTodfa . remappedUpdateDeletes proxyf x 
+      updateAll = remappedUpdateAll proxyf
   postBuild <- R.getPostBuild
   rec (kvbDyn, dfbEv) <- RC.selfEditingCollectionWithChanges dfaTodfb updateDeletes updateAll itemWidget (mempty :: f a)  dfaEv -- Dynamic t (KeyValueSet f b)
       dfbAddEv <- fmap (fmap Just) <$> addWidget kvbDyn -- Event t (Diff f b)
@@ -394,22 +389,16 @@ selectCollectionEditor2WR ::  forall t m f k a b. ( RD.Adjustable t m
   -> R.Dynamic t (f a)
   -> m (WR.WidgetResult t (f b))
 selectCollectionEditor2WR ddAttrsDyn keyToLabel itemWidget addWidget updateFromInput dfaTodfb dfbTodfa faDyn = do
-  let g :: Diffable f => RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
-      g kvsPair =
-        let singleton k a = RC.fromKeyValueList $ [(k,a)] 
-        in K.foldrWithKey (\_ (k,mb) df -> RC.slUnion df (singleton k mb)) RC.slEmpty kvsPair
-      updateDeletes :: RC.KeyValueSet f b -> RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f a
-      updateDeletes _ x = dfbTodfa $ RC.slFilter isNothing (g x) 
-      updateAll :: RC.KeyValueSet f b -> RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
-      updateAll kvb x = RC.slUnion (g x) (Just <$> kvb) -- left biased union
+  let proxyf = Proxy :: Proxy f
+      updateDeletes x = dfbTodfa . remappedUpdateDeletes proxyf x 
+      updateAll = remappedUpdateAll proxyf
       dynamicallyVisible visDyn w = let visAttrsDyn = bool hiddenCSS visibleCSS <$> visDyn in RD.elDynAttr "div" visAttrsDyn w
       keyLabelMapInDyn = M.fromList . fmap (\(k, _) -> (k, keyToLabel k)) . toKeyValueList <$> faDyn
   postBuild <- R.getPostBuild
   attrsDyn <- R.foldDyn (<>) ("size" RD.=: "1") (R.updated ddAttrsDyn)
-  rec let keyLabelMapUpdateEv :: Proxy f -> R.Event t (M.Map (Key f) T.Text) 
-          keyLabelMapUpdateEv pf = R.attachWith (flip $ updateKeyLabelMap pf keyToLabel) (R.current keyLabelMapDyn) $ R.leftmost [dfbEv, dfbAddEv]
+  rec let keyLabelMapUpdateEv pf = R.attachWith (flip $ updateKeyLabelMap pf keyToLabel) (R.current keyLabelMapDyn) $ R.leftmost [dfbEv, dfbAddEv]
           safeDropdownConfig = SD.SafeDropdownConfig R.never attrsDyn
-      keyLabelMapDyn <- dynamicPlusEvent keyLabelMapInDyn $ keyLabelMapUpdateEv (Proxy :: Proxy f)    
+      keyLabelMapDyn <- dynamicPlusEvent keyLabelMapInDyn $ keyLabelMapUpdateEv proxyf
       sdd <- SD.safeDropdown Nothing keyLabelMapDyn safeDropdownConfig
       sddNullEv <- R.updated <$> R.holdUniqDyn (isNothing <$> view SD.safeDropdown_value sdd) -- why not (M.null <$> keyLabelMap)?
       let (notNullEv, nullEv) = fanBool sddNullEv
@@ -428,6 +417,17 @@ selectCollectionEditor2WR ddAttrsDyn keyToLabel itemWidget addWidget updateFromI
           curDyn = RC.fromCompleteKeyValueSet <$> kvbDyn
   return $ WR.unsafeBuildWidgetResult curDyn (() <$ R.leftmost [dfbEv, dfbAddEv])
       
+
+remapKVS :: Diffable f => Proxy f -> RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
+remapKVS _ kvsPair =
+  let singleton k a = RC.fromKeyValueList $ [(k,a)] 
+  in K.foldrWithKey (\_ (k,mb) df -> RC.slUnion df (singleton k mb)) RC.slEmpty kvsPair
+  
+remappedUpdateDeletes :: Diffable f => Proxy f -> RC.KeyValueSet f b -> RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
+remappedUpdateDeletes pf _ x = RC.slFilter isNothing (remapKVS pf x) 
+
+remappedUpdateAll :: Diffable f => Proxy f -> RC.KeyValueSet f b -> RC.KeyValueSet f (Key (KeyValueSet f), Maybe b) -> RC.Diff f b
+remappedUpdateAll pf kvb x = RC.slUnion (remapKVS pf x) (Just <$> kvb) -- left biased union
 
 -- This can be plugged into edit Structure in place of ecListViewWithKey to get a selection with drodown in place of the entire list
 selectEditValues :: ( RD.Adjustable t m
