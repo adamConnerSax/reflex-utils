@@ -16,7 +16,7 @@
 module Reflex.Dom.Contrib.FormBuilder.Instances.Containers
   (
     -- * Container form builders
-    formCollectionEditor
+    hideDeletesFormCollectionEditor
   , formCollectionValueEditor
   , DisplayCollection (..)
   ) where
@@ -103,7 +103,7 @@ instance (Ord k, B.Validatable FValidation k, B.Validatable FValidation a) => B.
 instance (Ord k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (M.Map k a) where
   buildForm va mFN mFV =
     let newItemW =  newItemWidget (Proxy :: Proxy (M.Map k)) (Proxy :: Proxy a)
-    in validateForm va $ formCollectionEditor EC.DisplayAll showKeyEditVal newItemW mFV
+    in validateForm va $ hideDeletesFormCollectionEditor EC.DisplayAll showKeyEditVal newItemW mFV
 
 instance (Ord k, Hashable k, B.Validatable FValidation k, B.Validatable FValidation a) => B.Validatable FValidation (HML.HashMap k a) where
   validator = HML.traverseWithKey (\k a -> mergeAccValidation (B.validator a <$ B.validator k))
@@ -111,7 +111,7 @@ instance (Ord k, Hashable k, B.Validatable FValidation k, B.Validatable FValidat
 instance (Ord k, Hashable k, FormInstanceC t m, VFormBuilderBoth t m k a) => FormBuilder t m (HML.HashMap k a) where
   buildForm va mFN hmFV =
     let newItemW =  newItemWidget (Proxy :: Proxy (HML.HashMap k)) (Proxy :: Proxy a)
-    in validateForm va $ formCollectionEditor EC.DisplayAll showKeyEditVal newItemW hmFV
+    in validateForm va $ hideDeletesFormCollectionEditor EC.DisplayAll showKeyEditVal newItemW hmFV
 
 instance B.Validatable FValidation a => B.Validatable FValidation (IM.IntMap a) where
   validator = traverse B.validator
@@ -119,7 +119,7 @@ instance B.Validatable FValidation a => B.Validatable FValidation (IM.IntMap a) 
 instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (IM.IntMap a) where
   buildForm va mFN imFV =
     let newItemW =  newItemWidget (Proxy :: Proxy IM.IntMap) (Proxy :: Proxy a)
-    in validateForm va $ formCollectionEditor EC.DisplayAll showKeyEditVal newItemW imFV
+    in validateForm va $ hideDeletesFormCollectionEditor EC.DisplayAll showKeyEditVal newItemW imFV
 
 instance B.Validatable FValidation a => B.Validatable FValidation [a] where
   validator = traverse B.validator
@@ -127,7 +127,7 @@ instance B.Validatable FValidation a => B.Validatable FValidation [a] where
 instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m [a] where
   buildForm va mFN lFV =
     let newItemW =  newItemWidget (Proxy :: Proxy []) (Proxy :: Proxy a)
-    in validateForm va $ formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV
+    in validateForm va $ hideDeletesFormCollectionEditor EC.DisplayAll hideKeyEditVal newItemW lFV
 
 instance B.Validatable FValidation a => B.Validatable FValidation (Seq.Seq a) where
   validator = traverse B.validator
@@ -135,7 +135,7 @@ instance B.Validatable FValidation a => B.Validatable FValidation (Seq.Seq a) wh
 instance (FormInstanceC t m, VFormBuilderBoth t m Int a) => FormBuilder t m (Seq.Seq a) where
   buildForm va mFN sFV =
     let newItemW = newItemWidget (Proxy :: Proxy Seq.Seq) (Proxy :: Proxy a)
-    in validateForm va $ formCollectionEditor EC.DisplayAll hideKeyEditVal newItemW sFV
+    in validateForm va $ hideDeletesFormCollectionEditor EC.DisplayAll hideKeyEditVal newItemW sFV
 
 instance (A.Ix k, B.Validatable FValidation a) => B.Validatable FValidation (A.Array k a) where
   validator = traverse B.validator
@@ -156,25 +156,69 @@ instance (FormInstanceC t m, VFormBuilderC t m a) => FormBuilder t m (Tree.Tree 
 -- and that would require a redraw of everything anyway!
 -- TODO: Re-write in an event based way so we can honor the promise of WidgetResult
 -- might require a re-write in EditableCollection as well.
-formCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
-                                        , RD.PostBuild t m
-                                        , FormInstanceC t m
-                                        , R.Adjustable t m
-                                        , R.MonadHold t m
-                                        , MonadFix m
-                                        , RC.Mergeable f
-                                        , EC.EditableCollection f
-                                        , Ord (RC.Key f)
-                                        , Monoid (f a)
-                                        , RC.Key f ~ RC.Key (RC.KeyValueSet f))
+hideDeletesFormCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
+                                                   , RD.PostBuild t m
+                                                   , FormInstanceC t m
+                                                   , R.Adjustable t m
+                                                   , R.MonadHold t m
+                                                   , MonadFix m
+                                                   , RC.Mergeable f
+                                                   , EC.EditableCollection f
+                                                   , Ord (RC.Key f)
+                                                   , Monoid (f a)
+                                                   , RC.Key f ~ RC.Key (RC.KeyValueSet f))
   => EC.DisplayCollection t (RC.Key f) -- use a dropdown or show entire collection
   -> (RC.Key f -> R.Dynamic t a -> Form t m a) -- display and edit existing
   -> Form t m (EC.NewItem f a) -- input a new one
   -> FormValue t (f a)
   -> Form t m (f a)
-formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
+hideDeletesFormCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
   postBuild <- RD.getPostBuild
   let editWidget' k vDyn = R.fmapMaybe avToMaybe . WR.updatedWidgetResult . getCompose <$> unF (editWidget k vDyn) -- m (R.Event t a)
+      editAndDeleteWidget = EC.reappearingEditWithDeleteButton editWidget' M.empty (EC.buttonNoSubmit "-")
+      editDeletableWidget = case display of
+        EC.DisplayAll -> flip EC.ecListViewWithKey editAndDeleteWidget
+        EC.DisplayEach ddAttrs toText -> EC.selectEditValues ddAttrs toText (EC.updateKeyLabelMap (Proxy :: Proxy f) toText) editAndDeleteWidget
+      pf = Proxy :: Proxy f
+      addNewWidget = (EC.addNewItemWidgetModal pf $ EC.newKeyValueWidget pf avToEither (WR.widgetResultToDynamic . getCompose <$> unF newItemWidget)) . fmap RC.toKeyValueSet
+      collWidget fDyn = fmap AccSuccess <$> EC.hideDeletesCollectionEditorWR editDeletableWidget addNewWidget id id fDyn
+      invalidWidget = return . WR.dynamicToWidgetResult . fmap AccFailure
+  davFa <-  R.eitherDyn . fmap avToEither . WR.widgetResultToDynamic . getCompose $ fvFa
+  let (errsDynEv, fDynEv) = R.fanEither $ R.leftmost [R.updated davFa, R.tag (R.current davFa) postBuild]
+      isFNothing formErrs = if formErrs == [FNothing] then Just () else Nothing
+  fNothingEv <- R.fmapMaybe isFNothing . R.updated . join <$> R.holdDyn (R.constDyn $ [FNothing]) errsDynEv -- add empty container case
+  let fNothingFaDynEv = R.constDyn mempty <$ fNothingEv
+      initialWidget = invalidWidget $ R.constDyn [FInvalid "Initial Widget"]
+      updatedWidgetEv = R.leftmost [collWidget <$> fNothingFaDynEv, invalidWidget <$> errsDynEv, collWidget <$> fDynEv]
+  Compose . WR.dynamicWidgetResultToWidgetResult  <$> (RD.widgetHold initialWidget updatedWidgetEv)
+
+{-
+removeDeletesCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
+                                                 , RD.PostBuild t m
+                                                 , FormInstanceC t m
+                                                 , R.Adjustable t m
+                                                 , R.MonadHold t m
+                                                 , MonadFix m
+                                                 , RC.Mergeable f
+                                                 , EC.EditableCollection f
+                                                 , Ord (RC.Key f)
+                                                 , Monoid (f a)
+                                                 , RC.Key f ~ RC.Key (RC.KeyValueSet f))
+  => EC.DisplayCollection t (RC.Key f) -- use a dropdown or show entire collection
+  -> (RC.Key f -> R.Dynamic t a -> Form t m a) -- display, edit and deltexisting
+  -> Form t m (EC.NewItem f a) -- input a new one
+  -> FormValue t (f a)
+  -> Form t m (f a)
+removeDeletesFormCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
+  let collectionWidget = case display of
+        EC.DisplayAll -> removeDeletesCollectionEditorWR
+        EC.DisplayEach ddAttrs toText = removeDeletesSelectCollectionEditor ddAttrs toText
+      editWidget' k vDyn = R.fmapMaybe avToMaybe . WR.updatedWidgetResult . getCompose <$> unF (editWidget k vDyn) -- m (R.Event t a)
+        
+        
+  postBuild <- RD.getPostBuild
+  let editWidget' k vDyn = R.fmapMaybe avToMaybe . WR.updatedWidgetResult . getCompose <$> unF (editWidget k vDyn) -- m (R.Event t a)
+  
       editAndDeleteWidget = EC.reappearingEditWithDeleteButton editWidget' M.empty (EC.buttonNoSubmit "-")
       editDeletableWidget = case display of
         EC.DisplayAll -> flip EC.ecListViewWithKey editAndDeleteWidget
@@ -191,6 +235,7 @@ formCollectionEditor display editWidget newItemWidget fvFa = makeForm $ do
       initialWidget = invalidWidget $ R.constDyn [FInvalid "Initial Widget"]
       updatedWidgetEv = R.leftmost [collWidget <$> fNothingFaDynEv, invalidWidget <$> errsDynEv, collWidget <$> fDynEv]
   Compose . WR.dynamicWidgetResultToWidgetResult  <$> (RD.widgetHold initialWidget updatedWidgetEv)
+-}
 
 
 -- simpler widget for cases where we can't edit the structure.  Like Array and, for now, Tree.

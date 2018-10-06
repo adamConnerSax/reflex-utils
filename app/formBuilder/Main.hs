@@ -83,7 +83,7 @@ import           Reflex.Dom.Contrib.FormBuilder.Configuration
 import           Reflex.Dom.Contrib.FormBuilder.Instances            (FormInstanceC)
 import           Reflex.Dom.Contrib.FormBuilder.Instances.Containers (DisplayCollection,
                                                                       DisplayCollection (..),
-                                                                      formCollectionEditor,
+--                                                                      hideDeletesFormCollectionEditor,
 --                                                                      hideKeyEditVal,
 --                                                                      newItemWidget,
 --                                                                      showKeyEditVal)

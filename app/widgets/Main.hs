@@ -85,11 +85,11 @@ editValueEv valDyn = do
       config = RD.TextInputConfig "text" "" inputEv (R.constDyn M.empty)
   R.fmapMaybe (readMaybe . T.unpack) . RD._textInput_input <$> RD.textInput config
 
-editDeleteValue :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Show a, Read a) => k -> R.Dynamic t a -> m (R.Event t (k, Maybe a))
-editDeleteValue k aDyn = RD.el "div" $ do
+editDeleteValue :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Show a, Read a) => k -> R.Dynamic t a -> m (R.Event t (Maybe a))
+editDeleteValue _ aDyn = RD.el "div" $ do
   maEv <- RD.el "span" $ editValueEv aDyn
   delEv <- RD.el "span" $ EC.buttonNoSubmit "-"
-  return . fmap (\x -> (k,x)) $ R.leftmost [Just <$> maEv, Nothing <$ delEv]
+  return $ R.leftmost [Just <$> maEv, Nothing <$ delEv]
 
 inputPair :: (RD.DomBuilder t m, MonadWidgetExtraC t m, RD.PostBuild t m, Read k, Read v) => m (R.Dynamic t (Maybe (k,v)))
 inputPair = do
@@ -135,7 +135,7 @@ editableCollectionsWidget = do
   RD.el "p" $ RD.text "v1 @ List"
   editListDyn <- EC.simpleCollectionValueEditor display (const editValue) (R.constDyn testList)
   newLine >> (RD.dynText $ fmap (T.pack . show) editListDyn)
-  editListStructureDyn <- newLine >> EC.simpleHideDeltesCollectionEditor display (const editValue) inputValue editListDyn
+  editListStructureDyn <- newLine >> EC.simpleHideDeletesCollectionEditor display (const editValue) inputValue editListDyn
   newLine >> (RD.dynText $ fmap (T.pack . show) editListStructureDyn)
 
   RD.el "p" $ RD.text "v2 @ List"

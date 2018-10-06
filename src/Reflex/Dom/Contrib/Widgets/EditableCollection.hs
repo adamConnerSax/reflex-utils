@@ -10,6 +10,7 @@
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE InstanceSigs        #-}
+{-# LANGUAGE TupleSections       #-}
 module Reflex.Dom.Contrib.Widgets.EditableCollection
   (
     simpleCollectionValueEditor
@@ -146,18 +147,19 @@ simpleRemoveDeletesCollectionEditor :: forall t m f a. ( RD.DomBuilder t m
                                                        , Ord (Key f)
                                                        , Key f ~ Key (KeyValueSet f))
   => DisplayCollection t (Key f) -- use a dropdown or show entire collection
-  -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Key (KeyValueSet f), Maybe a))) -- display and edit existing
+  -> (RC.Key f -> R.Dynamic t a -> m (R.Event t (Maybe a))) -- display, edit and delete existing
   -> m (R.Dynamic t (Maybe (NewItem f a))) -- input a new one
   -> R.Dynamic t (f a)
   -> m (R.Dynamic t (f a))
 simpleRemoveDeletesCollectionEditor display editWidget newItemWidget fDyn =
-  let editValueWidget k a aEv = R.holdDyn a aEv >>= editWidget k -- $  R.fmapMaybe id . R.updated <$> editWidget k vDyn -- m (R.Event t (f a))
+  let editWidgetWithKey k aDyn = fmap (k,) <$> editWidget k aDyn
+      editValueWidget k a aEv = R.holdDyn a aEv >>= editWidgetWithKey k
       pf = Proxy :: Proxy f
       addNewWidget = addNewItemWidgetModal pf $ newKeyValueWidget pf (maybe (Left ("Invalid Input" :: T.Text)) Right) newItemWidget
       diffFromKVAndNew kva fa = RC.slUnion (Just <$> RC.toKeyValueSet fa) (Nothing <$ kva)
   in case display of
     DisplayAll -> WR.widgetResultToDynamic <$> removeDeletesCollectionEditorWR editValueWidget addNewWidget diffFromKVAndNew id id fDyn
-    DisplayEach ddAttrs labelToText -> WR.widgetResultToDynamic <$> removeDeletesSelectCollectionEditorWR ddAttrs labelToText editWidget addNewWidget diffFromKVAndNew id id fDyn
+    DisplayEach ddAttrs labelToText -> WR.widgetResultToDynamic <$> removeDeletesSelectCollectionEditorWR ddAttrs labelToText editWidgetWithKey addNewWidget diffFromKVAndNew id id fDyn
     
 -- | This class allows the collection editing functions to be polymorphic over the types supported by Reflex.Collections
 class (KeyedCollection f, Diffable f) => EditableCollection (f :: Type -> Type) where
